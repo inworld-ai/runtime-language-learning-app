@@ -1,0 +1,22 @@
+{
+  "name": "Aprendemo",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "npx ts-node index.ts"
+  },
+  "author": "Inworld AI",
+  "license": "MIT",
+  "description": "Learn Spanish with Inworld Runtime",
+  "devDependencies": {
+    "@tsconfig/node-lts": "^22.0.2",
+    "@types/node": "^24.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@inworld/runtime": "https://assets.inworld.ai/node-packages/inworld-runtime-0.4.3.tgz",
+    "dotenv": "^17.2.1",
+    "uuid": "^11.1.0"
+  }
+}
