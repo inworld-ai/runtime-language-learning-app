@@ -49,7 +49,7 @@ export function createConversationGraph(config: ConversationGraphConfig) {
   });
 
   const llmNode = NodeFactory.createRemoteLLMChatNode({
-    id: 'llm-node',
+    id: 'llm_node',
     llmConfig: {
       provider: 'openai',
       modelName: 'gpt-4.1-nano',
@@ -59,7 +59,6 @@ export function createConversationGraph(config: ConversationGraphConfig) {
     },
   });
 
-  // Create STT node
   const sttNode = NodeFactory.createRemoteSTTNode({
     id: `stt_node`,
     sttComponentId: sttComponent.id,
@@ -113,7 +112,7 @@ export function createConversationGraph(config: ConversationGraphConfig) {
     .addEdge(llmNode, chunkerNode)
     .addEdge(chunkerNode, ttsNode)
     .setEndNode(ttsNode)
-    .getExecutor();
+    .getExecutor()
 
   return executor;
 }

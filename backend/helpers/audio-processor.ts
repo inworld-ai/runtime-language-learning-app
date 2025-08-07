@@ -59,6 +59,7 @@ export class AudioProcessor {
     // Initialize conversation graph
     console.log('AudioProcessor: Creating conversation graph...');
     this.executor = createConversationGraph({ apiKey: this.apiKey });
+    this.executor.visualize('conversation_graph.png');
     this.isReady = true;
     console.log('AudioProcessor: Initialization complete, ready for audio processing');
   }
