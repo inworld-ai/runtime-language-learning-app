@@ -220,6 +220,44 @@ export class AudioProcessor {
         console.log(`VAD Chunk type: ${chunk.type}`);
         
         switch (chunk.type) {
+          case 'TTS_OUTPUT_STREAM':
+            console.log('VAD Processing TTS audio stream...');
+            if (chunk.data && this.websocket) {
+              const ttsStreamIterator = chunk.data;
+              console.log('VAD TTS Stream iterator:', ttsStreamIterator);
+              
+              if (ttsStreamIterator?.next) {
+                let ttsChunk = await ttsStreamIterator.next();
+                
+                while (!ttsChunk.done) {
+                  console.log('VAD TTS chunk:', ttsChunk);
+                  
+                  if (ttsChunk.audio && ttsChunk.audio.data) {
+                    // Convert Float32Array audio data to base64
+                    const audioData = new Float32Array(ttsChunk.audio.data);
+                    const int16Array = new Int16Array(audioData.length);
+                    
+                    // Convert Float32 to Int16
+                    for (let i = 0; i < audioData.length; i++) {
+                      int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
+                    }
+                    
+                    const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
+                    
+                    this.websocket.send(JSON.stringify({
+                      type: 'audio_stream',
+                      audio: base64Audio,
+                      sampleRate: ttsChunk.audio.sampleRate || 16000,
+                      timestamp: Date.now(),
+                      text: ttsChunk.text || ''
+                    }));
+                  }
+                  
+                  ttsChunk = await ttsStreamIterator.next();
+                }
+              }
+            }
+            break;
           case 'TEXT':
             if (chunk.data) {
               transcription = chunk.data;
@@ -330,6 +368,45 @@ export class AudioProcessor {
         console.log(`Chunk type: ${chunk.type}`)
         
         switch (chunk.type) {
+          case 'TTS_OUTPUT_STREAM':
+            console.log('Processing TTS audio stream...');
+            if (chunk.data && this.websocket) {
+              const ttsStreamIterator = chunk.data;
+              console.log('TTS Stream iterator:', ttsStreamIterator);
+              
+              if (ttsStreamIterator?.next) {
+                let ttsChunk = await ttsStreamIterator.next();
+                
+                while (!ttsChunk.done) {
+                  console.log('TTS chunk:', ttsChunk);
+                  
+                  if (ttsChunk.audio && ttsChunk.audio.data) {
+                    // Convert Float32Array audio data to base64
+                    const audioData = new Float32Array(ttsChunk.audio.data);
+                    const int16Array = new Int16Array(audioData.length);
+                    
+                    // Convert Float32 to Int16
+                    for (let i = 0; i < audioData.length; i++) {
+                      int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
+                    }
+                    
+                    const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
+                    
+                    this.websocket.send(JSON.stringify({
+                      type: 'audio_stream',
+                      audio: base64Audio,
+                      sampleRate: ttsChunk.audio.sampleRate || 16000,
+                      timestamp: Date.now(),
+                      text: ttsChunk.text || ''
+                    }));
+                  }
+                  
+                  ttsChunk = await ttsStreamIterator.next();
+                }
+              }
+            }
+            break;
+            
           case 'TEXT':
             if (chunk.data) {
               transcription = chunk.data;

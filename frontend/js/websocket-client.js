@@ -131,6 +131,14 @@ export class WebSocketClient {
                 });
                 break;
                 
+            case 'audio_stream':
+                this.emit('audio_stream', {
+                    audio: message.audio,
+                    sampleRate: message.sampleRate,
+                    timestamp: message.timestamp
+                });
+                break;
+                
             default:
                 console.log('Unknown message type:', message.type);
         }

@@ -1,5 +1,6 @@
 import { WebSocketClient } from './websocket-client.js';
 import { AudioHandler } from './audio-handler.js';
+import { AudioPlayer } from './audio-player.js';
 import { ChatUI } from './chat-ui.js';
 import { FlashcardUI } from './flashcard-ui.js';
 import { Storage } from './storage.js';
@@ -9,6 +10,7 @@ class App {
         this.storage = new Storage();
         this.wsClient = new WebSocketClient('ws://localhost:3001');
         this.audioHandler = new AudioHandler();
+        this.audioPlayer = new AudioPlayer();
         this.chatUI = new ChatUI();
         this.flashcardUI = new FlashcardUI();
         
@@ -28,7 +30,17 @@ class App {
         this.loadState();
         this.setupEventListeners();
         await this.connectWebSocket();
+        await this.initializeAudioPlayer();
         this.render();
+    }
+    
+    async initializeAudioPlayer() {
+        try {
+            await this.audioPlayer.initialize();
+            console.log('Audio player initialized');
+        } catch (error) {
+            console.error('Failed to initialize audio player:', error);
+        }
     }
     
     loadState() {
@@ -101,8 +113,20 @@ class App {
             this.handleLLMResponseComplete(data.text);
         });
         
+        this.wsClient.on('audio_stream', (data) => {
+            this.handleAudioStream(data);
+        });
+        
         this.audioHandler.on('audioChunk', (audioData) => {
             this.wsClient.sendAudioChunk(audioData);
+        });
+        
+        this.audioPlayer.on('playback_started', () => {
+            console.log('Audio playback started');
+        });
+        
+        this.audioPlayer.on('playback_finished', () => {
+            console.log('Audio playback finished');
         });
     }
     
@@ -172,6 +196,17 @@ class App {
         this.state.currentLLMResponse = '';
         this.state.currentTranscript = '';
         this.render();
+    }
+    
+    async handleAudioStream(data) {
+        try {
+            if (data.audio && data.audio.length > 0) {
+                console.log(`Received audio stream: ${data.audio.length} bytes at ${data.sampleRate}Hz${data.text ? ` with text: "${data.text}"` : ''}`);
+                await this.audioPlayer.addAudioStream(data.audio, data.sampleRate);
+            }
+        } catch (error) {
+            console.error('Error handling audio stream:', error);
+        }
     }
     
     playAudio(audioData) {
