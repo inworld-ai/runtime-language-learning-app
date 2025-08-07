@@ -58,7 +58,7 @@ export class AudioProcessor {
     // Initialize VAD
     try {
       const vadConfig: VADConfig = {
-        modelPath: '/Users/cale/code/aprendemo/backend/models/silero_vad.onnx',
+        modelPath: 'backend/models/silero_vad.onnx',
         threshold: 0.5,  // Following working example SPEECH_THRESHOLD
         minSpeechDuration: 0.2,  // MIN_SPEECH_DURATION_MS / 1000
         minSilenceDuration: 0.65, // PAUSE_DURATION_THRESHOLD_MS / 1000
