@@ -8,7 +8,6 @@ import { createConversationGraph } from '../graphs/conversation-graph.js';
 const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
 export class AudioProcessor {
-  private audioBuffer: Float32Array[] = [];
   private executor: any;
   private vad: SileroVAD | null = null;
   private isProcessing = false;
@@ -66,27 +65,15 @@ export class AudioProcessor {
 
   addAudioChunk(base64Audio: string) {
     try {
-      // Feed audio to VAD if available
+      // Feed audio to VAD if available and ready
       if (this.vad && this.isReady) {
         this.vad.addAudioData(base64Audio);
       } else {
-        // Convert and store for fallback processing
-        const normalizedArray = this.convertAudioData(base64Audio);
-        
-        // Debug: Save first few chunks to verify frontend audio quality
-        // if (this.debugCounter < 3) {
-        //   this.saveAudioDebug(normalizedArray, 'frontend-input');
-        // }
-        
-        this.audioBuffer.push(normalizedArray);
-        
-        if (this.audioBuffer.length > 100) {
-          this.audioBuffer = this.audioBuffer.slice(-100);
-        }
-
-        // Fallback processing when VAD unavailable
-        if (this.audioBuffer.length >= 20 && !this.isProcessing && this.isReady) {
-          this.processAccumulatedAudio();
+        // VAD not available - log error and ignore audio chunk
+        if (!this.vad) {
+          console.error('VAD not available - cannot process audio chunk');
+        } else if (!this.isReady) {
+          console.warn('AudioProcessor not ready yet - ignoring audio chunk');
         }
       }
     } catch (error) {
@@ -94,23 +81,6 @@ export class AudioProcessor {
     }
   }
 
-  private convertAudioData(base64Audio: string): Float32Array {
-    const binaryString = Buffer.from(base64Audio, 'base64').toString('binary');
-    const bytes = new Uint8Array(binaryString.length);
-    
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    const int16Array = new Int16Array(bytes.buffer);
-    const normalizedArray = new Float32Array(int16Array.length);
-    
-    for (let i = 0; i < int16Array.length; i++) {
-      normalizedArray[i] = int16Array[i] / 32768.0;
-    }
-
-    return normalizedArray;
-  }
 
   private amplifyAudio(audioData: Float32Array, gain: number): Float32Array {
     const amplified = new Float32Array(audioData.length);
@@ -332,152 +302,6 @@ export class AudioProcessor {
     }
   }
 
-  private async processAccumulatedAudio() {
-    if (this.isProcessing) return;
-    
-    this.isProcessing = true;
-
-    try {
-      const totalLength = this.audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
-      const combinedAudio = new Float32Array(totalLength);
-      
-      let offset = 0;
-      for (const chunk of this.audioBuffer) {
-        combinedAudio.set(chunk, offset);
-        offset += chunk.length;
-      }
-
-      // Save debug audio before sending to STT
-      await this.saveAudioDebug(combinedAudio, 'fallback-combined');
-
-      const outputStream = await this.executor.execute(
-        {
-          data: Array.from(combinedAudio),
-          sampleRate: 16000,
-        },
-        uuidv4(),
-      );
-
-      let transcription = '';
-      let chunk = await outputStream.next();
-      console.log('++++ grabbing stream output ++++')
-      console.log(chunk)
-
-      while (!chunk.done) {
-        console.log('++++ grabbing stream output ++++')
-        console.log(`Chunk type: ${chunk.type}`)
-        
-        switch (chunk.type) {
-          case 'TTS_OUTPUT_STREAM':
-            console.log('Processing TTS audio stream...');
-            if (chunk.data && this.websocket) {
-              const ttsStreamIterator = chunk.data;
-              console.log('TTS Stream iterator:', ttsStreamIterator);
-              
-              if (ttsStreamIterator?.next) {
-                let ttsChunk = await ttsStreamIterator.next();
-                
-                while (!ttsChunk.done) {
-                  console.log('TTS chunk:', ttsChunk);
-                  
-                  if (ttsChunk.audio && ttsChunk.audio.data) {
-                    // Convert Float32Array audio data to base64
-                    const audioData = new Float32Array(ttsChunk.audio.data);
-                    const int16Array = new Int16Array(audioData.length);
-                    
-                    // Convert Float32 to Int16
-                    for (let i = 0; i < audioData.length; i++) {
-                      int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
-                    }
-                    
-                    const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
-                    
-                    this.websocket.send(JSON.stringify({
-                      type: 'audio_stream',
-                      audio: base64Audio,
-                      sampleRate: ttsChunk.audio.sampleRate || 16000,
-                      timestamp: Date.now(),
-                      text: ttsChunk.text || ''
-                    }));
-                  }
-                  
-                  ttsChunk = await ttsStreamIterator.next();
-                }
-              }
-            }
-            break;
-            
-          case 'TEXT':
-            if (chunk.data) {
-              transcription = chunk.data;
-              console.log(`STT Transcription: "${transcription}"`);
-              
-              if (this.websocket) {
-                this.websocket.send(JSON.stringify({
-                  type: 'transcription',
-                  text: transcription.trim(),
-                  timestamp: Date.now()
-                }));
-              }
-            }
-            break;
-            
-          case 'CONTENT_STREAM':
-            const streamIterator = chunk.data as ContentStreamIterator;
-            console.log('Processing LLM stream...');
-            
-            let llmResponse = '';
-            while (true) {
-              const streamChunk = await streamIterator.next();
-              if (streamChunk.done) {
-                break;
-              }
-              
-              if (streamChunk.text) {
-                llmResponse += streamChunk.text;
-                console.log('LLM chunk:', streamChunk.text);
-                
-                if (this.websocket) {
-                  this.websocket.send(JSON.stringify({
-                    type: 'llm_response_chunk',
-                    text: streamChunk.text,
-                    timestamp: Date.now()
-                  }));
-                }
-              }
-            }
-            
-            if (llmResponse.trim()) {
-              console.log(`Complete LLM Response: "${llmResponse}"`);
-              
-              if (this.websocket) {
-                this.websocket.send(JSON.stringify({
-                  type: 'llm_response_complete',
-                  text: llmResponse.trim(),
-                  timestamp: Date.now()
-                }));
-              }
-            }
-            break;
-            
-          default:
-            console.log(`Unknown chunk type: ${chunk.type}`, chunk.data);
-            if (chunk.data) {
-              transcription += chunk.data;
-            }
-        }
-        
-        chunk = await outputStream.next();
-      }
-
-      this.audioBuffer = [];
-
-    } catch (error) {
-      console.error('Error processing audio:', error);
-    } finally {
-      this.isProcessing = false;
-    }
-  }
 
   destroy() {
     if (this.executor) {

@@ -13,7 +13,7 @@
 
 - [ ] Improve the conversation graph
     - [ ] Improve prompt templating for instructions and history
-    - [ ] Add text to speech
+    - [x] Add text to speech
 - [ ] Create the flashcard graph
     - [ ] Based on the conversation, we will create flashcards with:
         - [ ] Word
