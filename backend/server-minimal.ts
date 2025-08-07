@@ -15,7 +15,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 
 // Import our audio processor
-import { SimpleAudioProcessor } from './simple-audio-processor.js';
+import { SimpleAudioProcessor } from './helpers/simple-audio-processor.js';
 
 const app = express();
 const server = createServer(app);
@@ -32,10 +32,10 @@ wss.on('connection', (ws) => {
     console.log(`WebSocket connection established: ${connectionId}`);
     
     // Create audio processor for this connection  
-    const apiKey = 'RVVSTzZVaWtQNDB1dWIyMngySEFhdFJidkdEdUNmamk6SkZwTklYek5GWUx6bWw2emlaRTVCSzZETmxoanBCOHEwNHdVbXh5elJWb0k4cjdiMVJKYmVFcnpDbm9hQ2l6bw==';
+    const apiKey = process.env.INWORLD_API_KEY || 'RVVSTzZVaWtQNDB1dWIyMngySEFhdFJidkdEdUNmamk6SkZwTklYek5GWUx6bWw2emlaRTVCSzZETmxoanBCOHEwNHdVbXh5elJWb0k4cjdiMVJKYmVFcnpDbm9hQ2l6bw==';
     console.log(`🔑 Using API key: ${apiKey.substring(0, 20)}...`);
-    console.log(`🔑 Env API key: ${process.env.INWORLD_API_KEY?.substring(0, 20) || 'undefined'}...`);
-    const audioProcessor = new SimpleAudioProcessor(apiKey);
+    const audioProcessor = new SimpleAudioProcessor(apiKey, ws);
+    
     audioProcessors.set(connectionId, audioProcessor);
     
     ws.on('message', (data) => {

@@ -87,6 +87,13 @@ export class WebSocketClient {
                 this.emit('transcript_update', message.data.text);
                 break;
                 
+            case 'transcription':
+                this.emit('transcription', {
+                    text: message.text,
+                    timestamp: message.timestamp
+                });
+                break;
+                
             case 'ai_response':
                 this.emit('ai_response', {
                     text: message.data.text,

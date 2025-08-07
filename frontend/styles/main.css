@@ -177,7 +177,8 @@ body {
 }
 
 .current-transcript {
-    padding: 12px 16px;
+    display: none;
+    /* padding: 12px 16px;
     background: #f9fafb;
     border: 1px dashed #d1d5db;
     border-radius: 8px;
@@ -186,12 +187,12 @@ body {
     font-style: italic;
     min-height: 44px;
     display: flex;
-    align-items: center;
+    align-items: center; */
 }
 
-.current-transcript:empty::before {
+/* .current-transcript:empty::before {
     content: "Live transcription will appear here...";
-}
+} */
 
 /* Flashcards Section */
 .flashcards-section {

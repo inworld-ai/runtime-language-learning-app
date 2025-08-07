@@ -86,6 +86,12 @@ class App {
             this.render();
         });
         
+        this.wsClient.on('transcription', (data) => {
+            this.addMessage('learner', data.text);
+            this.state.currentTranscript = '';
+            this.render();
+        });
+        
         this.audioHandler.on('audioChunk', (audioData) => {
             this.wsClient.sendAudioChunk(audioData);
         });

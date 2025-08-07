@@ -24,7 +24,7 @@ export class AudioBuffer extends EventEmitter {
         this.bufferSize = Math.floor(bufferSeconds * sampleRate);
         this.buffer = new Float32Array(this.bufferSize);
         
-        console.log(`Audio buffer initialized: ${bufferSeconds}s (${this.bufferSize} samples)`);
+        // Audio buffer initialized
     }
 
     addChunk(audioData: Float32Array): void {
@@ -52,7 +52,7 @@ export class AudioBuffer extends EventEmitter {
         const sampleCount = Math.floor(duration * this.sampleRate);
         
         if (sampleCount > this.bufferSize || duration <= 0) {
-            console.warn(`Cannot extract segment: duration ${duration}s exceeds buffer capacity`);
+            // Cannot extract segment
             return null;
         }
 
@@ -73,7 +73,7 @@ export class AudioBuffer extends EventEmitter {
             segment.set(secondPart, firstPart.length);
         }
 
-        console.log(`Extracted ${duration.toFixed(2)}s audio segment (${sampleCount} samples)`);
+        // Extracted audio segment
         return segment;
     }
 
@@ -91,7 +91,7 @@ export class AudioBuffer extends EventEmitter {
             this.events = this.events.slice(-1000);
         }
         
-        console.log(`Audio event: ${type} at ${event.timestamp.toFixed(3)}`);
+        // Audio event logged
         this.emit('audioEvent', event);
     }
 
@@ -108,6 +108,6 @@ export class AudioBuffer extends EventEmitter {
         this.buffer.fill(0);
         this.writeIndex = 0;
         this.events = [];
-        console.log('Audio buffer cleared');
+        // Audio buffer cleared
     }
 }

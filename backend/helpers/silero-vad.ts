@@ -8,6 +8,7 @@ export interface VADConfig {
     threshold: number;
     minSpeechDuration: number;   // seconds
     minSilenceDuration: number;  // seconds
+    speechResetSilenceDuration: number;  // grace period before resetting speech timer
     sampleRate: number;
 }
 
@@ -21,12 +22,13 @@ export class SileroVAD extends EventEmitter {
     private vad: any = null;
     private config: VADConfig;
     private audioBuffer: AudioBuffer;
+    private accumulatedSamples: Float32Array[] = [];
     private isInitialized = false;
     
-    // State tracking
-    private currentSpeechStart: number | null = null;
-    private currentSilenceStart: number | null = null;
-    private isSpeechActive = false;
+    // Simple state tracking - following your sound logic
+    private speechStartTimestamp: number | null = null;
+    private lastSpeechTimestamp: number | null = null;
+    private silenceStartTimestamp: number | null = null;
 
     constructor(config: VADConfig) {
         super();
@@ -36,25 +38,21 @@ export class SileroVAD extends EventEmitter {
         // Listen to audio chunks from buffer
         this.audioBuffer.on('audioChunk', this.processAudioChunk.bind(this));
         
-        console.log(`Silero VAD initialized with threshold ${config.threshold}`);
+        // Silero VAD initialized
     }
 
     async initialize(): Promise<void> {
         if (this.isInitialized) return;
 
         try {
-            console.log('Initializing Silero VAD...');
+            // Initializing Silero VAD
             
             // Try to find CUDA device
             const cudaDevice = DeviceRegistry.getAvailableDevices().find(
                 (device) => device.getType() === DeviceType.CUDA
             );
             
-            if (cudaDevice) {
-                console.log('Using CUDA device for VAD');
-            } else {
-                console.log('Using CPU device for VAD');
-            }
+            // Device selection complete
 
             // Create local VAD instance
             this.vad = await VADFactory.createLocal({
@@ -63,7 +61,7 @@ export class SileroVAD extends EventEmitter {
             });
 
             this.isInitialized = true;
-            console.log('Silero VAD ready');
+            // Silero VAD ready
             
         } catch (error) {
             console.error('Failed to initialize Silero VAD:', error);
@@ -73,7 +71,7 @@ export class SileroVAD extends EventEmitter {
 
     addAudioData(base64Data: string): void {
         try {
-            // Convert base64 to buffer
+            // Convert base64 to buffer (same as working example needs)
             const binaryString = Buffer.from(base64Data, 'base64').toString('binary');
             const bytes = new Uint8Array(binaryString.length);
             
@@ -81,16 +79,17 @@ export class SileroVAD extends EventEmitter {
                 bytes[i] = binaryString.charCodeAt(i);
             }
 
-            // Convert Int16Array to Float32Array
+            // Convert to Int16Array but keep as integers (no normalization!)
             const int16Array = new Int16Array(bytes.buffer);
-            const floatArray = new Float32Array(int16Array.length);
             
+            // Convert to plain array of integers (like working example)
+            const integerArray = new Float32Array(int16Array.length);
             for (let i = 0; i < int16Array.length; i++) {
-                floatArray[i] = int16Array[i] / 32768.0; // Normalize to [-1, 1]
+                integerArray[i] = int16Array[i]; // Keep raw integer values for VAD
             }
 
-            // Add to audio buffer
-            this.audioBuffer.addChunk(floatArray);
+            // Add to audio buffer (still Float32Array for buffer compatibility)
+            this.audioBuffer.addChunk(integerArray);
             
         } catch (error) {
             console.error('Error processing audio data:', error);
@@ -98,98 +97,142 @@ export class SileroVAD extends EventEmitter {
     }
 
     private async processAudioChunk(chunk: AudioChunk): Promise<void> {
-        if (!this.isInitialized || !this.vad) return;
+        if (!this.isInitialized || !this.vad) {
+            console.log(`⚠️ Skipping VAD processing - initialized: ${this.isInitialized}, vad: ${!!this.vad}`);
+            return;
+        }
 
-        try {
-            // Process with Silero VAD
-            const result = await this.vad.detectVoiceActivity({
-                data: chunk.data,
-                sampleRate: this.config.sampleRate
-            });
+        // Accumulate samples until we have enough for VAD processing
+        this.accumulatedSamples.push(chunk.data);
+        
+        // Process when we have enough samples (try larger chunks to help with -1 results)
+        const totalSamples = this.accumulatedSamples.reduce((sum, arr) => sum + arr.length, 0);
+        if (totalSamples >= 1024) {  // Try larger chunks since -1 might mean insufficient data
+            try {
+                // Combine accumulated samples
+                const combinedAudio = new Float32Array(totalSamples);
+                let offset = 0;
+                for (const samples of this.accumulatedSamples) {
+                    combinedAudio.set(samples, offset);
+                    offset += samples.length;
+                }
 
-            const isSpeech = result > this.config.threshold;
-            const vadResult: VADResult = {
-                isSpeech,
-                confidence: result,
-                timestamp: chunk.timestamp
-            };
+                // Let VAD model make the speech/silence decision - it's working well
 
-            // Emit VAD result
-            this.emit('vadResult', vadResult);
+                // Convert Float32Array to plain array of integers (like working example)
+                const integerArray: number[] = [];
+                for (let i = 0; i < combinedAudio.length; i++) {
+                    integerArray.push(combinedAudio[i]); // Raw integer values
+                }
+                
+                // Process with Silero VAD using working example format
+                const result = await this.vad.detectVoiceActivity({
+                    data: integerArray,  // Plain array, not Float32Array!
+                    sampleRate: this.config.sampleRate
+                });
+                
+                // Handle -1 as silence (insufficient data = no speech detected)
+                let isSpeech = false;
+                if (result === -1) {
+                    isSpeech = false; // Treat as silence
+                } else {
+                    isSpeech = result > this.config.threshold;
+                }
+                
+                const vadResult: VADResult = {
+                    isSpeech,
+                    confidence: result,
+                    timestamp: chunk.timestamp
+                };
 
-            // Process speech/silence state changes
-            await this.processVADResult(vadResult);
-            
-        } catch (error) {
-            console.error('VAD processing error:', error);
+                // Emit VAD result
+                this.emit('vadResult', vadResult);
+
+                // Process speech/silence state changes
+                await this.processVADResult(vadResult);
+                
+                // Clear accumulated samples
+                this.accumulatedSamples = [];
+                
+            } catch (error) {
+                console.error('VAD processing error:', error);
+                this.accumulatedSamples = []; // Clear on error
+            }
         }
     }
+
 
     private async processVADResult(result: VADResult): Promise<void> {
         const now = result.timestamp;
 
         if (result.isSpeech) {
-            // Speech detected
-            if (!this.isSpeechActive) {
-                // Start of speech
-                this.currentSpeechStart = now;
-                this.currentSilenceStart = null;
-                this.isSpeechActive = true;
-                
+            // Speech detected - note the timestamp
+            if (this.speechStartTimestamp === null) {
+                // First speech detection - mark start
+                this.speechStartTimestamp = now;
                 this.audioBuffer.addEvent('speech_start', { confidence: result.confidence });
                 this.emit('speechStart', { timestamp: now, confidence: result.confidence });
-                
-                console.log(`Speech started (confidence: ${result.confidence.toFixed(3)})`);
+                // Speech started
             }
             
+            // Update last speech timestamp (for tracking continuous speech)
+            this.lastSpeechTimestamp = now;
+            
+            // Reset silence tracking since we have speech
+            this.silenceStartTimestamp = null;
+            
         } else {
-            // Silence detected
-            if (this.isSpeechActive) {
-                // Start tracking silence
-                if (this.currentSilenceStart === null) {
-                    this.currentSilenceStart = now;
-                    this.audioBuffer.addEvent('silence_start');
-                    
+            // No speech detected
+            if (this.speechStartTimestamp !== null) {
+                // We had speech before, now checking for silence
+                if (this.silenceStartTimestamp === null) {
+                    // First silence after speech - mark start of silence
+                    this.silenceStartTimestamp = now;
                 } else {
-                    // Check if we've had enough silence
-                    const silenceDuration = now - this.currentSilenceStart;
+                    // Check if we have unbroken silence for threshold duration
+                    const silenceDuration = now - this.silenceStartTimestamp;
                     
                     if (silenceDuration >= this.config.minSilenceDuration) {
-                        // End of speech
-                        const speechDuration = this.currentSilenceStart - (this.currentSpeechStart || now);
+                        // We have enough silence - extract speech segment with buffer and send to STT
+                        const speechDuration = this.silenceStartTimestamp - this.speechStartTimestamp;
+                        const totalDuration = now - this.speechStartTimestamp;
                         
-                        // Only process if speech was long enough
-                        if (speechDuration >= this.config.minSpeechDuration) {
-                            console.log(`Speech ended after ${speechDuration.toFixed(2)}s (${silenceDuration.toFixed(2)}s silence)`);
+                        // Speech complete, processing
+                        
+                        // Extract audio with 0.5s buffer on each side for better context
+                        const bufferDuration = 1.5;
+                        const extractStart = this.speechStartTimestamp - bufferDuration;
+                        const extractEnd = this.silenceStartTimestamp + bufferDuration;
+                        
+                        const speechSegment = this.audioBuffer.extractSegment(
+                            extractStart,
+                            extractEnd
+                        );
+                        
+                        if (speechSegment) {
+                            const actualExtractedDuration = extractEnd - extractStart;
                             
-                            // Extract the speech segment
-                            const speechSegment = this.audioBuffer.extractSegment(
-                                this.currentSpeechStart!,
-                                this.currentSilenceStart
-                            );
+                            this.audioBuffer.addEvent('speech_end', { 
+                                speechDuration,
+                                silenceDuration,
+                                totalDuration,
+                                extractedDuration: actualExtractedDuration,
+                                bufferDuration
+                            });
                             
-                            if (speechSegment) {
-                                this.audioBuffer.addEvent('speech_end', { 
-                                    duration: speechDuration,
-                                    silenceDuration 
-                                });
-                                
-                                this.emit('speechEnd', {
-                                    timestamp: now,
-                                    speechSegment,
-                                    speechStart: this.currentSpeechStart,
-                                    speechDuration,
-                                    silenceDuration
-                                });
-                            }
-                        } else {
-                            console.log(`Speech too short (${speechDuration.toFixed(2)}s), ignoring`);
+                            this.emit('speechEnd', {
+                                timestamp: now,
+                                speechSegment,
+                                speechStart: extractStart,  // Use buffered start
+                                speechDuration: actualExtractedDuration,  // Use actual extracted duration
+                                silenceDuration
+                            });
                         }
                         
-                        // Reset state
-                        this.isSpeechActive = false;
-                        this.currentSpeechStart = null;
-                        this.currentSilenceStart = null;
+                        // Reset state for next speech detection
+                        this.speechStartTimestamp = null;
+                        this.lastSpeechTimestamp = null;
+                        this.silenceStartTimestamp = null;
                     }
                 }
             }
@@ -205,6 +248,6 @@ export class SileroVAD extends EventEmitter {
         this.audioBuffer.clear();
         this.isInitialized = false;
         
-        console.log('Silero VAD destroyed');
+        // Silero VAD destroyed
     }
 }
