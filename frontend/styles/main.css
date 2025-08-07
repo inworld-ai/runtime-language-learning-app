@@ -1,0 +1,328 @@
+/* Reset and Base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #fafafa;
+    color: #1a1a1a;
+    line-height: 1.5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+/* Header */
+.header {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e5e5;
+    padding: 16px 0;
+}
+
+.header .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fbbf24;
+    transition: background-color 0.3s ease;
+}
+
+.status-dot.connected {
+    background: #10b981;
+}
+
+.status-dot.disconnected {
+    background: #ef4444;
+}
+
+.status-text {
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+/* Main Layout */
+.main {
+    padding: 32px 0;
+    min-height: calc(100vh - 80px);
+}
+
+.app-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    height: calc(100vh - 144px);
+}
+
+/* Section Headers */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.card-count {
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+/* Chat Section */
+.chat-section {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e5e5;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+}
+
+.mic-button {
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
+    border: 2px solid #e5e5e5;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #6b7280;
+}
+
+.mic-button:hover:not(:disabled) {
+    border-color: #1a1a1a;
+    color: #1a1a1a;
+}
+
+.mic-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mic-button.recording {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+}
+
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.message {
+    max-width: 80%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+.message.teacher {
+    background: #f3f4f6;
+    color: #1a1a1a;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+}
+
+.message.learner {
+    background: #1a1a1a;
+    color: #ffffff;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+}
+
+.current-transcript {
+    padding: 12px 16px;
+    background: #f9fafb;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #6b7280;
+    font-style: italic;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+}
+
+.current-transcript:empty::before {
+    content: "Live transcription will appear here...";
+}
+
+/* Flashcards Section */
+.flashcards-section {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e5e5;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+}
+
+.flashcards-container {
+    flex: 1;
+    min-height: 0;
+}
+
+.flashcards-grid {
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.flashcard {
+    background: #fafafa;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 20px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.flashcard:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.flashcard.flipped {
+    background: #1a1a1a;
+    color: #ffffff;
+}
+
+.flashcard-word {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: inherit;
+}
+
+.flashcard-translation {
+    font-size: 16px;
+    color: #6b7280;
+    margin-bottom: 12px;
+}
+
+.flashcard.flipped .flashcard-translation {
+    color: #d1d5db;
+}
+
+.flashcard-example {
+    font-size: 14px;
+    font-style: italic;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+.flashcard.flipped .flashcard-example {
+    color: #d1d5db;
+}
+
+.flashcard-mnemonic {
+    font-size: 13px;
+    color: #9ca3af;
+    padding: 8px 12px;
+    background: rgba(107, 114, 128, 0.1);
+    border-radius: 6px;
+    margin-top: 8px;
+}
+
+.flashcard.flipped .flashcard-mnemonic {
+    color: #9ca3af;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.empty-state {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 15px;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .app-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+        height: auto;
+    }
+    
+    .chat-section,
+    .flashcards-section {
+        min-height: 400px;
+    }
+    
+    .container {
+        padding: 0 16px;
+    }
+}
+
+/* Scrollbar Styling */
+.messages::-webkit-scrollbar,
+.flashcards-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.messages::-webkit-scrollbar-track,
+.flashcards-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.messages::-webkit-scrollbar-thumb,
+.flashcards-grid::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+}
+
+.messages::-webkit-scrollbar-thumb:hover,
+.flashcards-grid::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
