@@ -9,6 +9,7 @@ export interface VADConfig {
     minSpeechDuration: number;   // seconds
     minSilenceDuration: number;  // seconds
     speechResetSilenceDuration: number;  // grace period before resetting speech timer
+    minVolume: number;           // minimum RMS volume for speech (0.0-1.0)
     sampleRate: number;
 }
 
@@ -25,9 +26,12 @@ export class SileroVAD extends EventEmitter {
     private accumulatedSamples: Float32Array[] = [];
     private isInitialized = false;
     
-    // Simple state tracking - following your sound logic
-    private speechStartTimestamp: number | null = null;
-    private silenceStartTimestamp: number | null = null;
+    // Simplified state tracking following working example pattern
+    private isCapturingSpeech = false;
+    private speechBuffer: number[] = [];
+    private pauseDuration = 0;
+    private readonly FRAME_PER_BUFFER = 1024;
+    private readonly INPUT_SAMPLE_RATE = 16000;
 
     constructor(config: VADConfig) {
         super();
@@ -39,24 +43,35 @@ export class SileroVAD extends EventEmitter {
     }
 
     async initialize(): Promise<void> {
-        if (this.isInitialized) return;
+        if (this.isInitialized) {
+            console.log('SileroVAD: Already initialized');
+            return;
+        }
 
         try {
+            console.log('SileroVAD: Starting initialization with model path:', this.config.modelPath);
+            
             // Try to find CUDA device
-            const cudaDevice = DeviceRegistry.getAvailableDevices().find(
+            const availableDevices = DeviceRegistry.getAvailableDevices();
+            console.log('SileroVAD: Available devices:', availableDevices.map(d => d.getType()));
+            
+            const cudaDevice = availableDevices.find(
                 (device) => device.getType() === DeviceType.CUDA
             );
+            console.log('SileroVAD: Using CUDA device:', !!cudaDevice);
 
             // Create local VAD instance
+            console.log('SileroVAD: Creating VAD instance...');
             this.vad = await VADFactory.createLocal({
                 modelPath: this.config.modelPath,
                 device: cudaDevice
             });
 
             this.isInitialized = true;
+            console.log('SileroVAD: Initialization complete');
             
         } catch (error) {
-            console.error('Failed to initialize Silero VAD:', error);
+            console.error('SileroVAD: Failed to initialize:', error);
             throw error;
         }
     }
@@ -84,8 +99,16 @@ export class SileroVAD extends EventEmitter {
             this.audioBuffer.addChunk(normalizedArray);
             
         } catch (error) {
-            console.error('Error processing audio data:', error);
+            console.error('SileroVAD: Error processing audio data:', error);
         }
+    }
+
+    private calculateRMSVolume(audioData: Float32Array): number {
+        let sumSquares = 0;
+        for (let i = 0; i < audioData.length; i++) {
+            sumSquares += audioData[i] * audioData[i];
+        }
+        return Math.sqrt(sumSquares / audioData.length);
     }
 
     private async processAudioChunk(chunk: AudioChunk): Promise<void> {
@@ -96,9 +119,9 @@ export class SileroVAD extends EventEmitter {
         // Accumulate samples until we have enough for VAD processing
         this.accumulatedSamples.push(chunk.data);
         
-        // Process when we have enough samples (try larger chunks to help with -1 results)
+        // Process when we have enough samples (using FRAME_PER_BUFFER like working example)
         const totalSamples = this.accumulatedSamples.reduce((sum, arr) => sum + arr.length, 0);
-        if (totalSamples >= 1024) {  // Try larger chunks since -1 might mean insufficient data
+        if (totalSamples >= this.FRAME_PER_BUFFER) {
             try {
                 // Combine accumulated samples
                 const combinedAudio = new Float32Array(totalSamples);
@@ -107,6 +130,9 @@ export class SileroVAD extends EventEmitter {
                     combinedAudio.set(samples, offset);
                     offset += samples.length;
                 }
+
+                // Calculate RMS volume for noise filtering
+                const rmsVolume = this.calculateRMSVolume(combinedAudio);
 
                 // Convert normalized Float32Array back to integer array for VAD model
                 const integerArray: number[] = [];
@@ -121,26 +147,12 @@ export class SileroVAD extends EventEmitter {
                     sampleRate: this.config.sampleRate
                 });
                 
-                // Handle -1 as silence (insufficient data = no speech detected)
-                let isSpeech = false;
-                if (result === -1) {
-                    isSpeech = false; // Treat as silence
-                } else {
-                    console.log('result', result);
-                    isSpeech = result > this.config.threshold;
-                }
+                // Following working example: -1 = no voice activity, anything else = voice activity
+                // Add volume filtering to the working pattern
+                const hasVoiceActivity = (result !== -1) && (rmsVolume >= this.config.minVolume);
                 
-                const vadResult: VADResult = {
-                    isSpeech,
-                    confidence: result,
-                    timestamp: chunk.timestamp
-                };
-
-                // Emit VAD result
-                this.emit('vadResult', vadResult);
-
-                // Process speech/silence state changes
-                await this.processVADResult(vadResult);
+                // Process using simplified state machine from working example
+                await this.processVADResult(hasVoiceActivity, integerArray, rmsVolume);
                 
                 // Clear accumulated samples
                 this.accumulatedSamples = [];
@@ -153,74 +165,64 @@ export class SileroVAD extends EventEmitter {
     }
 
 
-    private async processVADResult(result: VADResult): Promise<void> {
-        const now = result.timestamp;
-
-        if (result.isSpeech) {
-            // Speech detected - note the timestamp
-            if (this.speechStartTimestamp === null) {
-                // First speech detection - mark start
-                this.speechStartTimestamp = now;
-                this.audioBuffer.addEvent('speech_start', { confidence: result.confidence });
-                this.emit('speechStart', { timestamp: now, confidence: result.confidence });
-            }
-            
-            // Reset silence tracking since we have speech
-            this.silenceStartTimestamp = null;
-            
-        } else {
-            // No speech detected
-            if (this.speechStartTimestamp !== null) {
-                // We had speech before, now checking for silence
-                if (this.silenceStartTimestamp === null) {
-                    // First silence after speech - mark start of silence
-                    this.silenceStartTimestamp = now;
-                } else {
-                    // Check if we have unbroken silence for threshold duration
-                    const silenceDuration = now - this.silenceStartTimestamp;
+    private async processVADResult(hasVoiceActivity: boolean, audioChunk: number[], volume: number): Promise<void> {
+        // Following the working example pattern exactly
+        if (this.isCapturingSpeech) {
+            this.speechBuffer.push(...audioChunk);
+            if (!hasVoiceActivity) {
+                // Already capturing speech but new chunk has no voice activity
+                this.pauseDuration += (audioChunk.length * 1000) / this.INPUT_SAMPLE_RATE; // ms
+                
+                if (this.pauseDuration > this.config.minSilenceDuration * 1000) { // Convert to ms
+                    this.isCapturingSpeech = false;
                     
-                    if (silenceDuration >= this.config.minSilenceDuration) {
-                        // We have enough silence - extract speech segment with buffer and send to STT
-                        const speechDuration = this.silenceStartTimestamp - this.speechStartTimestamp;
-                        const totalDuration = now - this.speechStartTimestamp;
-                        
-                        // Extract audio with generous buffer for complete utterances
-                        const bufferDuration = 2.0;  // Increased from 1.5s to 2.0s
-                        const extractStart = this.speechStartTimestamp - bufferDuration;
-                        const extractEnd = this.silenceStartTimestamp + bufferDuration;
-                        
-                        const speechSegment = this.audioBuffer.extractSegment(
-                            extractStart,
-                            extractEnd
-                        );
-                        
-                        if (speechSegment) {
-                            const actualExtractedDuration = extractEnd - extractStart;
-                            
-                            this.audioBuffer.addEvent('speech_end', { 
-                                speechDuration,
-                                silenceDuration,
-                                totalDuration,
-                                extractedDuration: actualExtractedDuration,
-                                bufferDuration
-                            });
-                            
-                            this.emit('speechEnd', {
-                                timestamp: now,
-                                speechSegment,
-                                speechStart: extractStart,  // Use buffered start
-                                speechDuration: actualExtractedDuration,  // Use actual extracted duration
-                                silenceDuration
-                            });
-                        }
-                        
-                        // Reset state for next speech detection
-                        this.speechStartTimestamp = null;
-                        this.silenceStartTimestamp = null;
+                    const speechDuration = (this.speechBuffer.length * 1000) / this.INPUT_SAMPLE_RATE; // ms
+                    
+                    if (speechDuration > this.config.minSpeechDuration * 1000) { // Convert to ms
+                        await this.processCapturedSpeech();
                     }
+                    
+                    // Reset for next speech capture
+                    this.speechBuffer = [];
+                    this.pauseDuration = 0;
                 }
+            } else {
+                // Already capturing speech and new chunk has voice activity
+                this.pauseDuration = 0;
             }
+        } else {
+            if (hasVoiceActivity) {
+                // Not capturing speech but new chunk has voice activity - start capturing
+                this.isCapturingSpeech = true;
+                this.speechBuffer = [...audioChunk]; // Start fresh
+                this.pauseDuration = 0;
+                
+                this.emit('speechStart', { 
+                    timestamp: Date.now() / 1000, 
+                    volume 
+                });
+            }
+            // Not capturing speech and new chunk has no voice activity - do nothing
         }
+    }
+    
+    private async processCapturedSpeech(): Promise<void> {
+        if (this.speechBuffer.length === 0) return;
+        
+        // Convert integer array back to Float32Array for processing
+        const speechSegment = new Float32Array(this.speechBuffer.length);
+        for (let i = 0; i < this.speechBuffer.length; i++) {
+            speechSegment[i] = this.speechBuffer[i] / 32768.0; // Normalize back to [-1, 1]
+        }
+        
+        const speechDuration = (this.speechBuffer.length * 1000) / this.INPUT_SAMPLE_RATE;
+        
+        this.emit('speechEnd', {
+            timestamp: Date.now() / 1000,
+            speechSegment,
+            speechDuration: speechDuration / 1000, // Convert back to seconds
+            samplesCount: this.speechBuffer.length
+        });
     }
 
     destroy(): void {

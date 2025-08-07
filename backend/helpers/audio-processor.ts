@@ -22,32 +22,46 @@ export class AudioProcessor {
   }
 
   private async initialize() {
+    console.log('AudioProcessor: Starting initialization...');
+    
     // Initialize VAD
     try {
       const vadConfig: VADConfig = {
         modelPath: '/Users/cale/code/aprendemo/backend/models/silero_vad.onnx',
-        threshold: 0.8,  // Lower threshold to catch quieter speech
-        minSpeechDuration: 0.1,  // Shorter min speech to catch quick words
-        minSilenceDuration: 1, // Longer silence required to end speech (was 0.8)
-        speechResetSilenceDuration: 1.2, // More generous grace period (was 1.0)
+        threshold: 0.5,  // Following working example SPEECH_THRESHOLD
+        minSpeechDuration: 0.2,  // MIN_SPEECH_DURATION_MS / 1000
+        minSilenceDuration: 0.65, // PAUSE_DURATION_THRESHOLD_MS / 1000
+        speechResetSilenceDuration: 1.0,
+        minVolume: 0.01, // Lower threshold to start - can adjust based on testing
         sampleRate: 16000
       };
       
+      console.log('AudioProcessor: Creating SileroVAD with config:', vadConfig);
       this.vad = new SileroVAD(vadConfig);
+      
+      console.log('AudioProcessor: Initializing VAD...');
       await this.vad.initialize();
+      console.log('AudioProcessor: VAD initialized successfully');
+      
+      this.vad.on('speechStart', (event) => {
+        console.log('🎤 Speech started');
+      });
       
       this.vad.on('speechEnd', async (event) => {
+        console.log('🔇 Speech ended, duration:', event.speechDuration.toFixed(2) + 's');
         await this.processVADSpeechSegment(event.speechSegment);
       });
       
     } catch (error) {
-      console.warn('VAD initialization failed:', error);
+      console.error('AudioProcessor: VAD initialization failed:', error);
       this.vad = null;
     }
     
     // Initialize conversation graph
+    console.log('AudioProcessor: Creating conversation graph...');
     this.executor = createConversationGraph({ apiKey: this.apiKey });
     this.isReady = true;
+    console.log('AudioProcessor: Initialization complete, ready for audio processing');
   }
 
   addAudioChunk(base64Audio: string) {
