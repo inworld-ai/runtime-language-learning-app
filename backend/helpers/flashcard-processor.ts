@@ -24,10 +24,12 @@ export class FlashcardProcessor {
 
   async generateFlashcards(
     messages: ConversationMessage[],
-    count: number = 3
+    count: number = 1
   ): Promise<Flashcard[]> {
     const graph = createFlashcardGraph();
-    const executor = graph.getExecutor();
+    const executor = graph.getExecutor({
+      disableRemoteConfig: true,
+    });
     
     // Generate flashcards in parallel
     const promises: Promise<Flashcard>[] = [];

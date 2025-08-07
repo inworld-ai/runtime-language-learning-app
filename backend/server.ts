@@ -42,7 +42,7 @@ wss.on('connection', (ws) => {
     // Set up flashcard generation callback
     audioProcessor.setFlashcardCallback(async (messages) => {
         try {
-            const flashcards = await flashcardProcessor.generateFlashcards(messages, 3);
+            const flashcards = await flashcardProcessor.generateFlashcards(messages, 1);
             if (flashcards.length > 0) {
                 ws.send(JSON.stringify({
                     type: 'flashcards_generated',

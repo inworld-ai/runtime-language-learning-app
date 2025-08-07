@@ -275,12 +275,12 @@ body {
 }
 
 .flashcard-front {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: #f3f4f6;
+    color: #1a1a1a;
 }
 
 .flashcard-back {
-    background: #fafafa;
+    background: #ffffff;
     border: 2px solid #e5e5e5;
     transform: rotateY(180deg);
 }
@@ -289,7 +289,6 @@ body {
     font-size: 32px;
     font-weight: 700;
     text-align: center;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .flashcard-english {
@@ -320,7 +319,7 @@ body {
 
 .mnemonic-label {
     font-weight: 600;
-    color: #9333ea;
+    color: #1a1a1a;
     margin-right: 4px;
 }
 
@@ -333,45 +332,38 @@ body {
         gap: 12px;
         padding-bottom: 8px;
         scroll-snap-type: x mandatory;
+        height: 100%;
     }
     
     .flashcard {
-        min-width: 280px;
-        width: 280px;
-        height: 180px;
-        scroll-snap-align: center;
+        min-width: 45%;
+        width: 45%;
+        height: calc(100% - 16px);
+        min-height: 280px;
+        scroll-snap-align: start;
     }
     
     .flashcard-spanish {
-        font-size: 28px;
+        font-size: 24px;
     }
     
     .flashcard-english {
-        font-size: 20px;
+        font-size: 18px;
     }
     
     .flashcard-example {
-        font-size: 14px;
+        font-size: 13px;
+        padding: 0 8px;
     }
     
     .flashcard-mnemonic {
-        font-size: 13px;
+        font-size: 12px;
         padding: 8px;
     }
     
-    /* Horizontal scrollbar styling */
-    .flashcards-grid::-webkit-scrollbar {
-        height: 6px;
-        width: auto;
-    }
-    
-    .flashcards-grid::-webkit-scrollbar-track {
-        background: transparent;
-    }
-    
-    .flashcards-grid::-webkit-scrollbar-thumb {
-        background: #d1d5db;
-        border-radius: 3px;
+    .flashcard-front,
+    .flashcard-back {
+        padding: 16px;
     }
 }
 
