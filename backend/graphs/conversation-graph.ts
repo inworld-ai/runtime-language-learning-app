@@ -7,6 +7,7 @@ import {
   registerCustomNodeType
 } from '@inworld/runtime/graph';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
+import { conversationTemplate } from '../helpers/prompt-templates.ts';
 
 export interface ConversationGraphConfig {
   apiKey: string;
@@ -36,18 +37,7 @@ export function createConversationGraph(
       console.log('Conversation state messages count:', conversationState.messages.length);
       console.log('Full conversation state:', JSON.stringify(conversationState, null, 2));
 
-      const template = `You are a helpful language learning assistant.
-
-{% if messages and messages|length > 0 %}
-Previous conversation:
-{% for message in messages %}
-{{ message.role }}: {{ message.content }}
-{% endfor %}
-{% endif %}
-
-User: {{ current_input }}
-
-Please respond naturally and helpfully.`;
+      const template = conversationTemplate;
 
       const templateData = {
         messages: conversationState.messages || [],
@@ -141,7 +131,9 @@ Please respond naturally and helpfully.`;
     .addEdge(llmNode, chunkerNode)
     .addEdge(chunkerNode, ttsNode)
     .setEndNode(ttsNode)
-    .getExecutor()
+    .getExecutor({
+      disableRemoteConfig: true,
+    })
 
   return executor;
 }

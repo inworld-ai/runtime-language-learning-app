@@ -11,8 +11,8 @@
 
 ## TODOs
 
-- [ ] Improve the conversation graph
-    - [ ] Improve prompt templating for instructions and history
+- [x] Improve the conversation graph
+    - [x] Improve prompt templating for instructions and history
     - [x] Add text to speech
 - [ ] Create the flashcard graph
     - [ ] Based on the conversation, we will create flashcards with:
