@@ -117,6 +117,20 @@ export class WebSocketClient {
                 this.emit('speech_ended', message.data);
                 break;
                 
+            case 'llm_response_chunk':
+                this.emit('llm_response_chunk', {
+                    text: message.text,
+                    timestamp: message.timestamp
+                });
+                break;
+                
+            case 'llm_response_complete':
+                this.emit('llm_response_complete', {
+                    text: message.text,
+                    timestamp: message.timestamp
+                });
+                break;
+                
             default:
                 console.log('Unknown message type:', message.type);
         }

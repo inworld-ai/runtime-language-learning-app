@@ -1,8 +1,10 @@
-To get started:
+# Aprendemo
 
-1. Get your Basic(base64) API key at https://platform.inworld.ai/
-2. Run `npm install`
-3. Run `INWORLD_API_KEY=<your Basic (Base64) key goes there> npx ts-node index.ts`
+"Aprender" is Spanish for "learn". This is a simple Node.js app where you can learn both Spanish (through conversation and flashcard studying) as well as the Inworld Runtime.
 
-Alternatively put key in the `.env` file in the root of the package
-Alternatively export it to the shell with `export INWORLD_API_KEY=<your Basic (Base64) key goes there>`
+## Setup
+
+1. Grab your Base64 API key from the Inworld Portal
+2. Put it in the `.env` file in the root of the package
+3. Run `npm install`
+4. Run the app with `npm run dev`

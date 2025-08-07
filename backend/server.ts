@@ -1,13 +1,11 @@
 // Load environment variables FIRST
 import dotenv from 'dotenv';
+dotenv.config();
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Load .env from root directory
-dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Basic imports
 import express from 'express';
@@ -15,16 +13,16 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 
 // Import our audio processor
-import { SimpleAudioProcessor } from './helpers/simple-audio-processor.js';
+import { AudioProcessor } from './helpers/audio-processor.ts';
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 
 // Store audio processors per connection
-const audioProcessors = new Map<string, SimpleAudioProcessor>();
+const audioProcessors = new Map<string, AudioProcessor>();
 
 // WebSocket handling with audio processing
 wss.on('connection', (ws) => {
@@ -32,9 +30,8 @@ wss.on('connection', (ws) => {
     console.log(`WebSocket connection established: ${connectionId}`);
     
     // Create audio processor for this connection  
-    const apiKey = process.env.INWORLD_API_KEY || 'RVVSTzZVaWtQNDB1dWIyMngySEFhdFJidkdEdUNmamk6SkZwTklYek5GWUx6bWw2emlaRTVCSzZETmxoanBCOHEwNHdVbXh5elJWb0k4cjdiMVJKYmVFcnpDbm9hQ2l6bw==';
-    console.log(`🔑 Using API key: ${apiKey.substring(0, 20)}...`);
-    const audioProcessor = new SimpleAudioProcessor(apiKey, ws);
+    const apiKey = process.env.INWORLD_API_KEY || '';
+    const audioProcessor = new AudioProcessor(apiKey, ws);
     
     audioProcessors.set(connectionId, audioProcessor);
     

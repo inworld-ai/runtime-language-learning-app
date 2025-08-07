@@ -1,12 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ContentStreamIterator } from '@inworld/runtime/common';
 import { SileroVAD, VADConfig } from './silero-vad.js';
 import { createConversationGraph } from '../graphs/conversation-graph.js';
 
 const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
-export class SimpleAudioProcessor {
+export class AudioProcessor {
   private audioBuffer: Float32Array[] = [];
   private executor: any;
   private vad: SileroVAD | null = null;
@@ -26,9 +27,9 @@ export class SimpleAudioProcessor {
       const vadConfig: VADConfig = {
         modelPath: '/Users/cale/code/aprendemo/backend/models/silero_vad.onnx',
         threshold: 0.8,  // Lower threshold to catch quieter speech
-        minSpeechDuration: 0.4,  // Shorter min speech to catch quick words
+        minSpeechDuration: 0.1,  // Shorter min speech to catch quick words
         minSilenceDuration: 1, // Longer silence required to end speech (was 0.8)
-        speechResetSilenceDuration: 1.5, // More generous grace period (was 1.0)
+        speechResetSilenceDuration: 1.2, // More generous grace period (was 1.0)
         sampleRate: 16000
       };
       
@@ -202,23 +203,73 @@ export class SimpleAudioProcessor {
       let chunk = await outputStream.next();
 
       while (!chunk.done) {
-        if (chunk.data) {
-          transcription += chunk.data;
+        console.log(`VAD Chunk type: ${chunk.type}`);
+        
+        switch (chunk.type) {
+          case 'TEXT':
+            if (chunk.data) {
+              transcription = chunk.data;
+              console.log(`VAD STT Transcription: "${transcription}"`);
+              
+              if (this.websocket) {
+                this.websocket.send(JSON.stringify({
+                  type: 'transcription',
+                  text: transcription.trim(),
+                  timestamp: Date.now()
+                }));
+              }
+            }
+            break;
+            
+          case 'CONTENT_STREAM':
+            const streamIterator = chunk.data as ContentStreamIterator;
+            console.log('VAD Processing LLM stream...');
+            
+            let llmResponse = '';
+            while (true) {
+              const streamChunk = await streamIterator.next();
+              if (streamChunk.done) {
+                break;
+              }
+              
+              if (streamChunk.text) {
+                llmResponse += streamChunk.text;
+                console.log('VAD LLM chunk:', streamChunk.text);
+                
+                if (this.websocket) {
+                  this.websocket.send(JSON.stringify({
+                    type: 'llm_response_chunk',
+                    text: streamChunk.text,
+                    timestamp: Date.now()
+                  }));
+                }
+              }
+            }
+            
+            if (llmResponse.trim()) {
+              console.log(`VAD Complete LLM Response: "${llmResponse}"`);
+              
+              if (this.websocket) {
+                this.websocket.send(JSON.stringify({
+                  type: 'llm_response_complete',
+                  text: llmResponse.trim(),
+                  timestamp: Date.now()
+                }));
+              }
+            }
+            break;
+            
+          default:
+            console.log(`VAD Unknown chunk type: ${chunk.type}`, chunk.data);
+            if (chunk.data) {
+              transcription += chunk.data;
+            }
         }
+        
         chunk = await outputStream.next();
       }
 
       if (transcription.trim()) {
-        console.log(`"${transcription.trim()}"`);
-        
-        if (this.websocket) {
-          this.websocket.send(JSON.stringify({
-            type: 'transcription',
-            text: transcription.trim(),
-            timestamp: Date.now()
-          }));
-        }
-        
         return transcription;
       }
 
@@ -262,23 +313,70 @@ export class SimpleAudioProcessor {
 
       while (!chunk.done) {
         console.log('++++ grabbing stream output ++++')
-        console.log(chunk.type)
-        if (chunk.data) {
-          transcription += chunk.data;
-        }
-        chunk = await outputStream.next();
-      }
-
-      if (transcription.trim()) {
-        console.log(`"${transcription.trim()}"`);
+        console.log(`Chunk type: ${chunk.type}`)
         
-        if (this.websocket) {
-          this.websocket.send(JSON.stringify({
-            type: 'transcription',
-            text: transcription.trim(),
-            timestamp: Date.now()
-          }));
+        switch (chunk.type) {
+          case 'TEXT':
+            if (chunk.data) {
+              transcription = chunk.data;
+              console.log(`STT Transcription: "${transcription}"`);
+              
+              if (this.websocket) {
+                this.websocket.send(JSON.stringify({
+                  type: 'transcription',
+                  text: transcription.trim(),
+                  timestamp: Date.now()
+                }));
+              }
+            }
+            break;
+            
+          case 'CONTENT_STREAM':
+            const streamIterator = chunk.data as ContentStreamIterator;
+            console.log('Processing LLM stream...');
+            
+            let llmResponse = '';
+            while (true) {
+              const streamChunk = await streamIterator.next();
+              if (streamChunk.done) {
+                break;
+              }
+              
+              if (streamChunk.text) {
+                llmResponse += streamChunk.text;
+                console.log('LLM chunk:', streamChunk.text);
+                
+                if (this.websocket) {
+                  this.websocket.send(JSON.stringify({
+                    type: 'llm_response_chunk',
+                    text: streamChunk.text,
+                    timestamp: Date.now()
+                  }));
+                }
+              }
+            }
+            
+            if (llmResponse.trim()) {
+              console.log(`Complete LLM Response: "${llmResponse}"`);
+              
+              if (this.websocket) {
+                this.websocket.send(JSON.stringify({
+                  type: 'llm_response_complete',
+                  text: llmResponse.trim(),
+                  timestamp: Date.now()
+                }));
+              }
+            }
+            break;
+            
+          default:
+            console.log(`Unknown chunk type: ${chunk.type}`, chunk.data);
+            if (chunk.data) {
+              transcription += chunk.data;
+            }
         }
+        
+        chunk = await outputStream.next();
       }
 
       this.audioBuffer = [];

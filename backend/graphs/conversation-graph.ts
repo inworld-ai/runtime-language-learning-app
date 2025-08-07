@@ -1,5 +1,4 @@
 import { ComponentFactory, CustomInputDataType, CustomOutputDataType, GraphBuilder, NodeFactory, registerCustomNodeType } from '@inworld/runtime/graph';
-import { TEXT_CONFIG } from '../../runtime_examples/cli/constants';
 
 export interface ConversationGraphConfig {
   apiKey: string;

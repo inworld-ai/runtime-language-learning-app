@@ -182,6 +182,22 @@ body {
     margin-right: 16px;
 }
 
+.message.streaming {
+    opacity: 0.8;
+    position: relative;
+}
+
+.streaming-cursor {
+    animation: blink 1s infinite;
+    color: #6b7280;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
 .current-transcript {
     display: none;
     /* padding: 12px 16px;
@@ -296,19 +312,36 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
+    .main {
+        padding: 16px 0;
+        height: calc(100vh - 80px);
+        overflow: hidden;
+    }
+    
     .app-grid {
         grid-template-columns: 1fr;
-        gap: 24px;
-        height: auto;
+        grid-template-rows: 1fr 1fr;
+        gap: 16px;
+        height: 100%;
+        overflow: hidden;
     }
     
     .chat-section,
     .flashcards-section {
-        min-height: 400px;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+        padding: 16px;
     }
     
     .container {
         padding: 0 16px;
+        height: 100%;
+    }
+    
+    .messages,
+    .flashcards-grid {
+        max-height: none;
     }
 }
 

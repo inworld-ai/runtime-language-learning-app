@@ -17,7 +17,8 @@ class App {
             flashcards: [],
             isRecording: false,
             connectionStatus: 'connecting',
-            currentTranscript: ''
+            currentTranscript: '',
+            currentLLMResponse: ''
         };
         
         this.init();
@@ -92,6 +93,14 @@ class App {
             this.render();
         });
         
+        this.wsClient.on('llm_response_chunk', (data) => {
+            this.handleLLMResponseChunk(data.text);
+        });
+        
+        this.wsClient.on('llm_response_complete', (data) => {
+            this.handleLLMResponseComplete(data.text);
+        });
+        
         this.audioHandler.on('audioChunk', (audioData) => {
             this.wsClient.sendAudioChunk(audioData);
         });
@@ -152,6 +161,19 @@ class App {
         };
     }
     
+    handleLLMResponseChunk(text) {
+        this.state.currentLLMResponse += text;
+        this.state.currentTranscript = 'AI is responding...';
+        this.render();
+    }
+    
+    handleLLMResponseComplete(fullText) {
+        this.addMessage('teacher', fullText);
+        this.state.currentLLMResponse = '';
+        this.state.currentTranscript = '';
+        this.render();
+    }
+    
     playAudio(audioData) {
         const audio = new Audio();
         audio.src = `data:audio/wav;base64,${audioData}`;
@@ -160,7 +182,7 @@ class App {
     
     render() {
         this.updateConnectionStatus();
-        this.chatUI.render(this.state.chatHistory, this.state.currentTranscript);
+        this.chatUI.render(this.state.chatHistory, this.state.currentTranscript, this.state.currentLLMResponse);
         this.flashcardUI.render(this.state.flashcards);
         
         const micButton = document.getElementById('micButton');

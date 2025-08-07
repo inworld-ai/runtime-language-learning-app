@@ -4,18 +4,24 @@ export class ChatUI {
         this.transcriptContainer = document.getElementById('currentTranscript');
     }
     
-    render(chatHistory, currentTranscript) {
-        this.renderMessages(chatHistory);
+    render(chatHistory, currentTranscript, currentLLMResponse) {
+        this.renderMessages(chatHistory, currentLLMResponse);
         this.renderCurrentTranscript(currentTranscript);
     }
     
-    renderMessages(messages) {
+    renderMessages(messages, currentLLMResponse) {
         this.messagesContainer.innerHTML = '';
         
         messages.forEach(message => {
             const messageElement = this.createMessageElement(message);
             this.messagesContainer.appendChild(messageElement);
         });
+        
+        // Show streaming LLM response if it exists
+        if (currentLLMResponse && currentLLMResponse.trim()) {
+            const streamingElement = this.createStreamingMessageElement(currentLLMResponse);
+            this.messagesContainer.appendChild(streamingElement);
+        }
         
         this.scrollToBottom();
     }
@@ -24,6 +30,20 @@ export class ChatUI {
         const div = document.createElement('div');
         div.className = `message ${message.role}`;
         div.textContent = message.content;
+        return div;
+    }
+    
+    createStreamingMessageElement(content) {
+        const div = document.createElement('div');
+        div.className = 'message teacher streaming';
+        div.textContent = content;
+        
+        // Add typing indicator
+        const cursor = document.createElement('span');
+        cursor.className = 'streaming-cursor';
+        cursor.textContent = '▊';
+        div.appendChild(cursor);
+        
         return div;
     }
     
