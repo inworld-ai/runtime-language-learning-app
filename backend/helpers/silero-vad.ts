@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { VADFactory } from '@inworld/runtime/primitives/vad';
 import { DeviceRegistry, DeviceType } from '@inworld/runtime/core';
-import { AudioBuffer, AudioChunk, AudioEvent } from './audio-buffer.js';
+import { AudioBuffer, AudioChunk } from './audio-buffer.js';
 
 export interface VADConfig {
     modelPath: string;
@@ -27,7 +27,6 @@ export class SileroVAD extends EventEmitter {
     
     // Simple state tracking - following your sound logic
     private speechStartTimestamp: number | null = null;
-    private lastSpeechTimestamp: number | null = null;
     private silenceStartTimestamp: number | null = null;
 
     constructor(config: VADConfig) {
@@ -37,22 +36,16 @@ export class SileroVAD extends EventEmitter {
         
         // Listen to audio chunks from buffer
         this.audioBuffer.on('audioChunk', this.processAudioChunk.bind(this));
-        
-        // Silero VAD initialized
     }
 
     async initialize(): Promise<void> {
         if (this.isInitialized) return;
 
         try {
-            // Initializing Silero VAD
-            
             // Try to find CUDA device
             const cudaDevice = DeviceRegistry.getAvailableDevices().find(
                 (device) => device.getType() === DeviceType.CUDA
             );
-            
-            // Device selection complete
 
             // Create local VAD instance
             this.vad = await VADFactory.createLocal({
@@ -61,7 +54,6 @@ export class SileroVAD extends EventEmitter {
             });
 
             this.isInitialized = true;
-            // Silero VAD ready
             
         } catch (error) {
             console.error('Failed to initialize Silero VAD:', error);
@@ -79,17 +71,17 @@ export class SileroVAD extends EventEmitter {
                 bytes[i] = binaryString.charCodeAt(i);
             }
 
-            // Convert to Int16Array but keep as integers (no normalization!)
+            // Convert to Int16Array then normalize to Float32 range [-1, 1]
             const int16Array = new Int16Array(bytes.buffer);
             
-            // Convert to plain array of integers (like working example)
-            const integerArray = new Float32Array(int16Array.length);
+            // Convert to normalized Float32Array for consistent audio processing
+            const normalizedArray = new Float32Array(int16Array.length);
             for (let i = 0; i < int16Array.length; i++) {
-                integerArray[i] = int16Array[i]; // Keep raw integer values for VAD
+                normalizedArray[i] = int16Array[i] / 32768.0; // Normalize to [-1, 1] range
             }
 
-            // Add to audio buffer (still Float32Array for buffer compatibility)
-            this.audioBuffer.addChunk(integerArray);
+            // Add to audio buffer with normalized Float32Array
+            this.audioBuffer.addChunk(normalizedArray);
             
         } catch (error) {
             console.error('Error processing audio data:', error);
@@ -98,7 +90,6 @@ export class SileroVAD extends EventEmitter {
 
     private async processAudioChunk(chunk: AudioChunk): Promise<void> {
         if (!this.isInitialized || !this.vad) {
-            // console.log(`⚠️ Skipping VAD processing - initialized: ${this.isInitialized}, vad: ${!!this.vad}`);
             return;
         }
 
@@ -117,17 +108,16 @@ export class SileroVAD extends EventEmitter {
                     offset += samples.length;
                 }
 
-                // Let VAD model make the speech/silence decision - it's working well
-
-                // Convert Float32Array to plain array of integers (like working example)
+                // Convert normalized Float32Array back to integer array for VAD model
                 const integerArray: number[] = [];
                 for (let i = 0; i < combinedAudio.length; i++) {
-                    integerArray.push(combinedAudio[i]); // Raw integer values
+                    // Convert back to Int16 range for VAD processing
+                    integerArray.push(Math.round(combinedAudio[i] * 32768));
                 }
                 
-                // Process with Silero VAD using working example format
+                // Process with Silero VAD
                 const result = await this.vad.detectVoiceActivity({
-                    data: integerArray,  // Plain array, not Float32Array!
+                    data: integerArray,
                     sampleRate: this.config.sampleRate
                 });
                 
@@ -172,11 +162,7 @@ export class SileroVAD extends EventEmitter {
                 this.speechStartTimestamp = now;
                 this.audioBuffer.addEvent('speech_start', { confidence: result.confidence });
                 this.emit('speechStart', { timestamp: now, confidence: result.confidence });
-                // Speech started
             }
-            
-            // Update last speech timestamp (for tracking continuous speech)
-            this.lastSpeechTimestamp = now;
             
             // Reset silence tracking since we have speech
             this.silenceStartTimestamp = null;
@@ -197,10 +183,8 @@ export class SileroVAD extends EventEmitter {
                         const speechDuration = this.silenceStartTimestamp - this.speechStartTimestamp;
                         const totalDuration = now - this.speechStartTimestamp;
                         
-                        // Speech complete, processing
-                        
-                        // Extract audio with 0.5s buffer on each side for better context
-                        const bufferDuration = 1.5;
+                        // Extract audio with generous buffer for complete utterances
+                        const bufferDuration = 2.0;  // Increased from 1.5s to 2.0s
                         const extractStart = this.speechStartTimestamp - bufferDuration;
                         const extractEnd = this.silenceStartTimestamp + bufferDuration;
                         
@@ -231,7 +215,6 @@ export class SileroVAD extends EventEmitter {
                         
                         // Reset state for next speech detection
                         this.speechStartTimestamp = null;
-                        this.lastSpeechTimestamp = null;
                         this.silenceStartTimestamp = null;
                     }
                 }
@@ -247,7 +230,5 @@ export class SileroVAD extends EventEmitter {
         
         this.audioBuffer.clear();
         this.isInitialized = false;
-        
-        // Silero VAD destroyed
     }
 }

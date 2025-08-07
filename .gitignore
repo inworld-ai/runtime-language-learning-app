@@ -4,3 +4,4 @@ CLAUDE.md
 package-lock.json
 runtime_examples/
 backend/models/
+.DS_Store
