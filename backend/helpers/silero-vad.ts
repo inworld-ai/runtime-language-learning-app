@@ -126,6 +126,7 @@ export class SileroVAD extends EventEmitter {
                 if (result === -1) {
                     isSpeech = false; // Treat as silence
                 } else {
+                    console.log('result', result);
                     isSpeech = result > this.config.threshold;
                 }
                 

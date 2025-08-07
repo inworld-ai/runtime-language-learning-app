@@ -188,7 +188,7 @@ export class SimpleAudioProcessor {
       const amplifiedSegment = this.amplifyAudio(speechSegment, 2.0);
 
       // Save debug audio before sending to STT
-      // await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
+      await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
 
       const outputStream = await this.executor.execute(
         {
@@ -257,8 +257,12 @@ export class SimpleAudioProcessor {
 
       let transcription = '';
       let chunk = await outputStream.next();
+      console.log('++++ grabbing stream output ++++')
+      console.log(chunk)
 
       while (!chunk.done) {
+        console.log('++++ grabbing stream output ++++')
+        console.log(chunk.type)
         if (chunk.data) {
           transcription += chunk.data;
         }
