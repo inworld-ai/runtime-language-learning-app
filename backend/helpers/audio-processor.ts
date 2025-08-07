@@ -17,6 +17,7 @@ export class AudioProcessor {
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
   };
+  private flashcardCallback: ((messages: Array<{ role: string; content: string }>) => Promise<void>) | null = null;
 
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
@@ -45,6 +46,10 @@ export class AudioProcessor {
 
   private getConversationState() {
     return this.conversationState;
+  }
+
+  setFlashcardCallback(callback: (messages: Array<{ role: string; content: string }>) => Promise<void>) {
+    this.flashcardCallback = callback;
   }
 
   private async initialize() {
@@ -308,6 +313,28 @@ export class AudioProcessor {
                   text: llmResponse.trim(),
                   timestamp: Date.now()
                 }));
+              }
+              
+              // Trigger flashcard generation after LLM response
+              if (this.flashcardCallback && this.conversationState.messages.length > 0) {
+                // Get the last few messages for context
+                const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                  role: msg.role,
+                  content: msg.content
+                }));
+                
+                // Add the current exchange if not already in state
+                if (transcription && llmResponse) {
+                  recentMessages.push(
+                    { role: 'user', content: transcription },
+                    { role: 'assistant', content: llmResponse }
+                  );
+                }
+                
+                // Call flashcard generation in background
+                this.flashcardCallback(recentMessages).catch(error => {
+                  console.error('Error in flashcard generation callback:', error);
+                });
               }
             }
             break;

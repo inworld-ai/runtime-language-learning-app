@@ -240,64 +240,139 @@ body {
 }
 
 .flashcard {
-    background: #fafafa;
-    border: 1px solid #e5e5e5;
-    border-radius: 8px;
-    padding: 20px;
-    transition: all 0.2s ease;
+    position: relative;
+    height: 200px;
     cursor: pointer;
+    perspective: 1000px;
 }
 
-.flashcard:hover {
-    background: #f3f4f6;
-    border-color: #d1d5db;
+.flashcard-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+    transition: transform 0.6s;
+    transform-style: preserve-3d;
 }
 
-.flashcard.flipped {
-    background: #1a1a1a;
-    color: #ffffff;
+.flashcard.flipped .flashcard-inner {
+    transform: rotateY(180deg);
 }
 
-.flashcard-word {
-    font-size: 18px;
+.flashcard-front,
+.flashcard-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.flashcard-front {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.flashcard-back {
+    background: #fafafa;
+    border: 2px solid #e5e5e5;
+    transform: rotateY(180deg);
+}
+
+.flashcard-spanish {
+    font-size: 32px;
+    font-weight: 700;
+    text-align: center;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.flashcard-english {
+    font-size: 24px;
     font-weight: 600;
-    margin-bottom: 8px;
-    color: inherit;
-}
-
-.flashcard-translation {
-    font-size: 16px;
-    color: #6b7280;
-    margin-bottom: 12px;
-}
-
-.flashcard.flipped .flashcard-translation {
-    color: #d1d5db;
+    color: #1a1a1a;
+    margin-bottom: 16px;
 }
 
 .flashcard-example {
-    font-size: 14px;
+    font-size: 16px;
     font-style: italic;
     color: #6b7280;
-    margin-bottom: 8px;
-}
-
-.flashcard.flipped .flashcard-example {
-    color: #d1d5db;
+    margin-bottom: 16px;
+    text-align: center;
+    line-height: 1.4;
 }
 
 .flashcard-mnemonic {
-    font-size: 13px;
-    color: #9ca3af;
-    padding: 8px 12px;
-    background: rgba(107, 114, 128, 0.1);
-    border-radius: 6px;
-    margin-top: 8px;
+    font-size: 14px;
+    color: #6b7280;
+    padding: 12px;
+    background: rgba(107, 114, 128, 0.08);
+    border-radius: 8px;
+    width: 100%;
+    text-align: center;
 }
 
-.flashcard.flipped .flashcard-mnemonic {
-    color: #9ca3af;
-    background: rgba(255, 255, 255, 0.1);
+.mnemonic-label {
+    font-weight: 600;
+    color: #9333ea;
+    margin-right: 4px;
+}
+
+/* Mobile-specific flashcard layout */
+@media (max-width: 768px) {
+    .flashcards-grid {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 12px;
+        padding-bottom: 8px;
+        scroll-snap-type: x mandatory;
+    }
+    
+    .flashcard {
+        min-width: 280px;
+        width: 280px;
+        height: 180px;
+        scroll-snap-align: center;
+    }
+    
+    .flashcard-spanish {
+        font-size: 28px;
+    }
+    
+    .flashcard-english {
+        font-size: 20px;
+    }
+    
+    .flashcard-example {
+        font-size: 14px;
+    }
+    
+    .flashcard-mnemonic {
+        font-size: 13px;
+        padding: 8px;
+    }
+    
+    /* Horizontal scrollbar styling */
+    .flashcards-grid::-webkit-scrollbar {
+        height: 6px;
+        width: auto;
+    }
+    
+    .flashcards-grid::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .flashcards-grid::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 3px;
+    }
 }
 
 .empty-state {

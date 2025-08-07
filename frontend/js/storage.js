@@ -2,6 +2,7 @@ export class Storage {
     constructor() {
         this.storageKey = 'aprende-app-state';
         this.conversationKey = 'aprende-conversation-history';
+        this.flashcardsKey = 'aprende-flashcards';
     }
     
     saveState(state) {
@@ -81,6 +82,58 @@ export class Storage {
             localStorage.removeItem(this.conversationKey);
         } catch (error) {
             console.error('Failed to clear conversation history from localStorage:', error);
+        }
+    }
+    
+    // Flashcard methods
+    getFlashcards() {
+        try {
+            const serializedFlashcards = localStorage.getItem(this.flashcardsKey);
+            if (serializedFlashcards === null) {
+                return [];
+            }
+            return JSON.parse(serializedFlashcards);
+        } catch (error) {
+            console.error('Failed to load flashcards from localStorage:', error);
+            return [];
+        }
+    }
+    
+    saveFlashcards(flashcards) {
+        try {
+            const serializedFlashcards = JSON.stringify(flashcards);
+            localStorage.setItem(this.flashcardsKey, serializedFlashcards);
+        } catch (error) {
+            console.error('Failed to save flashcards to localStorage:', error);
+        }
+    }
+    
+    addFlashcards(newFlashcards) {
+        const existingFlashcards = this.getFlashcards();
+        
+        // Filter out duplicates based on spanish word
+        const uniqueNewFlashcards = newFlashcards.filter(newCard => {
+            return !existingFlashcards.some(existing => 
+                existing.spanish?.toLowerCase() === newCard.spanish?.toLowerCase()
+            );
+        });
+        
+        const updatedFlashcards = [...existingFlashcards, ...uniqueNewFlashcards];
+        
+        // Keep only the last 100 flashcards
+        if (updatedFlashcards.length > 100) {
+            updatedFlashcards.splice(0, updatedFlashcards.length - 100);
+        }
+        
+        this.saveFlashcards(updatedFlashcards);
+        return updatedFlashcards;
+    }
+    
+    clearFlashcards() {
+        try {
+            localStorage.removeItem(this.flashcardsKey);
+        } catch (error) {
+            console.error('Failed to clear flashcards from localStorage:', error);
         }
     }
 }

@@ -49,19 +49,22 @@ class App {
         const savedState = this.storage.getState();
         if (savedState) {
             this.state.chatHistory = savedState.chatHistory || [];
-            this.state.flashcards = savedState.flashcards || [];
         }
+        
+        // Load flashcards from storage
+        this.state.flashcards = this.storage.getFlashcards();
         
         // Load existing conversation history
         const existingConversation = this.storage.getConversationHistory();
         console.log('Loading existing conversation history:', existingConversation.messages.length, 'messages');
+        console.log('Loading existing flashcards:', this.state.flashcards.length, 'flashcards');
     }
     
     saveState() {
         this.storage.saveState({
-            chatHistory: this.state.chatHistory,
-            flashcards: this.state.flashcards
+            chatHistory: this.state.chatHistory
         });
+        // Flashcards are saved separately through storage.addFlashcards()
     }
     
     setupEventListeners() {
@@ -103,6 +106,11 @@ class App {
         
         this.wsClient.on('flashcard_generated', (flashcard) => {
             this.addFlashcard(flashcard);
+        });
+        
+        this.wsClient.on('flashcards_generated', (flashcards) => {
+            console.log('Received new flashcards:', flashcards);
+            this.addMultipleFlashcards(flashcards);
         });
         
         this.wsClient.on('speech_detected', (data) => {
@@ -228,14 +236,23 @@ class App {
     
     addFlashcard(flashcard) {
         const exists = this.state.flashcards.some(card => 
-            card.word === flashcard.word
+            (card.spanish === flashcard.spanish) || (card.word === flashcard.word)
         );
         
         if (!exists) {
             this.state.flashcards.push(flashcard);
+            this.storage.addFlashcards([flashcard]);
             this.saveState();
             this.render();
         }
+    }
+    
+    addMultipleFlashcards(flashcards) {
+        // Use storage method which handles deduplication and persistence
+        const updatedFlashcards = this.storage.addFlashcards(flashcards);
+        this.state.flashcards = updatedFlashcards;
+        this.saveState();
+        this.render();
     }
     
     getContextForBackend() {

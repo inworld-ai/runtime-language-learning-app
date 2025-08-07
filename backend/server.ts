@@ -14,6 +14,7 @@ import { WebSocketServer } from 'ws';
 
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.ts';
+import { FlashcardProcessor } from './helpers/flashcard-processor.ts';
 
 const app = express();
 const server = createServer(app);
@@ -23,6 +24,7 @@ const PORT = 3001;
 
 // Store audio processors per connection
 const audioProcessors = new Map<string, AudioProcessor>();
+const flashcardProcessors = new Map<string, FlashcardProcessor>();
 
 // WebSocket handling with audio processing
 wss.on('connection', (ws) => {
@@ -32,8 +34,25 @@ wss.on('connection', (ws) => {
     // Create audio processor for this connection  
     const apiKey = process.env.INWORLD_API_KEY || '';
     const audioProcessor = new AudioProcessor(apiKey, ws);
+    const flashcardProcessor = new FlashcardProcessor();
     
     audioProcessors.set(connectionId, audioProcessor);
+    flashcardProcessors.set(connectionId, flashcardProcessor);
+    
+    // Set up flashcard generation callback
+    audioProcessor.setFlashcardCallback(async (messages) => {
+        try {
+            const flashcards = await flashcardProcessor.generateFlashcards(messages, 3);
+            if (flashcards.length > 0) {
+                ws.send(JSON.stringify({
+                    type: 'flashcards_generated',
+                    flashcards: flashcards
+                }));
+            }
+        } catch (error) {
+            console.error('Error generating flashcards:', error);
+        }
+    });
     
     ws.on('message', (data) => {
         try {
@@ -42,6 +61,12 @@ wss.on('connection', (ws) => {
             if (message.type === 'audio_chunk' && message.audio_data) {
                 // Process audio chunk
                 audioProcessor.addAudioChunk(message.audio_data);
+            } else if (message.type === 'reset_flashcards') {
+                // Reset flashcards for new conversation
+                const processor = flashcardProcessors.get(connectionId);
+                if (processor) {
+                    processor.reset();
+                }
             } else {
                 console.log('Received non-audio message:', message.type);
             }
@@ -59,6 +84,9 @@ wss.on('connection', (ws) => {
             processor.destroy();
             audioProcessors.delete(connectionId);
         }
+        
+        // Clean up flashcard processor
+        flashcardProcessors.delete(connectionId);
     });
 });
 
