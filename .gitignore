@@ -1,4 +1,6 @@
 .env
-node_modules
+node_modules/
 CLAUDE.md
 package-lock.json
+runtime_examples/
+backend/models/

@@ -69,11 +69,7 @@ wss.on('connection', (ws) => {
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 server.listen(PORT, () => {
-    console.log(`Audio processing server running on port ${PORT}`);
-    console.log('Environment variables loaded:');
-    console.log('- INWORLD_API_KEY:', process.env.INWORLD_API_KEY ? 'present' : 'missing');
-    console.log('- PORT:', process.env.PORT || 'using default');
-    console.log('🎤 Ready to process audio streams!');
+    console.log(`Server running on port ${PORT}`);
 });
 
 // Graceful shutdown

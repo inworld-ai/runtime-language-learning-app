@@ -98,7 +98,7 @@ export class SileroVAD extends EventEmitter {
 
     private async processAudioChunk(chunk: AudioChunk): Promise<void> {
         if (!this.isInitialized || !this.vad) {
-            console.log(`⚠️ Skipping VAD processing - initialized: ${this.isInitialized}, vad: ${!!this.vad}`);
+            // console.log(`⚠️ Skipping VAD processing - initialized: ${this.isInitialized}, vad: ${!!this.vad}`);
             return;
         }
 

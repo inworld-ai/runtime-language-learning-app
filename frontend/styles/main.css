@@ -76,6 +76,7 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 32px;
     height: calc(100vh - 144px);
+    overflow: hidden;
 }
 
 /* Section Headers */
@@ -106,6 +107,8 @@ body {
     padding: 24px;
     display: flex;
     flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 .mic-button {
@@ -143,6 +146,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
 }
 
 .messages {
@@ -152,6 +156,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-height: 0;
 }
 
 .message {
@@ -174,6 +179,7 @@ body {
     color: #ffffff;
     align-self: flex-end;
     border-bottom-right-radius: 4px;
+    margin-right: 16px;
 }
 
 .current-transcript {

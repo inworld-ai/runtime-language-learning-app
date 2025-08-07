@@ -41,7 +41,7 @@ export class SimpleAudioProcessor {
       
       // Set up VAD event listeners
       this.vad.on('speechStart', (event) => {
-        console.log(`🎤 VAD: Speech started (confidence: ${event.confidence.toFixed(3)})`);
+        // console.log(`🎤 VAD: Speech started (confidence: ${event.confidence.toFixed(3)})`);
       });
       
       this.vad.on('speechEnd', async (event) => {
@@ -270,7 +270,7 @@ export class SimpleAudioProcessor {
     const hasSignificantEnergy = peakValue > peakThreshold || rms > rmsThreshold;
     
     if (!hasSignificantEnergy) {
-      console.log(`Rejecting low-energy audio: peak=${peakValue.toFixed(0)}, rms=${rms.toFixed(0)} (need peak>${peakThreshold.toFixed(0)} OR rms>${rmsThreshold.toFixed(0)})`);
+      // console.log(`Rejecting low-energy audio: peak=${peakValue.toFixed(0)}, rms=${rms.toFixed(0)} (need peak>${peakThreshold.toFixed(0)} OR rms>${rmsThreshold.toFixed(0)})`);
     }
     
     return hasSignificantEnergy;
@@ -287,7 +287,7 @@ export class SimpleAudioProcessor {
 
     // Check if audio has significant energy (not just noise)
     if (!this.hasSignificantAudio(speechSegment)) {
-      console.log('Skipping low-energy segment');
+      // console.log('Skipping low-energy segment');
       this.isProcessing = false;
       return;
     }
