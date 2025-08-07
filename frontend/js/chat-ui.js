@@ -17,11 +17,8 @@ export class ChatUI {
             this.messagesContainer.appendChild(messageElement);
         });
         
-        // Show streaming LLM response if it exists
-        if (currentLLMResponse && currentLLMResponse.trim()) {
-            const streamingElement = this.createStreamingMessageElement(currentLLMResponse);
-            this.messagesContainer.appendChild(streamingElement);
-        }
+        // Removed streaming message display to avoid duplicates
+        // The response will appear once complete as a regular message
         
         this.scrollToBottom();
     }

@@ -20,7 +20,9 @@ class App {
             isRecording: false,
             connectionStatus: 'connecting',
             currentTranscript: '',
-            currentLLMResponse: ''
+            currentLLMResponse: '',
+            pendingTranscription: null,
+            pendingLLMResponse: null
         };
         
         this.init();
@@ -49,6 +51,10 @@ class App {
             this.state.chatHistory = savedState.chatHistory || [];
             this.state.flashcards = savedState.flashcards || [];
         }
+        
+        // Load existing conversation history
+        const existingConversation = this.storage.getConversationHistory();
+        console.log('Loading existing conversation history:', existingConversation.messages.length, 'messages');
     }
     
     saveState() {
@@ -66,6 +72,19 @@ class App {
         
         this.wsClient.on('connection', (status) => {
             this.state.connectionStatus = status;
+            
+            // Send existing conversation history to backend when connected
+            if (status === 'connected') {
+                const existingConversation = this.storage.getConversationHistory();
+                if (existingConversation.messages.length > 0) {
+                    console.log('Sending existing conversation history to backend:', existingConversation.messages.length, 'messages');
+                    this.wsClient.send({
+                        type: 'conversation_update',
+                        data: existingConversation
+                    });
+                }
+            }
+            
             this.render();
         });
         
@@ -100,8 +119,9 @@ class App {
         });
         
         this.wsClient.on('transcription', (data) => {
-            this.addMessage('learner', data.text);
+            this.state.pendingTranscription = data.text;
             this.state.currentTranscript = '';
+            this.checkAndUpdateConversation();
             this.render();
         });
         
@@ -110,6 +130,8 @@ class App {
         });
         
         this.wsClient.on('llm_response_complete', (data) => {
+            this.state.pendingLLMResponse = data.text;
+            this.checkAndUpdateConversation();
             this.handleLLMResponseComplete(data.text);
         });
         
@@ -159,7 +181,45 @@ class App {
         this.render();
     }
     
+    checkAndUpdateConversation() {
+        // Only proceed when we have both transcription and LLM response
+        console.log('checkAndUpdateConversation called - pending transcription:', this.state.pendingTranscription, 'pending LLM:', this.state.pendingLLMResponse);
+        
+        if (this.state.pendingTranscription && this.state.pendingLLMResponse) {
+            console.log('Adding messages to conversation history...');
+            
+            // Add both messages to conversation history (with automatic truncation)
+            const userHistory = this.storage.addMessage('user', this.state.pendingTranscription);
+            const assistantHistory = this.storage.addMessage('assistant', this.state.pendingLLMResponse);
+            
+            console.log('User message added, total messages:', userHistory.messages.length);
+            console.log('Assistant message added, total messages:', assistantHistory.messages.length);
+            
+            // Add to chat history for display
+            this.addMessageToHistory('learner', this.state.pendingTranscription);
+            this.addMessageToHistory('teacher', this.state.pendingLLMResponse);
+            
+            // Get updated conversation history and send to backend
+            const conversationHistory = this.storage.getConversationHistory();
+            console.log('Sending conversation update to backend:', conversationHistory.messages.length, 'messages');
+            
+            this.wsClient.send({
+                type: 'conversation_update',
+                data: conversationHistory
+            });
+            
+            // Clear pending messages
+            this.state.pendingTranscription = null;
+            this.state.pendingLLMResponse = null;
+        }
+    }
+    
     addMessage(role, content) {
+        // This method is kept for backward compatibility with existing addMessage calls
+        this.addMessageToHistory(role, content);
+    }
+    
+    addMessageToHistory(role, content) {
         const message = { role, content };
         this.state.chatHistory.push(message);
         this.saveState();
@@ -192,7 +252,8 @@ class App {
     }
     
     handleLLMResponseComplete(fullText) {
-        this.addMessage('teacher', fullText);
+        // Message adding is now handled by checkAndUpdateConversation()
+        // This just clears the current response state for UI
         this.state.currentLLMResponse = '';
         this.state.currentTranscript = '';
         this.render();

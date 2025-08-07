@@ -14,10 +14,37 @@ export class AudioProcessor {
   private isReady = false;
   private websocket: any = null;
   private debugCounter = 0;
+  private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
+    messages: []
+  };
 
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
+    this.setupWebSocketMessageHandler();
     setTimeout(() => this.initialize(), 100);
+  }
+
+  private setupWebSocketMessageHandler() {
+    if (this.websocket) {
+      this.websocket.on('message', (data: string) => {
+        try {
+          const message = JSON.parse(data);
+          
+          if (message.type === 'conversation_update') {
+            console.log('Received conversation_update message:', message.data);
+            this.conversationState = message.data;
+            console.log('Updated conversation state:', this.conversationState.messages.length, 'messages');
+            console.log('Full conversation state:', JSON.stringify(this.conversationState, null, 2));
+          }
+        } catch (error) {
+          // Not a JSON message or conversation update, ignore
+        }
+      });
+    }
+  }
+
+  private getConversationState() {
+    return this.conversationState;
   }
 
   private async initialize() {
@@ -58,7 +85,10 @@ export class AudioProcessor {
     
     // Initialize conversation graph
     console.log('AudioProcessor: Creating conversation graph...');
-    this.executor = createConversationGraph({ apiKey: this.apiKey });
+    this.executor = createConversationGraph(
+      { apiKey: this.apiKey },
+      () => this.getConversationState()
+    );
     this.executor.visualize('conversation_graph.png');
     this.isReady = true;
     console.log('AudioProcessor: Initialization complete, ready for audio processing');

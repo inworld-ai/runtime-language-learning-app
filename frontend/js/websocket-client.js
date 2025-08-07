@@ -144,6 +144,12 @@ export class WebSocketClient {
         }
     }
     
+    send(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        }
+    }
+    
     sendAudioChunk(audioData) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             const message = {

@@ -6,12 +6,16 @@ import {
   NodeFactory, 
   registerCustomNodeType
 } from '@inworld/runtime/graph';
+import { renderJinja } from '@inworld/runtime/primitives/llm';
 
 export interface ConversationGraphConfig {
   apiKey: string;
 }
 
-export function createConversationGraph(config: ConversationGraphConfig) {
+export function createConversationGraph(
+  config: ConversationGraphConfig,
+  getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> }
+) {
   // Create STT component
   const sttComponent = ComponentFactory.createRemoteSTTComponent({
     id: `stt_component`,
@@ -21,26 +25,51 @@ export function createConversationGraph(config: ConversationGraphConfig) {
     },
   });
 
-  const promptBuilderType = registerCustomNodeType(
-    `prompt_builder_${Date.now()}`,
-    [CustomInputDataType.TEXT],
+  const enhancedPromptBuilderType = registerCustomNodeType(
+    `enhanced_prompt_builder_${Date.now()}`,
+    [CustomInputDataType.TEXT], // Current STT transcription
     CustomOutputDataType.CHAT_REQUEST,
-    async (context, input) => {
-      console.log('prompt_builder', input);
+    async (context, currentInput) => {
+      const conversationState = getConversationState(); // Previous conversation
+      console.log('=== Enhanced Prompt Builder ===');
+      console.log('Enhanced prompt builder input:', currentInput);
+      console.log('Conversation state messages count:', conversationState.messages.length);
+      console.log('Full conversation state:', JSON.stringify(conversationState, null, 2));
+
+      const template = `You are a helpful language learning assistant.
+
+{% if messages and messages|length > 0 %}
+Previous conversation:
+{% for message in messages %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+{% endif %}
+
+User: {{ current_input }}
+
+Please respond naturally and helpfully.`;
+
+      const templateData = {
+        messages: conversationState.messages || [],
+        current_input: currentInput
+      };
+
+      console.log('Template data being sent to Jinja:', JSON.stringify(templateData, null, 2));
+
+      const renderedPrompt = await renderJinja(template, JSON.stringify(templateData));
+      console.log('=== Rendered Prompt ===');
+      console.log(renderedPrompt);
+      console.log('========================');
+
       return {
-        messages: [
-          {
-            role: 'user',
-            content: `respond to the following user message: ${input}`
-          }
-        ]
-      }
+        messages: [{ role: 'user', content: renderedPrompt }]
+      };
     }
   )
 
   const promptBuilderNode = NodeFactory.createCustomNode(
-    'prompt_builder_node',
-    promptBuilderType,
+    'enhanced_prompt_builder_node',
+    enhancedPromptBuilderType,
   );
 
   const proxyNode = NodeFactory.createProxyNode({
