@@ -2,6 +2,11 @@
 
 "Aprender" is Spanish for "learn". This is a simple Node.js app where you can learn both Spanish (through conversation and flashcard studying) as well as the Inworld Runtime.
 
+## Requirements
+
+- Inworld Runtime
+- Node v22.x.x
+
 ## Setup
 
 1. Grab your Base64 API key from the Inworld Portal
