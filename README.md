@@ -1,6 +1,6 @@
 # Aprendemo
 
-"Aprender" is Spanish for "learn". This is a simple Node.js app where you can learn both Spanish (through conversation and flashcard studying) as well as the Inworld Runtime.
+"Aprender" is Spanish for "learn". This is a simple Node.js app where you can learn both Spanish (through conversation and flashcard studying) as well as a demonstration of the Inworld Runtime Node.js SDK.
 
 ## Requirements
 
