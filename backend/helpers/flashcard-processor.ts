@@ -26,10 +26,7 @@ export class FlashcardProcessor {
     messages: ConversationMessage[],
     count: number = 1
   ): Promise<Flashcard[]> {
-    const graph = createFlashcardGraph();
-    const executor = graph.getExecutor({
-      disableRemoteConfig: true,
-    });
+    const executor = createFlashcardGraph();
     
     // Generate flashcards in parallel
     const promises: Promise<Flashcard>[] = [];
@@ -68,20 +65,12 @@ export class FlashcardProcessor {
         flashcards: this.existingFlashcards
       };
 
-      const outputStream = await executor.execute(input, v4());
-      let result = await outputStream.next();
-      
-      // Get the final result (the parsed flashcard)
-      while (!result.done) {
-        const nextResult = await outputStream.next();
-        if (!nextResult.done) {
-          result = nextResult;
-        } else {
-          break;
-        }
+      const outputStream = await executor.start(input, v4());
+      let finalData: any = null;
+      for await (const res of outputStream) {
+        finalData = res.data;
       }
-      
-      const flashcard = result.data as Flashcard;
+      const flashcard = finalData as Flashcard;
       
       // Check if this is a duplicate
       const isDuplicate = this.existingFlashcards.some(
