@@ -12,7 +12,6 @@ import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { flashcardPromptTemplate } from '../helpers/prompt-templates.ts';
 import { v4 } from 'uuid';
 
-// Custom node to build the prompt from template
 const flashcardPromptBuilderNodeType = registerCustomNodeType(
   'FlashcardPromptBuilder',
   [CustomInputDataType.CUSTOM],

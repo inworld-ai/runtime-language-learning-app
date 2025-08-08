@@ -32,10 +32,6 @@ export function createConversationGraph(
     CustomOutputDataType.CHAT_REQUEST,
     async (context, currentInput) => {
       const conversationState = getConversationState(); // Previous conversation
-      console.log('=== Enhanced Prompt Builder ===');
-      console.log('Enhanced prompt builder input:', currentInput);
-      console.log('Conversation state messages count:', conversationState.messages.length);
-      console.log('Full conversation state:', JSON.stringify(conversationState, null, 2));
 
       const template = conversationTemplate;
 

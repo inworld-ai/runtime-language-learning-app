@@ -29,6 +29,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    /* Make header content span full viewport width so items sit in the corners */
+    max-width: none;
+    width: 100%;
 }
 
 .logo {
