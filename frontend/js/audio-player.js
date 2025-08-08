@@ -6,6 +6,8 @@ export class AudioPlayer {
         this.currentSource = null;
         this.sampleRate = 16000; // Default sample rate to match backend
         this.listeners = new Map();
+        this.isStreamingActive = false;
+        this.streamTimeout = null;
         
         // Check for iOS and use iOS handler if available
         this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -53,11 +55,27 @@ export class AudioPlayer {
             return;
         }
         
+        // Mark streaming as active
+        this.isStreamingActive = true;
+        
+        // Clear any existing timeout
+        if (this.streamTimeout) {
+            clearTimeout(this.streamTimeout);
+        }
+        
+        // Set a timeout to detect end of streaming (if no new chunks for 1 second)
+        this.streamTimeout = setTimeout(() => {
+            this.endStreaming();
+        }, 1000);
+        
         // Use iOS handler for audio playback if available
         if (this.isIOS && this.iosHandler) {
             try {
                 await this.iosHandler.playAudioChunk(base64Audio, isLastChunk);
-                this.emit('playback_started');
+                if (!this.isPlaying) {
+                    this.isPlaying = true;
+                    this.emit('playback_started');
+                }
                 return;
             } catch (error) {
                 console.error('[AudioPlayer] iOS playback failed, falling back to standard:', error);
@@ -196,5 +214,27 @@ export class AudioPlayer {
     
     isPlaybackActive() {
         return this.isPlaying;
+    }
+    
+    endStreaming() {
+        console.log('[AudioPlayer] Stream ended, finalizing audio playback');
+        this.isStreamingActive = false;
+        
+        // Clear timeout
+        if (this.streamTimeout) {
+            clearTimeout(this.streamTimeout);
+            this.streamTimeout = null;
+        }
+        
+        // For iOS, signal that streaming is complete
+        if (this.isIOS && this.iosHandler) {
+            this.iosHandler.playAudioChunk('', true); // Send empty chunk with isLastChunk=true
+        }
+    }
+    
+    // Method to be called when backend signals stream complete
+    markStreamComplete() {
+        console.log('[AudioPlayer] Stream marked as complete by backend');
+        this.endStreaming();
     }
 }

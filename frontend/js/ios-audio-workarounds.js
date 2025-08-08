@@ -240,6 +240,52 @@ class IOSAudioHandler {
     console.log('[iOS Audio] Microphone stopped');
   }
   
+  // PCM to WAV conversion for iOS
+  createWAVFromPCM(pcmData, sampleRate = 16000) {
+    // PCM data is Int16Array
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const dataLength = pcmData.byteLength;
+    
+    // Create WAV header
+    const headerLength = 44;
+    const fileLength = headerLength + dataLength;
+    const arrayBuffer = new ArrayBuffer(fileLength);
+    const view = new DataView(arrayBuffer);
+    
+    // RIFF header
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, fileLength - 8, true); // File size - 8
+    writeString(8, 'WAVE');
+    
+    // fmt chunk
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, 1, true); // Audio format (1 = PCM)
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bitsPerSample / 8, true); // Byte rate
+    view.setUint16(32, numChannels * bitsPerSample / 8, true); // Block align
+    view.setUint16(34, bitsPerSample, true);
+    
+    // data chunk
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+    
+    // Copy PCM data
+    const dataOffset = 44;
+    const dataView = new Uint8Array(arrayBuffer, dataOffset);
+    dataView.set(new Uint8Array(pcmData.buffer || pcmData));
+    
+    return arrayBuffer;
+  }
+  
   // Audio playback methods for iOS
   async playAudioChunk(base64Audio, isLastChunk = false) {
     try {
@@ -247,7 +293,7 @@ class IOSAudioHandler {
       this.audioChunks.push(base64Audio);
       
       // If this is the last chunk or we have enough chunks, create and play audio
-      if (isLastChunk || this.audioChunks.length > 5) {
+      if (isLastChunk || this.audioChunks.length > 10) {
         await this.playAccumulatedAudio();
       }
     } catch (error) {
@@ -259,21 +305,36 @@ class IOSAudioHandler {
     if (this.audioChunks.length === 0) return;
     
     try {
+      console.log('[iOS Audio] Processing accumulated audio chunks:', this.audioChunks.length);
+      
+      // Decode and combine all base64 chunks into one Int16Array
+      let totalLength = 0;
+      const decodedChunks = this.audioChunks.map(base64 => {
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        totalLength += bytes.length;
+        return bytes;
+      });
+      
       // Combine all chunks
-      const combinedBase64 = this.audioChunks.join('');
-      this.audioChunks = []; // Clear chunks
-      
-      // Convert base64 to blob
-      const audioData = atob(combinedBase64);
-      const arrayBuffer = new ArrayBuffer(audioData.length);
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      for (let i = 0; i < audioData.length; i++) {
-        uint8Array[i] = audioData.charCodeAt(i);
+      const combinedData = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of decodedChunks) {
+        combinedData.set(chunk, offset);
+        offset += chunk.length;
       }
       
-      // Create blob with appropriate MIME type
-      const audioBlob = new Blob([uint8Array], { type: 'audio/mpeg' });
+      // Clear chunks
+      this.audioChunks = [];
+      
+      // Convert PCM to WAV
+      const wavData = this.createWAVFromPCM(combinedData, 16000);
+      
+      // Create blob with WAV data
+      const audioBlob = new Blob([wavData], { type: 'audio/wav' });
       const audioUrl = URL.createObjectURL(audioBlob);
       
       // Clean up previous audio URL
@@ -282,8 +343,13 @@ class IOSAudioHandler {
       }
       this.currentAudioUrl = audioUrl;
       
-      // Get or create audio element
-      const audioElement = document.querySelector('audio') || document.createElement('audio');
+      // Get audio element - use the one we added to HTML
+      const audioElement = document.getElementById('iosAudioElement') || document.querySelector('audio');
+      
+      if (!audioElement) {
+        console.error('[iOS Audio] No audio element found!');
+        return;
+      }
       
       // iOS-specific audio element setup
       audioElement.setAttribute('playsinline', '');

@@ -62,6 +62,9 @@
         </div>
     </main>
 
+    <!-- Hidden audio element for iOS playback -->
+    <audio id="iosAudioElement" style="display: none;" playsinline webkit-playsinline></audio>
+
     <!-- iOS Audio Workarounds - Load conditionally -->
     <script>
         // Detect iOS and load workarounds if needed

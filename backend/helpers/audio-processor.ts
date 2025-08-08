@@ -261,6 +261,13 @@ export class AudioProcessor {
                   
                   ttsChunk = await ttsStreamIterator.next();
                 }
+                
+                // Send completion signal for iOS
+                console.log('VAD TTS stream complete, sending completion signal');
+                this.websocket.send(JSON.stringify({
+                  type: 'audio_stream_complete',
+                  timestamp: Date.now()
+                }));
               }
             }
             break;

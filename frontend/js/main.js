@@ -172,6 +172,11 @@ class App {
             this.handleAudioStream(data);
         });
         
+        this.wsClient.on('audio_stream_complete', (data) => {
+            console.log('Audio stream complete signal received');
+            this.audioPlayer.markStreamComplete();
+        });
+        
         this.audioHandler.on('audioChunk', (audioData) => {
             this.wsClient.sendAudioChunk(audioData);
         });
