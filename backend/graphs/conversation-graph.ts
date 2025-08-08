@@ -1,11 +1,5 @@
-import { 
-  ComponentFactory, 
-  CustomInputDataType, 
-  CustomOutputDataType, 
-  GraphBuilder, 
-  NodeFactory, 
-  registerCustomNodeType
-} from '@inworld/runtime/graph';
+import { GraphBuilder, CustomNode, ProcessContext, ProxyNode, RemoteLLMChatNode, RemoteSTTNode, RemoteTTSNode, TextChunkingNode } from '@inworld/runtime/graph';
+import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { conversationTemplate } from '../helpers/prompt-templates.ts';
 
@@ -14,112 +8,71 @@ export interface ConversationGraphConfig {
 }
 
 export function createConversationGraph(
-  config: ConversationGraphConfig,
+  _config: ConversationGraphConfig,
   getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> }
 ) {
-  // Create STT component
-  const sttComponent = ComponentFactory.createRemoteSTTComponent({
-    id: `stt_component`,
-    sttConfig: {
-      apiKey: config.apiKey,
-      defaultConfig: {},
-    },
-  });
-
-  const enhancedPromptBuilderType = registerCustomNodeType(
-    `enhanced_prompt_builder_${Date.now()}`,
-    [CustomInputDataType.TEXT], // Current STT transcription
-    CustomOutputDataType.CHAT_REQUEST,
-    async (context, currentInput) => {
-      const conversationState = getConversationState(); // Previous conversation
-
-      const template = conversationTemplate;
-
+  // Create the custom node class with closure over getConversationState
+  class EnhancedPromptBuilderNode extends CustomNode {
+    async process(_context: ProcessContext, currentInput: string) {
+      // Access getConversationState from the closure
+      const conversationState = getConversationState();
       const templateData = {
         messages: conversationState.messages || [],
-        current_input: currentInput
+        current_input: currentInput,
       };
 
-      console.log('Template data being sent to Jinja:', JSON.stringify(templateData, null, 2));
+      // console.log(
+      //   'Template data being sent to Jinja:',
+      //   JSON.stringify(templateData, null, 2),
+      // );
 
-      const renderedPrompt = await renderJinja(template, JSON.stringify(templateData));
-      console.log('=== Rendered Prompt ===');
-      console.log(renderedPrompt);
-      console.log('========================');
-
-      return {
+      const renderedPrompt = await renderJinja(
+        conversationTemplate,
+        JSON.stringify(templateData),
+      );
+      // console.log('=== Rendered Prompt ===');
+      // console.log(renderedPrompt);
+      // console.log('========================');
+      
+      // Return LLMChatRequest for the LLM node
+      return new GraphTypes.LLMChatRequest({
         messages: [{ role: 'user', content: renderedPrompt }]
-      };
+      });
     }
-  )
+  }
 
-  const promptBuilderNode = NodeFactory.createCustomNode(
-    'enhanced_prompt_builder_node',
-    enhancedPromptBuilderType,
-  );
-
-  const proxyNode = NodeFactory.createProxyNode({
-    id: 'proxy_node',
-    reportToClient: true,
-  });
-
-  const llmNode = NodeFactory.createRemoteLLMChatNode({
-    id: 'llm_node',
-    llmConfig: {
-      provider: 'openai',
-      modelName: 'gpt-4.1-nano',
-      apiKey: config.apiKey,
-      stream: true,
-      reportToClient: true,
+  const sttNode = new RemoteSTTNode({
+    id: 'stt_node',
+    sttConfig: {
+      language: { lang: 'en', locale: 'US' },
     },
   });
-
-  const sttNode = NodeFactory.createRemoteSTTNode({
-    id: `stt_node`,
-    sttComponentId: sttComponent.id,
+  const proxyNode = new ProxyNode({ id: 'proxy_node', reportToClient: true });
+  const promptBuilderNode = new EnhancedPromptBuilderNode({ id: 'enhanced_prompt_builder_node' });
+  const llmNode = new RemoteLLMChatNode({
+    id: 'llm_node',
+    provider: 'openai',
+    modelName: 'gpt-4.1-nano',
+    stream: true,
+    reportToClient: true,
+  });
+  const chunkerNode = new TextChunkingNode({ id: 'chunker_node' });
+  const ttsNode = new RemoteTTSNode({
+    id: 'tts_node',
+    speakerId: 'Diego',
+    modelId: 'inworld-tts-1',
+    sampleRate: 16000,
+    speakingRate: 1,
+    temperature: 0.7,
   });
 
-  const ttsComponent = ComponentFactory.createRemoteTTSComponent({
-    id: `tts_component`,
-    apiKey: config.apiKey,
-    synthesisConfig: {
-      type: 'inworld',
-      config: {
-        modelId: 'inworld-tts-1',
-        postprocessing: {
-          sampleRate: 16000
-          },
-          inference: {
-            pitch: 1,
-            speakingRate: 1,
-            temperature: 0.7,
-          },
-        },
-      }
-  });
-
-  const ttsNode = NodeFactory.createRemoteTTSNode({
-    id: `tts_node`,
-    ttsComponentId: ttsComponent.id,
-    voice: {
-      speakerId: 'Diego',
-    }
-  });
-
-  const chunkerNode = NodeFactory.createTextChunkingNode({
-    id: `chunker_node`
-  });
-
-  // Build graph
-  const executor = new GraphBuilder(`conversation_graph`)
-    .addComponent(sttComponent)
-    .addComponent(ttsComponent)
-    .addNode(sttNode) 
+  const executor = new GraphBuilder('conversation_graph')
+    .addNode(sttNode)
     .addNode(proxyNode)
     .addNode(promptBuilderNode)
     .addNode(llmNode)
-    .addNode(ttsNode)
     .addNode(chunkerNode)
+    .addNode(ttsNode)
     .setStartNode(sttNode)
     .addEdge(sttNode, proxyNode)
     .addEdge(proxyNode, promptBuilderNode)
@@ -127,9 +80,7 @@ export function createConversationGraph(
     .addEdge(llmNode, chunkerNode)
     .addEdge(chunkerNode, ttsNode)
     .setEndNode(ttsNode)
-    .getExecutor({
-      disableRemoteConfig: true,
-    })
+    .build({ disableRemoteConfig: true });
 
   return executor;
 }
