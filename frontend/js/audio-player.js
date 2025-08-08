@@ -6,6 +6,15 @@ export class AudioPlayer {
         this.currentSource = null;
         this.sampleRate = 16000; // Default sample rate to match backend
         this.listeners = new Map();
+        
+        // Check for iOS and use iOS handler if available
+        this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        this.iosHandler = window.iosAudioHandler || null;
+        
+        if (this.isIOS && this.iosHandler) {
+            console.log('[AudioPlayer] Using iOS audio workarounds for playback');
+        }
     }
     
     on(event, callback) {
@@ -38,14 +47,26 @@ export class AudioPlayer {
         }
     }
     
-    async addAudioStream(base64Audio, sampleRate = 16000) {
-        if (!this.audioContext) {
-            await this.initialize();
-        }
-        
+    async addAudioStream(base64Audio, sampleRate = 16000, isLastChunk = false) {
         if (!base64Audio || base64Audio.length === 0) {
             console.warn('Empty audio data received');
             return;
+        }
+        
+        // Use iOS handler for audio playback if available
+        if (this.isIOS && this.iosHandler) {
+            try {
+                await this.iosHandler.playAudioChunk(base64Audio, isLastChunk);
+                this.emit('playback_started');
+                return;
+            } catch (error) {
+                console.error('[AudioPlayer] iOS playback failed, falling back to standard:', error);
+            }
+        }
+        
+        // Standard implementation
+        if (!this.audioContext) {
+            await this.initialize();
         }
         
         try {
@@ -134,6 +155,15 @@ export class AudioPlayer {
     }
     
     stop() {
+        // Use iOS handler if available
+        if (this.isIOS && this.iosHandler) {
+            this.iosHandler.stopAudioPlayback();
+            this.isPlaying = false;
+            this.emit('playback_stopped');
+            return;
+        }
+        
+        // Standard implementation
         if (this.currentSource) {
             try {
                 this.currentSource.stop();

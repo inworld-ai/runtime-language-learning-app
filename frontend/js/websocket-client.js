@@ -6,6 +6,19 @@ export class WebSocketClient {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.reconnectDelay = 1000;
+        this.pingInterval = null;
+        
+        // Check for iOS and use optimized URL if available
+        this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        if (this.isIOS && window.iosAudioHandler) {
+            const optimizedUrl = window.iosAudioHandler.getOptimizedWebSocketURL();
+            if (optimizedUrl) {
+                console.log('[WebSocketClient] Using iOS-optimized WebSocket URL:', optimizedUrl);
+                this.url = optimizedUrl;
+            }
+        }
     }
     
     on(event, callback) {
@@ -31,6 +44,12 @@ export class WebSocketClient {
                     console.log('WebSocket connected');
                     this.reconnectAttempts = 0;
                     this.emit('connection', 'connected');
+                    
+                    // Start ping/pong for iOS to keep connection alive
+                    if (this.isIOS) {
+                        this.startPingPong();
+                    }
+                    
                     resolve();
                 };
                 
@@ -46,6 +65,9 @@ export class WebSocketClient {
                 this.ws.onclose = (event) => {
                     console.log('WebSocket disconnected:', event.code, event.reason);
                     this.emit('connection', 'disconnected');
+                    
+                    // Stop ping/pong
+                    this.stopPingPong();
                     
                     if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
                         this.scheduleReconnect();
@@ -165,8 +187,26 @@ export class WebSocketClient {
     }
     
     disconnect() {
+        this.stopPingPong();
         if (this.ws) {
             this.ws.close();
+        }
+    }
+    
+    startPingPong() {
+        // Send ping every 30 seconds to keep connection alive on iOS
+        this.pingInterval = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.send({ type: 'ping' });
+                console.log('[WebSocketClient] Ping sent to keep connection alive');
+            }
+        }, 30000);
+    }
+    
+    stopPingPong() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
         }
     }
 }

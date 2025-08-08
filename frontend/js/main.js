@@ -69,9 +69,34 @@ class App {
     
     setupEventListeners() {
         const micButton = document.getElementById('micButton');
-        micButton.addEventListener('click', () => {
+        
+        // Check for iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        // Add both click and touch events for better iOS support
+        micButton.addEventListener('click', (e) => {
+            e.preventDefault();
             this.toggleStreaming();
         });
+        
+        if (isIOS) {
+            // Add touch event for iOS
+            micButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.toggleStreaming();
+            }, { passive: false });
+            
+            // Prevent double-tap zoom on mic button
+            let lastTouchEnd = 0;
+            micButton.addEventListener('touchend', (e) => {
+                const now = Date.now();
+                if (now - lastTouchEnd <= 300) {
+                    e.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, false);
+        }
         
         this.wsClient.on('connection', (status) => {
             this.state.connectionStatus = status;

@@ -62,6 +62,22 @@
         </div>
     </main>
 
+    <!-- iOS Audio Workarounds - Load conditionally -->
+    <script>
+        // Detect iOS and load workarounds if needed
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        if (isIOS) {
+            const script = document.createElement('script');
+            script.src = 'js/ios-audio-workarounds.js';
+            script.onload = () => {
+                console.log('[Main] iOS audio workarounds loaded');
+            };
+            document.head.appendChild(script);
+        }
+    </script>
+    
     <script type="module" src="js/main.js"></script>
 </body>
 </html>

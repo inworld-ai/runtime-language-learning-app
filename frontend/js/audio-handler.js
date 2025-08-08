@@ -7,6 +7,36 @@ export class AudioHandler {
         this.microphone = null;
         this.isStreaming = false;
         this.listeners = new Map();
+        
+        // Check for iOS and use iOS handler if available
+        this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        this.iosHandler = window.iosAudioHandler || null;
+        
+        if (this.isIOS && this.iosHandler) {
+            console.log('[AudioHandler] Using iOS audio workarounds');
+            this.setupIOSEventListeners();
+        }
+    }
+    
+    setupIOSEventListeners() {
+        // Listen for iOS audio unlock event
+        window.addEventListener('ios-audio-unlocked', (event) => {
+            console.log('[AudioHandler] iOS audio unlocked');
+            this.audioContext = event.detail.audioContext;
+        });
+        
+        // Listen for iOS audio errors
+        window.addEventListener('ios-audio-error', (event) => {
+            console.error('[AudioHandler] iOS audio error:', event.detail.message);
+            this.emit('error', event.detail);
+        });
+        
+        // Listen for iOS audio ended
+        window.addEventListener('ios-audio-ended', () => {
+            console.log('[AudioHandler] iOS audio playback ended');
+            this.emit('playback_finished');
+        });
     }
     
     on(event, callback) {
@@ -27,6 +57,28 @@ export class AudioHandler {
         try {
             console.log('Starting continuous audio streaming...');
             
+            // Use iOS handler if available
+            if (this.isIOS && this.iosHandler) {
+                console.log('[AudioHandler] Using iOS audio handler for microphone');
+                
+                // First unlock audio context if needed
+                await this.iosHandler.unlockAudioContext();
+                
+                // Start microphone with iOS workarounds
+                const success = await this.iosHandler.startMicrophone((audioData) => {
+                    if (this.isStreaming) {
+                        this.emit('audioChunk', audioData);
+                    }
+                });
+                
+                if (success) {
+                    this.isStreaming = true;
+                    console.log('[AudioHandler] iOS microphone started successfully');
+                    return;
+                }
+            }
+            
+            // Fallback to standard implementation
             const constraints = {
                 audio: {
                     echoCancellation: true,
@@ -152,6 +204,14 @@ export class AudioHandler {
         console.log('Stopping continuous audio streaming...');
         this.isStreaming = false;
 
+        // Use iOS handler if available
+        if (this.isIOS && this.iosHandler) {
+            this.iosHandler.stopMicrophone();
+            console.log('[AudioHandler] iOS microphone stopped');
+            return;
+        }
+
+        // Standard cleanup
         if (this.workletNode) {
             this.workletNode.port.onmessage = null;
             this.workletNode.disconnect();
