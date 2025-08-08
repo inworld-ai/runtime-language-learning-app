@@ -82,7 +82,8 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 32px;
     height: calc(100vh - 144px);
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: visible;
 }
 
 /* Section Headers */
@@ -233,7 +234,8 @@ body {
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: hidden;
 }
 
 .flashcards-container {
@@ -243,6 +245,7 @@ body {
 
 .flashcards-grid {
     height: 100%;
+    overflow-x: hidden;
     overflow-y: auto;
     display: flex;
     flex-direction: column;

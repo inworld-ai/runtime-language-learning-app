@@ -18,7 +18,19 @@ export class FlashcardUI {
     }
     
     updateCardCount(count) {
-        this.cardCount.textContent = `${count} card${count !== 1 ? 's' : ''}`;
+        if (count >= 1) {
+            this.cardCount.textContent = `Export ${count} card${count !== 1 ? 's' : ''} to Anki`;
+            this.cardCount.style.cursor = 'pointer';
+            this.cardCount.style.color = '#666';
+            this.cardCount.style.textDecoration = 'underline';
+            this.cardCount.onclick = () => this.exportToAnki();
+        } else {
+            this.cardCount.textContent = `${count} card${count !== 1 ? 's' : ''}`;
+            this.cardCount.style.cursor = 'default';
+            this.cardCount.style.color = 'inherit';
+            this.cardCount.style.textDecoration = 'none';
+            this.cardCount.onclick = null;
+        }
     }
     
     renderFlashcards(flashcards) {
@@ -84,5 +96,65 @@ export class FlashcardUI {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    async exportToAnki() {
+        try {
+            // Filter out invalid flashcards
+            const validFlashcards = this.flashcards.filter(flashcard => 
+                flashcard.spanish && 
+                flashcard.english && 
+                flashcard.spanish.trim() !== '' && 
+                flashcard.english.trim() !== ''
+            );
+
+            if (validFlashcards.length === 0) {
+                alert('No valid flashcards to export');
+                return;
+            }
+
+            // Show loading state
+            const originalText = this.cardCount.textContent;
+            this.cardCount.textContent = 'Exporting...';
+            this.cardCount.style.cursor = 'wait';
+
+            const response = await fetch('/api/export-anki', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    flashcards: validFlashcards,
+                    deckName: 'Aprendemo Spanish Cards'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Export failed');
+            }
+
+            // Create download link
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'aprendemo_cards.apkg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            console.log('ANKI deck exported successfully!');
+            
+            // Restore original state
+            this.updateCardCount(this.flashcards.length);
+            
+        } catch (error) {
+            console.error('Error exporting to ANKI:', error);
+            alert('Failed to export flashcards to ANKI');
+            
+            // Restore original state
+            this.updateCardCount(this.flashcards.length);
+        }
     }
 }

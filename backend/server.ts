@@ -15,10 +15,14 @@ import { WebSocketServer } from 'ws';
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.ts';
 import { FlashcardProcessor } from './helpers/flashcard-processor.ts';
+import { AnkiExporter } from './helpers/anki-exporter.ts';
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
+
+// Add JSON parsing middleware
+app.use(express.json());
 
 const PORT = 3001;
 
@@ -88,6 +92,35 @@ wss.on('connection', (ws) => {
         // Clean up flashcard processor
         flashcardProcessors.delete(connectionId);
     });
+});
+
+// API endpoint for ANKI export
+app.post('/api/export-anki', async (req, res) => {
+  try {
+    const { flashcards, deckName } = req.body;
+    
+    if (!flashcards || !Array.isArray(flashcards)) {
+      return res.status(400).json({ error: 'Invalid flashcards data' });
+    }
+
+    const exporter = new AnkiExporter();
+    const ankiBuffer = await exporter.exportFlashcards(
+      flashcards, 
+      deckName || 'Aprendemo Spanish Cards'
+    );
+
+    // Set headers for file download
+    const filename = `${deckName || 'aprendemo_cards'}.apkg`;
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', ankiBuffer.length);
+
+    // Send the file
+    res.send(ankiBuffer);
+  } catch (error) {
+    console.error('Error exporting to ANKI:', error);
+    res.status(500).json({ error: 'Failed to export flashcards' });
+  }
 });
 
 // Serve static frontend files
