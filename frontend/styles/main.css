@@ -82,7 +82,7 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 32px;
     height: calc(100vh - 144px);
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* Section Headers */
@@ -114,6 +114,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -230,6 +231,9 @@ body {
     padding: 24px;
     display: flex;
     flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .flashcards-container {
@@ -248,8 +252,10 @@ body {
 .flashcard {
     position: relative;
     height: 200px;
+    min-height: 200px;
     cursor: pointer;
     perspective: 1000px;
+    flex: 0 0 auto;
 }
 
 .flashcard-inner {
