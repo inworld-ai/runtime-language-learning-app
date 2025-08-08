@@ -9,15 +9,10 @@
 3. Run `npm install`
 4. Run the app with `npm run dev`
 
-## TODOs
+## Usage
 
-- [x] Improve the conversation graph
-    - [x] Improve prompt templating for instructions and history
-    - [x] Add text to speech
-- [ ] Create the flashcard graph
-    - [ ] Based on the conversation, we will create flashcards with:
-        - [ ] Word
-        - [ ] Translation
-        - [ ] Example sentence
-        - [ ] Mnemonic
-- [ ] Create an ANKI exporter
+1. Go to http://localhost:3001
+2. Hit the mic button
+3. Have a Spanish conversation with the AI teacher
+4. Flashcards will be automatically generated
+5. Hit the export button above the flashcards to export the ANKI deck
