@@ -94,7 +94,6 @@ export class AudioProcessor {
       { apiKey: this.apiKey },
       () => this.getConversationState()
     );
-    await this.executor.visualize('conversation_graph.png');
     this.isReady = true;
     console.log('AudioProcessor: Initialization complete, ready for audio processing');
   }

@@ -12,7 +12,7 @@
 1. Grab your Base64 API key from the Inworld Portal
 2. Put it in the `.env` file in the root of the package
 3. Run `npm install`
-4. Run the app with `npm run dev`
+4. Run the app with `npm run dev` (for development) or `npm start` (for production)
 
 ## Usage
 
