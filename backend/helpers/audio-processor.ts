@@ -323,25 +323,32 @@ export class AudioProcessor {
               }
               
               // Trigger flashcard generation after LLM response
-              if (this.flashcardCallback && this.conversationState.messages.length > 0) {
-                // Get the last few messages for context
-                const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+              if (this.flashcardCallback) {
+                // Get the last few messages for context when available
+                const recentMessages = (
+                  this.conversationState.messages && this.conversationState.messages.length > 0
+                    ? this.conversationState.messages.slice(-6)
+                    : []
+                ).map(msg => ({
                   role: msg.role,
                   content: msg.content
                 }));
-                
-                // Add the current exchange if not already in state
+
+                // Ensure we have at least the current exchange for the first turn
                 if (transcription && llmResponse) {
                   recentMessages.push(
                     { role: 'user', content: transcription },
                     { role: 'assistant', content: llmResponse }
                   );
                 }
-                
-                // Call flashcard generation in background
-                this.flashcardCallback(recentMessages).catch(error => {
-                  console.error('Error in flashcard generation callback:', error);
-                });
+
+                // Only generate if we have some context
+                if (recentMessages.length > 0) {
+                  // Call flashcard generation in background
+                  this.flashcardCallback(recentMessages).catch(error => {
+                    console.error('Error in flashcard generation callback:', error);
+                  });
+                }
               }
             }
             break;

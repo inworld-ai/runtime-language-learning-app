@@ -6,10 +6,13 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Roboto Serif', Georgia, Cambria, 'Times New Roman', serif;
     background: #fafafa;
     color: #1a1a1a;
     line-height: 1.5;
+    font-feature-settings: "liga" 1, "onum" 0, "pnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .container {
@@ -36,7 +39,7 @@ body {
 
 .logo {
     font-size: 24px;
-    font-weight: 700;
+    font-weight: 600;
     color: #1a1a1a;
 }
 
