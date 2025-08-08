@@ -12,7 +12,7 @@ export const conversationTemplate = `
 - If they don't want anything in particular, lead them in a conversation or lesson about Mexico City, the Dunedin sound rock scene, gardening, the concept of brunch across cultures, Balkan travel, or any other topic which comes to mind
 - You can advise the user that if they want specific flashcards, they should just ask
 - Gently correct the user if they make mistakes
-- Do not speak too much - the focus should be on encouraging the user to speak.
+- Don't always ask the user questions, you can talk about yourself as well. Be natural!
 
 {% if messages and messages|length > 0 %}
 Previous conversation:

@@ -22,7 +22,9 @@ class App {
             currentTranscript: '',
             currentLLMResponse: '',
             pendingTranscription: null,
-            pendingLLMResponse: null
+            pendingLLMResponse: null,
+            streamingLLMResponse: '',
+            lastPendingTranscription: null
         };
         
         this.init();
@@ -154,18 +156,34 @@ class App {
         this.wsClient.on('transcription', (data) => {
             this.state.pendingTranscription = data.text;
             this.state.currentTranscript = '';
+            this.state.streamingLLMResponse = ''; // Reset LLM streaming for new conversation
+            // Only render if the transcription changed to avoid restarting typewriter
+            if (this.state.lastPendingTranscription !== data.text) {
+                this.state.lastPendingTranscription = data.text;
+                this.render();
+            }
             this.checkAndUpdateConversation();
-            this.render();
         });
         
         this.wsClient.on('llm_response_chunk', (data) => {
-            this.handleLLMResponseChunk(data.text);
+            // Just accumulate the chunks, don't render yet
+            this.state.streamingLLMResponse += data.text;
         });
         
         this.wsClient.on('llm_response_complete', (data) => {
-            this.state.pendingLLMResponse = data.text;
-            this.checkAndUpdateConversation();
-            this.handleLLMResponseComplete(data.text);
+            console.log('[Main] LLM response complete, starting typewriter with:', data.text);
+            // Start the typewriter effect with the complete text
+            this.state.streamingLLMResponse = data.text; // Set the complete text for typewriter
+            console.log('[Main] About to render for typewriter effect');
+            
+            // Set up callback for when typewriter finishes
+            this.chatUI.setLLMTypewriterCallback(() => {
+                console.log('[Main] LLM typewriter finished, updating conversation');
+                this.state.pendingLLMResponse = data.text;
+                this.checkAndUpdateConversation();
+            });
+            
+            this.render(); // Start typewriter effect
         });
         
         this.wsClient.on('audio_stream', (data) => {
@@ -246,9 +264,15 @@ class App {
                 data: conversationHistory
             });
             
-            // Clear pending messages
+            // Clear pending messages and streaming state
             this.state.pendingTranscription = null;
             this.state.pendingLLMResponse = null;
+            this.state.streamingLLMResponse = '';
+            this.state.lastPendingTranscription = null;
+            
+            // Clear any active typewriters before rendering final state
+            this.chatUI.clearAllTypewriters();
+            this.render();
         }
     }
     
@@ -292,19 +316,7 @@ class App {
         };
     }
     
-    handleLLMResponseChunk(text) {
-        this.state.currentLLMResponse += text;
-        this.state.currentTranscript = 'AI is responding...';
-        this.render();
-    }
-    
-    handleLLMResponseComplete(fullText) {
-        // Message adding is now handled by checkAndUpdateConversation()
-        // This just clears the current response state for UI
-        this.state.currentLLMResponse = '';
-        this.state.currentTranscript = '';
-        this.render();
-    }
+
     
     async handleAudioStream(data) {
         try {
@@ -325,7 +337,13 @@ class App {
     
     render() {
         this.updateConnectionStatus();
-        this.chatUI.render(this.state.chatHistory, this.state.currentTranscript, this.state.currentLLMResponse);
+        this.chatUI.render(
+            this.state.chatHistory, 
+            this.state.currentTranscript, 
+            this.state.currentLLMResponse,
+            this.state.pendingTranscription,
+            this.state.streamingLLMResponse
+        );
         this.flashcardUI.render(this.state.flashcards);
         
         const micButton = document.getElementById('micButton');
