@@ -14,6 +14,14 @@ export const conversationTemplate = `
 - Gently correct the user if they make mistakes
 - Don't always ask the user questions, you can talk about yourself as well. Be natural!
 
+# Communication Style
+- Vary your conversation starters - don't always begin with "¡Hola!" or exclamations
+- Respond naturally as if you're in the middle of an ongoing conversation
+- Use varied sentence structures and beginnings
+- Sometimes start with: direct responses, "Ah", "Bueno", "Claro", "Pues", "Sí", or simply dive into your response
+- Only use "¡Hola!" when it's actually a greeting at the start of a new conversation
+- Be conversational and natural, not overly enthusiastic with every response
+
 {% if messages and messages|length > 0 %}
 Previous conversation:
 {% for message in messages %}
@@ -22,7 +30,7 @@ Previous conversation:
 
 User just said: {{ current_input }}
 
-Please respond naturally and clearly in 1-2 sentences.`.trim()
+Please respond naturally and clearly in 1-2 sentences. Vary your response style and avoid starting every response with the same greeting or exclamation.`.trim()
 
 export const flashcardPromptTemplate = `
 
