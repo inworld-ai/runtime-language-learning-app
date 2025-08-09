@@ -2,8 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GraphTypes } from '@inworld/runtime/common';
-import { SileroVAD, VADConfig } from './silero-vad.js';
-import { createConversationGraph } from '../graphs/conversation-graph.js';
+import { SileroVAD, VADConfig } from './silero-vad.ts';
+import { createConversationGraph } from '../graphs/conversation-graph.ts';
 
 const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
@@ -14,12 +14,11 @@ export class AudioProcessor {
   private isReady = false;
   private websocket: any = null;
   private debugCounter = 0;
-  private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
+  private conversationState: { messages: Array<{ role: string; content: string; timestamp: number }> } = {
     messages: []
   };
-  private flashcardCallback: ((messages: Array<{ role: string; content: string }>) => Promise<void>) | null = null;
 
-  constructor(private apiKey: string, websocket?: any) {
+  constructor(websocket?: any) {
     this.websocket = websocket;
     this.setupWebSocketMessageHandler();
     setTimeout(() => this.initialize(), 100);
@@ -46,10 +45,6 @@ export class AudioProcessor {
 
   private getConversationState() {
     return this.conversationState;
-  }
-
-  setFlashcardCallback(callback: (messages: Array<{ role: string; content: string }>) => Promise<void>) {
-    this.flashcardCallback = callback;
   }
 
   private async initialize() {
@@ -89,13 +84,8 @@ export class AudioProcessor {
     }
     
     // Initialize conversation graph
-    console.log('AudioProcessor: Creating conversation graph...');
-    this.executor = createConversationGraph(
-      { apiKey: this.apiKey },
-      () => this.getConversationState()
-    );
+    this.executor = createConversationGraph()
     this.isReady = true;
-    console.log('AudioProcessor: Initialization complete, ready for audio processing');
   }
 
   addAudioChunk(base64Audio: string) {
@@ -205,10 +195,12 @@ export class AudioProcessor {
     this.isProcessing = true;
 
     try {
+      let transcription = '';
+      let llmResponse = '';
       const amplifiedSegment = this.amplifyAudio(speechSegment, 2.0);
 
       // Save debug audio before sending to STT
-      await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
+      // await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
 
       // Create Audio instance for STT node
       const audioInput = new GraphTypes.Audio({
@@ -216,23 +208,16 @@ export class AudioProcessor {
         sampleRate: 16000,
       });
 
+      // Send the audio to the conversation graph
       const outputStream = await this.executor.start(
         audioInput,
         uuidv4(),
       );
 
-      let transcription = '';
-      let llmResponse = '';
-
       for await (const chunk of outputStream) {
-        console.log(`VAD Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
-        
-        // Use processResponse for type-safe handling
         await chunk.processResponse({
-          // Handle string output (from ProxyNode with STT transcription)
           string: (data: string) => {
-            transcription = data;
-            console.log(`VAD STT Transcription (via ProxyNode): "${transcription}"`);
+            transcription = data; 
             if (this.websocket) {
               this.websocket.send(JSON.stringify({
                 type: 'transcription',
@@ -240,110 +225,12 @@ export class AudioProcessor {
                 timestamp: Date.now()
               }));
             }
-            // Update conversation state with user message
             this.conversationState.messages.push({
               role: 'user',
               content: transcription.trim(),
-              timestamp: new Date().toISOString()
-            });
-            console.log('Updated conversation state with user message:', transcription);
-          },
-          
-          // Handle ContentStream (from LLM)
-          ContentStream: async (streamIterator: GraphTypes.ContentStream) => {
-            console.log('VAD Processing LLM ContentStream...');
-            let currentLLMResponse = '';
-            for await (const streamChunk of streamIterator) {
-              if (streamChunk.text) {
-                currentLLMResponse += streamChunk.text;
-                console.log('VAD LLM chunk:', streamChunk.text);
-                if (this.websocket) {
-                  this.websocket.send(JSON.stringify({
-                    type: 'llm_response_chunk',
-                    text: streamChunk.text,
-                    timestamp: Date.now()
-                  }));
-                }
-              }
-            }
-            if (currentLLMResponse.trim()) {
-              llmResponse = currentLLMResponse;
-              console.log(`VAD Complete LLM Response: "${llmResponse}"`);
-              if (this.websocket) {
-                this.websocket.send(JSON.stringify({
-                  type: 'llm_response_complete',
-                  text: llmResponse.trim(),
-                  timestamp: Date.now()
-                }));
-              }
-              // Update conversation state with assistant message
-              this.conversationState.messages.push({
-                role: 'assistant',
-                content: llmResponse.trim(),
-                timestamp: new Date().toISOString()
-              });
-              console.log('Updated conversation state with assistant message:', llmResponse);
-              
-              // Trigger flashcard generation immediately after LLM response
-              if (transcription && llmResponse) {
-                console.log('Triggering flashcard generation with conversation context');
-                
-                // Send conversation update to frontend
-                if (this.websocket) {
-                  this.websocket.send(JSON.stringify({
-                    type: 'conversation_update',
-                    messages: this.conversationState.messages,
-                    timestamp: Date.now()
-                  }));
-                }
-                
-                // Generate flashcards
-                if (this.flashcardCallback) {
-                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                  }));
-                  
-                  this.flashcardCallback(recentMessages).catch(error => {
-                    console.error('Error in flashcard generation callback:', error);
-                  });
-                }
-              }
-            }
-          },
-          
-          // Handle TTS output stream
-          TTSOutputStream: async (ttsStreamIterator: GraphTypes.TTSOutputStream) => {
-            console.log('VAD Processing TTS audio stream...');
-            for await (const ttsChunk of ttsStreamIterator) {
-              if (ttsChunk.audio && ttsChunk.audio.data) {
-                const audioData = new Float32Array(ttsChunk.audio.data);
-                const int16Array = new Int16Array(audioData.length);
-                for (let i = 0; i < audioData.length; i++) {
-                  int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
-                }
-                const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
-                this.websocket.send(JSON.stringify({
-                  type: 'audio_stream',
-                  audio: base64Audio,
-                  sampleRate: ttsChunk.audio.sampleRate || 16000,
-                  timestamp: Date.now(),
-                  text: ttsChunk.text || ''
-                }));
-              }
-            }
-            // Send completion signal for iOS
-            console.log('VAD TTS stream complete, sending completion signal');
-            this.websocket.send(JSON.stringify({
-              type: 'audio_stream_complete',
               timestamp: Date.now()
-            }));
+            });
           },
-          
-          // Handle any other type
-          default: (data: any) => {
-            console.log(`VAD Unknown/unhandled chunk type: ${chunk.typeName}`, data);
-          }
         });
       }
 

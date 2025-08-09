@@ -5,4 +5,4 @@ package-lock.json
 backend/models/
 backend/audio/
 .DS_Store
-runtime_examples_05/
+templates/

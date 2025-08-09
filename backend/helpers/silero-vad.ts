@@ -4,7 +4,7 @@ import { DeviceRegistry, DeviceType } from '@inworld/runtime/core';
 import { AudioBuffer, AudioChunk } from './audio-buffer.js';
 
 export interface VADConfig {
-    modelPath: string;
+    modelPath: string;  
     threshold: number;
     minSpeechDuration: number;   // seconds
     minSilenceDuration: number;  // seconds
