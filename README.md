@@ -7,12 +7,13 @@
 - [ ] Conversation
     - [x] VAD
     - [x] STT
-    - [ ] Prompt
-    - [ ] LLM
-    - [ ] TTS
-- [ ] Flashcards
-    - [ ] Prompt
-    - [ ] LLM
+    - [x] Prompt
+    - [x] LLM
+    - [x] TTS
+- [x] Flashcards
+    - [x] Prompt
+    - [x] LLM
+- [x] Anki Format Export
 
 ## Requirements
 
