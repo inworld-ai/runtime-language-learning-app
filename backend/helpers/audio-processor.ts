@@ -256,7 +256,7 @@ export class AudioProcessor {
             for await (const streamChunk of streamIterator) {
               if (streamChunk.text) {
                 currentLLMResponse += streamChunk.text;
-                console.log('VAD LLM chunk:', streamChunk.text);
+                // console.log('VAD LLM chunk:', streamChunk.text);
                 if (this.websocket) {
                   this.websocket.send(JSON.stringify({
                     type: 'llm_response_chunk',
