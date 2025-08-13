@@ -43,9 +43,7 @@ export function createConversationGraph(
 
   const sttNode = new RemoteSTTNode({
     id: 'stt_node',
-    sttConfig: {
-      languageCode: 'en-US',
-    },
+    sttConfig: {},
   });
   const proxyNode = new ProxyNode({ id: 'proxy_node', reportToClient: true });
   const promptBuilderNode = new EnhancedPromptBuilderNode({ id: 'enhanced_prompt_builder_node' });
