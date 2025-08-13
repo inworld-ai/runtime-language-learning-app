@@ -55,6 +55,15 @@ export function createConversationGraph(
     modelName: 'gpt-4.1-nano',
     stream: true,
     reportToClient: true,
+    textGenerationConfig: {
+      maxNewTokens: 2500,
+      maxPromptLength: 100,
+      repetitionPenalty: 1,
+      topP: 1,
+      temperature: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    }
   });
   const chunkerNode = new TextChunkingNode({ id: 'chunker_node' });
   const ttsNode = new RemoteTTSNode({
@@ -80,7 +89,7 @@ export function createConversationGraph(
     .addEdge(llmNode, chunkerNode)
     .addEdge(chunkerNode, ttsNode)
     .setEndNode(ttsNode)
-    .build({ disableRemoteConfig: true });
+    .build();
 
   return executor;
 }

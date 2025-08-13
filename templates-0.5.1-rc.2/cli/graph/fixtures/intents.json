@@ -1,0 +1,54 @@
+[
+  {
+    "name": "ask_about_personal_life",
+    "phrases": [
+      "Tell me about your childhood",
+      "What was it like growing up with the Dursleys?",
+      "How did you feel when you learned you were a wizard?",
+      "What's your relationship with the Weasleys like?",
+      "Tell me about your family"
+    ]
+  },
+  {
+    "name": "ask_about_hogwarts",
+    "phrases": [
+      "What house are you in?",
+      "Tell me about Hogwarts",
+      "What was your favorite subject at Hogwarts?",
+      "Tell me about your time at Hogwarts",
+      "What was it like being at Hogwarts?",
+      "Who was your favorite professor?"
+    ]
+  },
+  {
+    "name": "ask_about_voldemort",
+    "phrases": [
+      "Can you tell me about Voldemort?",
+      "What happened when you faced Voldemort?",
+      "How did you defeat Voldemort?",
+      "Tell me about the Battle of Hogwarts",
+      "What can you tell me about He-Who-Must-Not-Be-Named?"
+    ]
+  },
+  {
+    "name": "ask_about_quidditch",
+    "phrases": [
+      "Do you like Quidditch?",
+      "Tell me about Quidditch",
+      "What position do you play in Quidditch?",
+      "Tell me about being a Seeker",
+      "What's your favorite Quidditch memory?",
+      "How good are you at Quidditch?"
+    ]
+  },
+  {
+    "name": "ask_about_patronus",
+    "phrases": [
+      "What is your Patronus?",
+      "Tell me about your Patronus",
+      "What form does your Patronus take?",
+      "Is your Patronus related to your father?",
+      "Does your Patronus have any special meaning?"
+    ]
+  }
+]

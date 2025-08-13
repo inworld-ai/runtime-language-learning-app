@@ -77,6 +77,15 @@ export function createFlashcardGraph() {
     provider: 'openai',
     modelName: 'gpt-4.1',
     stream: false,
+    textGenerationConfig: {
+      maxNewTokens: 2500,
+      maxPromptLength: 100,
+      repetitionPenalty: 1,
+      topP: 1,
+      temperature: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    }
   });
   const parserNode = new FlashcardParserNode({ id: 'flashcard-parser' });
 
@@ -90,7 +99,7 @@ export function createFlashcardGraph() {
     .addEdge(llmNode, parserNode)
     .setStartNode(promptBuilderNode)
     .setEndNode(parserNode)
-    .build({ disableRemoteConfig: true });
+    .build();
 
   return executor;
 }

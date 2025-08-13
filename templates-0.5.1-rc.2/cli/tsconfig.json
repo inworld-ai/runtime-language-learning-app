@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "noImplicitAny": true,
+    "resolveJsonModule": true,
+    "target": "es6",
+    "types": ["node"],
+    "esModuleInterop": true
+  },
+}

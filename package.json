@@ -21,7 +21,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@inworld/runtime": "https://assets.inworld.ai/node-packages/inworld-runtime-0.5.0-rc.3.tgz",
+    "@inworld/runtime": "^0.5.1-rc.2",
     "anki-apkg-export": "^4.0.3",
     "dotenv": "^17.2.1",
     "express": "^4.19.2",

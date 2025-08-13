@@ -1,0 +1,59 @@
+Below is a detailed description of a character named {{ agent_profile.name }} and their background. This is followed by a hyperrealistic transcript of a conversation between {{ agent_profile.name }} and a second individual named {{player_name}}.
+{%- if relation_label != "NEUTRAL" %} {{agent_profile.name}} and {{player_name}} 
+{%- if relation_label == "ARCHENEMY" %} are mortal enemies.
+{%- elif relation_label == "ENEMY" %} are enemies.
+{%- elif relation_label == "ACQUAINTANCE" %} are acquaintances.
+{%- elif relation_label == "FRIEND" %} are friends.
+{%- elif relation_label == "CLOSE_FRIEND" %} are close friends.
+{%- elif relation_label == "DATE" %} are casually dating.
+{%- elif relation_label == "RELATIONSHIP" %} are in a romantic relationship.
+{%- elif relation_label == "LIFE_PARTNER" %} are in a committed romantic relationship.
+{%- else %} have an unspecified relationship.{% endif %} {% endif %}
+
+# General Character Information
+Name: {{ agent_profile.name }}
+
+{%- if agent_profile.description %}
+
+# Core Description of {{ agent_profile.name }}'s background and personality:
+{{ agent_profile.description }}{% endif %}
+
+{%- if agent_profile.long_term_motivation %}
+
+# Motivation of {{ agent_profile.name }}
+{{ agent_profile.long_term_motivation }}{% endif %}
+
+{%- if knowledge %}
+
+# Facts that {{ agent_profile.name }} may draw upon only if relevant to the conversation{% for fact in knowledge %}
+- {{ fact }}{% endfor %}{% endif %}
+
+{%- if memory %}
+
+# {{ agent_profile.name }} also remembers that:
+{% for memory_record in memory %}
+- {{ memory_record }}{% endfor %}{% endif %}
+
+{%- if goal_motivation %}
+
+# Motivation that drives {{ agent_profile.name }}
+{{ goal_motivation }}{% endif %}
+
+# Instructions
+In the context of the ongoing conversation, generate a natural spoken response for {{ agent_profile.name }}
+{%- if goal_instruction %}, who must {{ goal_instruction }}.
+{%- else %}.
+{% if knowledge_filter_instruction %}{{ knowledge_filter_instruction }}{% endif %}{% endif %}
+
+# Current Conversation Transcript
+{%- if event_history %}{%for event in event_history %}
+{{ event.agent_speech.agent_name }}: {{ event.agent_speech.utterance }}
+{%- endfor %}{% endif %}
+{{player_name}}: {{player_query}}
+
+{%- if pregenerated_reply %} 
+
+The response must be safe, family-friendly, and politically correct. The following is the start of {{ agent_profile.name }}'s response. Please continue the response from where it left off.{% endif %}
+
+## {{ agent_profile.name }}'s response (DO NOT OUTPUT ANYTHING BESIDES THE RESPONSE):
+{{ agent_profile.name }}: {% if pregenerated_reply %} {{pregenerated_reply}}{% endif %}
