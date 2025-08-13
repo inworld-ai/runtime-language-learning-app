@@ -1,0 +1,8 @@
+.env
+node_modules/
+CLAUDE.md
+package-lock.json
+backend/models/
+backend/audio/
+.DS_Store
+templates/
