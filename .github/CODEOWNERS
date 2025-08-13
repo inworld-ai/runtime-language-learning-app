@@ -1,15 +1,3 @@
-# Code Owners for aprendemo repository
-# This file defines who can approve pull requests for different parts of the codebase.
-# When someone opens a PR that modifies code, the code owners will be automatically
-# requested for review.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
-# Default owners for everything in the repo
-# Both the Forward Deploy Engineers team and cale@inworld.ai can approve PRs
 * @inworld-ai/forward-deploy-engineers @cale
-
-# You can add more specific ownership patterns below if needed
-# For example:
-# /backend/ @inworld-ai/forward-deploy-engineers @cale
-# /frontend/ @inworld-ai/forward-deploy-engineers @cale
-# *.ts @inworld-ai/forward-deploy-engineers @cale
-# *.js @inworld-ai/forward-deploy-engineers @cale
