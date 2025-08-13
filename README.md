@@ -1,19 +1,6 @@
-# Aprendemo
+# Inworld Runtime App Template - Language Learning
 
 "Aprender" is Spanish for "learn". This is a simple Node.js app where you can learn both Spanish (through conversation and flashcard studying) as well as a demonstration of the Inworld Runtime Node.js SDK.
-
-## TODOs
-
-- [ ] Conversation
-    - [x] VAD
-    - [x] STT
-    - [x] Prompt
-    - [x] LLM
-    - [x] TTS
-- [x] Flashcards
-    - [x] Prompt
-    - [x] LLM
-- [x] Anki Format Export
 
 ## Requirements
 
