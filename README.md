@@ -1,3 +1,5 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 # Inworld Runtime App Template - Language Learning
 
 This is a Node.js app where you can learn both Spanish (through conversation and flashcard studying) as well as a demonstration of the Inworld Runtime Node.js SDK. We call it "Aprendemo" as "Aprender" is Spanish for "to learn" and it's a demo of Inworld Runtime. Use it as a template to start your own project or submit a PR!
@@ -26,3 +28,7 @@ This is a Node.js app where you can learn both Spanish (through conversation and
    ```
 4. Run `npm install`
 5. Run the app with `npm run dev` (for development) or `npm start` (for production)
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
