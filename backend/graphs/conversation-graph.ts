@@ -2,6 +2,7 @@ import { GraphBuilder, CustomNode, ProcessContext, ProxyNode, RemoteLLMChatNode,
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { conversationTemplate } from '../helpers/prompt-templates.ts';
+import type { IntroductionState } from '../helpers/introduction-state-processor.ts';
 
 export interface ConversationGraphConfig {
   apiKey: string;
@@ -9,16 +10,19 @@ export interface ConversationGraphConfig {
 
 export function createConversationGraph(
   _config: ConversationGraphConfig,
-  getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> }
+  getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> },
+  getIntroductionState: () => IntroductionState
 ) {
   // Create the custom node class with closure over getConversationState
   class EnhancedPromptBuilderNode extends CustomNode {
     async process(_context: ProcessContext, currentInput: string) {
       // Access getConversationState from the closure
       const conversationState = getConversationState();
+      const introductionState = getIntroductionState();
       const templateData = {
         messages: conversationState.messages || [],
         current_input: currentInput,
+        introduction_state: introductionState || { name: '', level: '', goal: '' }
       };
 
       // console.log(
@@ -55,7 +59,7 @@ export function createConversationGraph(
     reportToClient: true,
     textGenerationConfig: {
       maxNewTokens: 2500,
-      maxPromptLength: 100,
+      maxPromptLength: 2000,
       repetitionPenalty: 1,
       topP: 1,
       temperature: 1,

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { GraphTypes } from '@inworld/runtime/common';
 import { SileroVAD, VADConfig } from './silero-vad.js';
 import { createConversationGraph } from '../graphs/conversation-graph.js';
+import type { IntroductionState } from './introduction-state-processor.ts';
 
 const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
@@ -18,6 +19,8 @@ export class AudioProcessor {
     messages: []
   };
   private flashcardCallback: ((messages: Array<{ role: string; content: string }>) => Promise<void>) | null = null;
+  private introductionState: IntroductionState = { name: '', level: '', goal: '', timestamp: '' };
+  private introductionStateCallback: ((messages: Array<{ role: string; content: string }>) => Promise<IntroductionState | null>) | null = null;
 
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
@@ -50,6 +53,14 @@ export class AudioProcessor {
 
   setFlashcardCallback(callback: (messages: Array<{ role: string; content: string }>) => Promise<void>) {
     this.flashcardCallback = callback;
+  }
+
+  setIntroductionStateCallback(callback: (messages: Array<{ role: string; content: string }>) => Promise<IntroductionState | null>) {
+    this.introductionStateCallback = callback;
+  }
+
+  getIntroductionState(): IntroductionState {
+    return this.introductionState;
   }
 
   private async initialize() {
@@ -92,7 +103,8 @@ export class AudioProcessor {
     console.log('AudioProcessor: Creating conversation graph...');
     this.executor = createConversationGraph(
       { apiKey: this.apiKey },
-      () => this.getConversationState()
+      () => this.getConversationState(),
+      () => this.getIntroductionState()
     );
     this.isReady = true;
     console.log('AudioProcessor: Initialization complete, ready for audio processing');
@@ -247,6 +259,31 @@ export class AudioProcessor {
               timestamp: new Date().toISOString()
             });
             console.log('Updated conversation state with user message:', transcription);
+
+            // Opportunistically run introduction-state extraction as soon as we have user input
+            const isIntroCompleteEarly = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
+            if (!isIntroCompleteEarly && this.introductionStateCallback) {
+              const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                role: msg.role,
+                content: msg.content
+              }));
+              this.introductionStateCallback(recentMessages)
+                .then((state) => {
+                  if (state) {
+                    this.introductionState = state;
+                    if (this.websocket) {
+                      this.websocket.send(JSON.stringify({
+                        type: 'introduction_state_updated',
+                        introduction_state: this.introductionState,
+                        timestamp: Date.now()
+                      }));
+                    }
+                  }
+                })
+                .catch((error) => {
+                  console.error('Error in introduction-state callback (early):', error);
+                });
+            }
           },
           
           // Handle ContentStream (from LLM)
@@ -307,6 +344,31 @@ export class AudioProcessor {
                   this.flashcardCallback(recentMessages).catch(error => {
                     console.error('Error in flashcard generation callback:', error);
                   });
+                }
+
+                // Run introduction-state extraction while incomplete
+                const isIntroComplete = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
+                if (!isIntroComplete && this.introductionStateCallback) {
+                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                  }));
+                  this.introductionStateCallback(recentMessages)
+                    .then((state) => {
+                      if (state) {
+                        this.introductionState = state;
+                        if (this.websocket) {
+                          this.websocket.send(JSON.stringify({
+                            type: 'introduction_state_updated',
+                            introduction_state: this.introductionState,
+                            timestamp: Date.now()
+                          }));
+                        }
+                      }
+                    })
+                    .catch((error) => {
+                      console.error('Error in introduction-state callback:', error);
+                    });
                 }
               }
             }

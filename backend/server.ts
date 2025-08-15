@@ -16,6 +16,7 @@ import { WebSocketServer } from 'ws';
 import { AudioProcessor } from './helpers/audio-processor.ts';
 import { FlashcardProcessor } from './helpers/flashcard-processor.ts';
 import { AnkiExporter } from './helpers/anki-exporter.ts';
+import { IntroductionStateProcessor } from './helpers/introduction-state-processor.ts';
 
 const app = express();
 const server = createServer(app);
@@ -29,6 +30,7 @@ const PORT = 3001;
 // Store audio processors per connection
 const audioProcessors = new Map<string, AudioProcessor>();
 const flashcardProcessors = new Map<string, FlashcardProcessor>();
+const introductionStateProcessors = new Map<string, IntroductionStateProcessor>();
 
 // WebSocket handling with audio processing
 wss.on('connection', (ws) => {
@@ -39,9 +41,11 @@ wss.on('connection', (ws) => {
     const apiKey = process.env.INWORLD_API_KEY || '';
     const audioProcessor = new AudioProcessor(apiKey, ws);
     const flashcardProcessor = new FlashcardProcessor();
+    const introductionStateProcessor = new IntroductionStateProcessor();
     
     audioProcessors.set(connectionId, audioProcessor);
     flashcardProcessors.set(connectionId, flashcardProcessor);
+    introductionStateProcessors.set(connectionId, introductionStateProcessor);
     
     // Set up flashcard generation callback
     audioProcessor.setFlashcardCallback(async (messages) => {
@@ -55,6 +59,18 @@ wss.on('connection', (ws) => {
             }
         } catch (error) {
             console.error('Error generating flashcards:', error);
+        }
+    });
+    
+    // Set up introduction-state extraction callback (runs until complete)
+    audioProcessor.setIntroductionStateCallback(async (messages) => {
+        try {
+            if (introductionStateProcessor.isComplete()) return introductionStateProcessor.getState();
+            const state = await introductionStateProcessor.update(messages);
+            return state;
+        } catch (error) {
+            console.error('Error generating introduction state:', error);
+            return null;
         }
     });
     
@@ -89,8 +105,9 @@ wss.on('connection', (ws) => {
             audioProcessors.delete(connectionId);
         }
         
-        // Clean up flashcard processor
+        // Clean up processors
         flashcardProcessors.delete(connectionId);
+        introductionStateProcessors.delete(connectionId);
     });
 });
 

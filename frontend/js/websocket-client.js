@@ -130,6 +130,9 @@ export class WebSocketClient {
             case 'flashcards_generated':
                 this.emit('flashcards_generated', message.flashcards);
                 break;
+            case 'introduction_state_updated':
+                this.emit('introduction_state_updated', message.introduction_state);
+                break;
                 
             case 'connection_status':
                 // Connection status received
