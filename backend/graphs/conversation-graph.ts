@@ -77,7 +77,10 @@ export function createConversationGraph(
     temperature: 0.7,
   });
 
-  const executor = new GraphBuilder('conversation_graph')
+  const executor = new GraphBuilder({
+    id: 'conversation_graph',
+    enableRemoteConfig: true
+  })
     .addNode(sttNode)
     .addNode(proxyNode)
     .addNode(promptBuilderNode)

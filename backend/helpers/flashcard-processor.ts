@@ -1,5 +1,6 @@
 import { v4 } from 'uuid';
 import { createFlashcardGraph } from '../graphs/flashcard-graph.ts';
+import { UserContext } from '@inworld/runtime/graph';
 
 export interface Flashcard {
   id: string;
@@ -24,7 +25,8 @@ export class FlashcardProcessor {
 
   async generateFlashcards(
     messages: ConversationMessage[],
-    count: number = 1
+    count: number = 1,
+    userContext?: UserContext
   ): Promise<Flashcard[]> {
     const executor = createFlashcardGraph();
     
@@ -32,7 +34,7 @@ export class FlashcardProcessor {
     const promises: Promise<Flashcard>[] = [];
     
     for (let i = 0; i < count; i++) {
-      promises.push(this.generateSingleFlashcard(executor, messages));
+      promises.push(this.generateSingleFlashcard(executor, messages, userContext));
     }
     
     try {
@@ -55,7 +57,8 @@ export class FlashcardProcessor {
 
   private async generateSingleFlashcard(
     executor: any,
-    messages: ConversationMessage[]
+    messages: ConversationMessage[],
+    userContext?: UserContext
   ): Promise<Flashcard> {
     try {
       const input = {
@@ -65,7 +68,13 @@ export class FlashcardProcessor {
         flashcards: this.existingFlashcards
       };
 
-      const outputStream = await executor.start(input, v4());
+      let outputStream;
+      try {
+        outputStream = await executor.start(input, v4(), userContext);
+      } catch (err) {
+        console.warn('Flashcard executor.start with UserContext failed, falling back without context:', err);
+        outputStream = await executor.start(input, v4());
+      }
       let finalData: any = null;
       for await (const res of outputStream) {
         finalData = res.data;

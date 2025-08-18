@@ -11,6 +11,9 @@ const __dirname = path.dirname(__filename);
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
+import { telemetry } from '@inworld/runtime';
+import { MetricType } from '@inworld/runtime/telemetry';
+import { UserContext } from '@inworld/runtime/graph';
 
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.ts';
@@ -27,10 +30,35 @@ app.use(express.json());
 
 const PORT = 3001;
 
+// Initialize telemetry once at startup
+try {
+  const telemetryApiKey = process.env.INWORLD_API_KEY;
+  if (telemetryApiKey) {
+    telemetry.init({
+      apiKey: telemetryApiKey,
+      appName: 'Aprendemo',
+      appVersion: '1.0.0'
+    });
+
+    telemetry.configureMetric({
+      metricType: MetricType.COUNTER_UINT,
+      name: 'flashcard_clicks_total',
+      description: 'Total flashcard clicks',
+      unit: 'clicks'
+    });
+  } else {
+    console.warn('[Telemetry] INWORLD_API_KEY not set. Metrics will be disabled.');
+  }
+} catch (err) {
+  console.error('[Telemetry] Initialization failed:', err);
+}
+
 // Store audio processors per connection
 const audioProcessors = new Map<string, AudioProcessor>();
 const flashcardProcessors = new Map<string, FlashcardProcessor>();
 const introductionStateProcessors = new Map<string, IntroductionStateProcessor>();
+// Store lightweight per-connection attributes provided by the client (e.g., timezone, userId)
+const connectionAttributes = new Map<string, { timezone?: string; userId?: string }>();
 
 // WebSocket handling with audio processing
 wss.on('connection', (ws) => {
@@ -50,7 +78,21 @@ wss.on('connection', (ws) => {
     // Set up flashcard generation callback
     audioProcessor.setFlashcardCallback(async (messages) => {
         try {
-            const flashcards = await flashcardProcessor.generateFlashcards(messages, 1);
+            // Build UserContext for flashcard graph execution
+            const introState = introductionStateProcessor.getState();
+            const attrs = connectionAttributes.get(connectionId) || {};
+            const userAttributes: Record<string, string> = {
+                timezone: attrs.timezone || ''
+            };
+            userAttributes.name = (introState?.name && introState.name.trim()) || 'unknown';
+            userAttributes.level = (introState?.level && (introState.level as string)) || 'unknown';
+            userAttributes.goal = (introState?.goal && introState.goal.trim()) || 'unknown';
+
+            // Prefer a stable targeting key from client if available, fallback to connectionId
+            const targetingKey = attrs.userId || connectionId;
+            const userContext = new UserContext(userAttributes, targetingKey);
+
+            const flashcards = await flashcardProcessor.generateFlashcards(messages, 1, userContext);
             if (flashcards.length > 0) {
                 ws.send(JSON.stringify({
                     type: 'flashcards_generated',
@@ -87,6 +129,30 @@ wss.on('connection', (ws) => {
                 if (processor) {
                     processor.reset();
                 }
+            } else if (message.type === 'user_context') {
+                const timezone = message.timezone || (message.data && message.data.timezone) || undefined;
+                const userId = message.userId || (message.data && message.data.userId) || undefined;
+                connectionAttributes.set(connectionId, { timezone, userId });
+            } else if (message.type === 'flashcard_clicked') {
+                try {
+                    const card = message.card || {};
+                    const introState = introductionStateProcessors.get(connectionId)?.getState();
+                    const attrs = connectionAttributes.get(connectionId) || {};
+                    telemetry.metric.recordCounterUInt('flashcard_clicks_total', 1, {
+                        connectionId,
+                        cardId: card.id || '',
+                        spanish: card.spanish || card.word || '',
+                        english: card.english || card.translation || '',
+                        source: 'ui',
+                        timezone: attrs.timezone || '',
+                        name: (introState?.name && introState.name.trim()) || 'unknown',
+                        level: (introState?.level && (introState.level as string)) || 'unknown',
+                        goal: (introState?.goal && introState.goal.trim()) || 'unknown'
+                    });
+                }
+                catch (err) {
+                    console.error('Error recording flashcard click metric:', err);
+                }
             } else {
                 console.log('Received non-audio message:', message.type);
             }
@@ -108,6 +174,7 @@ wss.on('connection', (ws) => {
         // Clean up processors
         flashcardProcessors.delete(connectionId);
         introductionStateProcessors.delete(connectionId);
+        connectionAttributes.delete(connectionId);
     });
 });
 

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GraphTypes } from '@inworld/runtime/common';
+import { UserContext } from '@inworld/runtime/graph';
 import { SileroVAD, VADConfig } from './silero-vad.js';
 import { createConversationGraph } from '../graphs/conversation-graph.js';
 import type { IntroductionState } from './introduction-state-processor.ts';
@@ -21,6 +22,9 @@ export class AudioProcessor {
   private flashcardCallback: ((messages: Array<{ role: string; content: string }>) => Promise<void>) | null = null;
   private introductionState: IntroductionState = { name: '', level: '', goal: '', timestamp: '' };
   private introductionStateCallback: ((messages: Array<{ role: string; content: string }>) => Promise<IntroductionState | null>) | null = null;
+  private targetingKey: string | null = null;
+  private clientTimezone: string | null = null;
+  private hasMergedInitialHistory = false;
 
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
@@ -28,17 +32,47 @@ export class AudioProcessor {
     setTimeout(() => this.initialize(), 100);
   }
 
+  private trimConversationHistory(maxTurns: number = 40) {
+    const maxMessages = maxTurns * 2;
+    if (this.conversationState.messages.length > maxMessages) {
+      this.conversationState.messages = this.conversationState.messages.slice(-maxMessages);
+    }
+  }
+
   private setupWebSocketMessageHandler() {
     if (this.websocket) {
-      this.websocket.on('message', (data: string) => {
+      this.websocket.on('message', (data: any) => {
         try {
-          const message = JSON.parse(data);
+          const raw = typeof data === 'string' ? data : data?.toString?.() || '';
+          const message = JSON.parse(raw);
           
           if (message.type === 'conversation_update') {
-            // console.log('Received conversation_update message:', message.data);
-            this.conversationState = message.data;
-            // console.log('Updated conversation state:', this.conversationState.messages.length, 'messages');
-            // console.log('Full conversation state:', JSON.stringify(this.conversationState, null, 2));
+            if (this.hasMergedInitialHistory) {
+              // Ignore subsequent client history updates to avoid duplicates; server is source of truth
+              return;
+            }
+            const incoming = (message.data && message.data.messages) ? message.data.messages : [];
+            const existing = this.conversationState.messages || [];
+            const combined = [...existing, ...incoming];
+            const seen = new Set<string>();
+            const deduped: Array<{ role: string; content: string; timestamp: string }> = [];
+            for (const m of combined) {
+              const key = `${m.timestamp}|${m.role}|${m.content}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                deduped.push(m);
+              }
+            }
+            deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            this.conversationState = { messages: deduped };
+            this.trimConversationHistory(40);
+            this.hasMergedInitialHistory = true;
+          } else if (message.type === 'user_context') {
+            // Persist minimal attributes for user context
+            const tz = message.timezone || (message.data && message.data.timezone) || '';
+            const uid = message.userId || (message.data && message.data.userId) || '';
+            this.clientTimezone = tz || this.clientTimezone;
+            if (uid) this.targetingKey = uid;
           }
         } catch (error) {
           // Not a JSON message or conversation update, ignore
@@ -228,10 +262,31 @@ export class AudioProcessor {
         sampleRate: 16000,
       });
 
-      const outputStream = await this.executor.start(
-        audioInput,
-        uuidv4(),
-      );
+      // Build user context for experiments
+      const attributes: Record<string, string> = {
+        timezone: this.clientTimezone || '',
+      };
+      attributes.name = (this.introductionState?.name && this.introductionState.name.trim()) || 'unknown';
+      attributes.level = (this.introductionState?.level && (this.introductionState.level as string)) || 'unknown';
+      attributes.goal = (this.introductionState?.goal && this.introductionState.goal.trim()) || 'unknown';
+
+      const targetingKey = this.targetingKey || uuidv4();
+      const userContext = new UserContext(attributes, targetingKey);
+      console.log(userContext)
+      let outputStream;
+      try {
+        outputStream = await this.executor.start(
+          audioInput,
+          uuidv4(),
+          userContext,
+        );
+      } catch (err) {
+        console.warn('Executor.start with UserContext failed, falling back without context:', err);
+        outputStream = await this.executor.start(
+          audioInput,
+          uuidv4(),
+        );
+      }
 
       let transcription = '';
       let llmResponse = '';
@@ -258,6 +313,7 @@ export class AudioProcessor {
               content: transcription.trim(),
               timestamp: new Date().toISOString()
             });
+            this.trimConversationHistory(40);
             console.log('Updated conversation state with user message:', transcription);
 
             // Opportunistically run introduction-state extraction as soon as we have user input
@@ -319,6 +375,7 @@ export class AudioProcessor {
                 content: llmResponse.trim(),
                 timestamp: new Date().toISOString()
               });
+              this.trimConversationHistory(40);
               console.log('Updated conversation state with assistant message:', llmResponse);
               
               // Trigger flashcard generation immediately after LLM response
