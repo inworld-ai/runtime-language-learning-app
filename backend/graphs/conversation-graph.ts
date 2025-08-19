@@ -79,7 +79,7 @@ export function createConversationGraph(
 
   const executor = new GraphBuilder({
     id: 'conversation_graph',
-    enableRemoteConfig: true
+    enableRemoteConfig: false
   })
     .addNode(sttNode)
     .addNode(proxyNode)

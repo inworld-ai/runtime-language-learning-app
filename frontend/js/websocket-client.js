@@ -173,6 +173,10 @@ export class WebSocketClient {
                     timestamp: message.timestamp
                 });
                 break;
+
+            case 'interrupt':
+                this.emit('interrupt', { reason: message.reason });
+                break;
                 
             default:
                 console.log('Unknown message type:', message.type);

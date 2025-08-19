@@ -198,6 +198,12 @@ class App {
             console.log('Audio stream complete signal received');
             this.audioPlayer.markStreamComplete();
         });
+
+        // Minimal interruption handling: stop audio playback immediately
+        this.wsClient.on('interrupt', (_data) => {
+            console.log('[Main] Interrupt received, stopping audio playback');
+            try { this.audioPlayer.stop(); } catch (_) {}
+        });
         
         this.audioHandler.on('audioChunk', (audioData) => {
             this.wsClient.sendAudioChunk(audioData);

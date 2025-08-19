@@ -104,9 +104,10 @@ export class AudioPlayer {
             // Queue the audio buffer for playback
             this.audioQueue.push(audioBuffer);
             
-            // Start playback if not already playing
+            // Start playback immediately if not already playing
             if (!this.isPlaying) {
-                this.playNextBuffer();
+                // Start playing immediately without blocking
+                setTimeout(() => this.playNextBuffer(), 0);
             }
             
         } catch (error) {
@@ -116,25 +117,18 @@ export class AudioPlayer {
     
     async createAudioBuffer(arrayBuffer, sampleRate) {
         try {
-            // Try to decode as audio first (for formats like MP3, WAV, etc.)
-            try {
-                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer.slice(0));
-                return audioBuffer;
-            } catch (decodeError) {
-                console.log('Decoding as audio format failed, treating as raw PCM data');
-                
-                // Treat as raw PCM data (common for TTS output)
-                const int16Array = new Int16Array(arrayBuffer);
-                const audioBuffer = this.audioContext.createBuffer(1, int16Array.length, sampleRate);
-                const channelData = audioBuffer.getChannelData(0);
-                
-                // Convert Int16 to Float32 and normalize
-                for (let i = 0; i < int16Array.length; i++) {
-                    channelData[i] = int16Array[i] / 32768.0;
-                }
-                
-                return audioBuffer;
+            // We know the backend sends raw PCM Int16 data, so skip decode attempt
+            // and directly process as PCM for faster playback
+            const int16Array = new Int16Array(arrayBuffer);
+            const audioBuffer = this.audioContext.createBuffer(1, int16Array.length, sampleRate);
+            const channelData = audioBuffer.getChannelData(0);
+            
+            // Convert Int16 to Float32 and normalize
+            for (let i = 0; i < int16Array.length; i++) {
+                channelData[i] = int16Array[i] / 32768.0;
             }
+            
+            return audioBuffer;
         } catch (error) {
             console.error('Error creating audio buffer:', error);
             throw error;

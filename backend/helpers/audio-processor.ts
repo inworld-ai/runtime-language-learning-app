@@ -16,6 +16,10 @@ export class AudioProcessor {
   private isReady = false;
   private websocket: any = null;
   private debugCounter = 0;
+  private currentOutputStream: any | null = null;
+  private debounceTimeoutMs: number = 2000;
+  private debounceTimer: NodeJS.Timeout | null = null;
+  private pendingSpeechSegments: Float32Array[] = [];  // Accumulate speech segments
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
   };
@@ -106,7 +110,7 @@ export class AudioProcessor {
         modelPath: 'backend/models/silero_vad.onnx',
         threshold: 0.5,  // Following working example SPEECH_THRESHOLD
         minSpeechDuration: 0.2,  // MIN_SPEECH_DURATION_MS / 1000
-        minSilenceDuration: 0.65, // PAUSE_DURATION_THRESHOLD_MS / 1000
+        minSilenceDuration: 0.4, // Reduced from 0.65 for faster response
         speechResetSilenceDuration: 1.0,
         minVolume: 0.01, // Lower threshold to start - can adjust based on testing
         sampleRate: 16000
@@ -121,11 +125,73 @@ export class AudioProcessor {
       
       this.vad.on('speechStart', (event) => {
         console.log('🎤 Speech started');
+        
+        // Always notify frontend to stop audio playback when user starts speaking
+        if (this.websocket) {
+          try {
+            this.websocket.send(JSON.stringify({ type: 'interrupt', reason: 'speech_start' }));
+          } catch (_) {
+            // ignore send errors
+          }
+        }
+        
+        // If we have a pending debounce timer, it means we were about to process
+        // but the user started speaking again - cancel processing and keep accumulating
+        if (this.debounceTimer) {
+          console.log('User resumed speaking - cancelling pending processing');
+          clearTimeout(this.debounceTimer);
+          this.debounceTimer = null;
+          
+          // If we're currently processing, interrupt graph execution
+          if (this.isProcessing) {
+            this.interrupt('speech_resumed');
+          }
+        } else if (this.isProcessing) {
+          // User started speaking while we're processing - interrupt graph execution
+          this.interrupt('speech_start');
+        }
       });
       
       this.vad.on('speechEnd', async (event) => {
         console.log('🔇 Speech ended, duration:', event.speechDuration.toFixed(2) + 's');
-        await this.processVADSpeechSegment(event.speechSegment);
+        
+        try {
+          if (event.speechSegment && event.speechSegment.length > 0) {
+            // Add this segment to pending segments
+            this.pendingSpeechSegments.push(event.speechSegment);
+            
+            // Cancel any existing debounce timer
+            if (this.debounceTimer) {
+              clearTimeout(this.debounceTimer);
+            }
+            
+            // Set a timer to process after debounce period
+            this.debounceTimer = setTimeout(async () => {
+              this.debounceTimer = null;
+              
+              // Only process if not already processing
+              if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
+                // Combine all pending segments
+                const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
+                const combinedSegment = new Float32Array(totalLength);
+                let offset = 0;
+                for (const seg of this.pendingSpeechSegments) {
+                  combinedSegment.set(seg, offset);
+                  offset += seg.length;
+                }
+                
+                // Clear pending segments
+                this.pendingSpeechSegments = [];
+                
+                // Process the combined segment
+                console.log('Processing combined speech segment after debounce');
+                await this.processVADSpeechSegment(combinedSegment);
+              }
+            }, this.debounceTimeoutMs);
+          }
+        } catch (error) {
+          console.error('Error handling speech segment:', error);
+        }
       });
       
     } catch (error) {
@@ -254,7 +320,7 @@ export class AudioProcessor {
       const amplifiedSegment = this.amplifyAudio(speechSegment, 2.0);
 
       // Save debug audio before sending to STT
-      await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
+      // await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
 
       // Create Audio instance for STT node
       const audioInput = new GraphTypes.Audio({
@@ -291,6 +357,9 @@ export class AudioProcessor {
       let transcription = '';
       let llmResponse = '';
 
+      // Track the current output stream so it can be cancelled on interruption
+      this.currentOutputStream = outputStream;
+
       for await (const chunk of outputStream) {
         console.log(`VAD Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
         
@@ -307,14 +376,8 @@ export class AudioProcessor {
                 timestamp: Date.now()
               }));
             }
-            // Update conversation state with user message
-            this.conversationState.messages.push({
-              role: 'user',
-              content: transcription.trim(),
-              timestamp: new Date().toISOString()
-            });
-            this.trimConversationHistory(40);
-            console.log('Updated conversation state with user message:', transcription);
+            // Don't add to conversation state yet - the prompt template will use it as current_input
+            // We'll add it after processing completes
 
             // Opportunistically run introduction-state extraction as soon as we have user input
             const isIntroCompleteEarly = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
@@ -369,14 +432,21 @@ export class AudioProcessor {
                   timestamp: Date.now()
                 }));
               }
-              // Update conversation state with assistant message
+              // Now update conversation state with both user and assistant messages
+              // Add user message first (it wasn't added earlier to avoid duplication)
+              this.conversationState.messages.push({
+                role: 'user',
+                content: transcription.trim(),
+                timestamp: new Date().toISOString()
+              });
+              // Then add assistant message
               this.conversationState.messages.push({
                 role: 'assistant',
                 content: llmResponse.trim(),
                 timestamp: new Date().toISOString()
               });
               this.trimConversationHistory(40);
-              console.log('Updated conversation state with assistant message:', llmResponse);
+              console.log('Updated conversation state with full exchange');
               
               // Trigger flashcard generation immediately after LLM response
               if (transcription && llmResponse) {
@@ -434,21 +504,33 @@ export class AudioProcessor {
           // Handle TTS output stream
           TTSOutputStream: async (ttsStreamIterator: GraphTypes.TTSOutputStream) => {
             console.log('VAD Processing TTS audio stream...');
+            let isFirstChunk = true;
             for await (const ttsChunk of ttsStreamIterator) {
               if (ttsChunk.audio && ttsChunk.audio.data) {
+                // Log first chunk for latency tracking
+                if (isFirstChunk) {
+                  console.log('Sending first TTS chunk immediately');
+                }
+                
                 const audioData = new Float32Array(ttsChunk.audio.data);
                 const int16Array = new Int16Array(audioData.length);
                 for (let i = 0; i < audioData.length; i++) {
                   int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
                 }
                 const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
+                
+                // Send immediately without buffering
                 this.websocket.send(JSON.stringify({
                   type: 'audio_stream',
                   audio: base64Audio,
                   sampleRate: ttsChunk.audio.sampleRate || 16000,
                   timestamp: Date.now(),
-                  text: ttsChunk.text || ''
+                  text: ttsChunk.text || '',
+                  isFirstChunk: isFirstChunk
                 }));
+                
+                // Mark that we've sent the first chunk
+                isFirstChunk = false;
               }
             }
             // Send completion signal for iOS
@@ -474,6 +556,8 @@ export class AudioProcessor {
       console.error('Error processing VAD speech segment:', error);
     } finally {
       this.isProcessing = false;
+      // Clear tracked stream reference
+      this.currentOutputStream = null;
     }
   }
 
@@ -489,4 +573,36 @@ export class AudioProcessor {
       this.vad = null;
     }
   }
+
+  // Cancel current graph execution (audio stop is handled separately in speechStart)
+  private interrupt(reason?: string) {
+    try {
+      // Don't reset VAD - it needs to maintain its speech detection state
+      // But clear pending segments if we're interrupting due to new speech
+      if (reason === 'speech_start') {
+        this.pendingSpeechSegments = [];
+      }
+      // Keep segments if user is just resuming (speech_resumed)
+      
+      if (this.executor) {
+        if (this.currentOutputStream) {
+          try {
+            this.executor.closeExecution(this.currentOutputStream);
+          } catch (e) {
+            console.warn('Failed to close specific execution, cleaning up all:', e);
+            // Fallback: cleanup all executions if closing specific stream fails
+            try { this.executor.cleanupAllExecutions(); } catch (_) {}
+          } finally {
+            this.currentOutputStream = null;
+          }
+        } else {
+          try { this.executor.cleanupAllExecutions(); } catch (_) {}
+        }
+      }
+    } finally {
+      // Reset processing flag to allow new processing
+      this.isProcessing = false;
+    }
+  }
+
 }
