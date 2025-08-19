@@ -25,6 +25,7 @@ export class SileroVAD extends EventEmitter {
     private audioBuffer: AudioBuffer;
     private accumulatedSamples: Float32Array[] = [];
     private isInitialized = false;
+    private isProcessingVAD = false;  // Prevent concurrent VAD calls
     
     // Simplified state tracking following working example pattern
     private isCapturingSpeech = false;
@@ -111,8 +112,22 @@ export class SileroVAD extends EventEmitter {
         return Math.sqrt(sumSquares / audioData.length);
     }
 
+    reset(): void {
+        // Reset all state when interruption occurs
+        this.accumulatedSamples = [];
+        this.isProcessingVAD = false;
+        this.isCapturingSpeech = false;
+        this.speechBuffer = [];
+        this.pauseDuration = 0;
+    }
+
     private async processAudioChunk(chunk: AudioChunk): Promise<void> {
         if (!this.isInitialized || !this.vad) {
+            return;
+        }
+
+        // Skip if already processing to prevent concurrent VAD calls
+        if (this.isProcessingVAD) {
             return;
         }
 
@@ -122,6 +137,7 @@ export class SileroVAD extends EventEmitter {
         // Process when we have enough samples (using FRAME_PER_BUFFER like working example)
         const totalSamples = this.accumulatedSamples.reduce((sum, arr) => sum + arr.length, 0);
         if (totalSamples >= this.FRAME_PER_BUFFER) {
+            this.isProcessingVAD = true;  // Set flag before async operation
             try {
                 // Combine accumulated samples
                 const combinedAudio = new Float32Array(totalSamples);
@@ -160,6 +176,8 @@ export class SileroVAD extends EventEmitter {
             } catch (error) {
                 console.error('VAD processing error:', error);
                 this.accumulatedSamples = []; // Clear on error
+            } finally {
+                this.isProcessingVAD = false;  // Always reset flag
             }
         }
     }

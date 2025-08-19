@@ -19,7 +19,6 @@ export class AudioProcessor {
   private currentOutputStream: any | null = null;
   private debounceTimeoutMs: number = 2000;
   private debounceTimer: NodeJS.Timeout | null = null;
-  private pendingSpeechBuffers: Float32Array[] = [];
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
   };
@@ -110,7 +109,7 @@ export class AudioProcessor {
         modelPath: 'backend/models/silero_vad.onnx',
         threshold: 0.5,  // Following working example SPEECH_THRESHOLD
         minSpeechDuration: 0.2,  // MIN_SPEECH_DURATION_MS / 1000
-        minSilenceDuration: 0.65, // PAUSE_DURATION_THRESHOLD_MS / 1000
+        minSilenceDuration: 0.4, // Reduced from 0.65 for faster response
         speechResetSilenceDuration: 1.0,
         minVolume: 0.01, // Lower threshold to start - can adjust based on testing
         sampleRate: 16000
@@ -125,25 +124,39 @@ export class AudioProcessor {
       
       this.vad.on('speechStart', (event) => {
         console.log('🎤 Speech started');
-        // If we are waiting to process a recently ended utterance, cancel that and keep accumulating
+        // Clear any pending cleanup timer
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
           this.debounceTimer = null;
         }
-        // Minimal interruption handling: cancel current graph execution and notify client to stop audio
+        // Interrupt any ongoing processing and audio playback
         this.interrupt('speech_start');
       });
       
       this.vad.on('speechEnd', async (event) => {
         console.log('🔇 Speech ended, duration:', event.speechDuration.toFixed(2) + 's');
-        // Buffer the segment and schedule debounced processing
+        
+        // Only process if not already processing to avoid race conditions
         try {
-          if (event.speechSegment && event.speechSegment.length > 0) {
-            this.pendingSpeechBuffers.push(event.speechSegment);
+          if (event.speechSegment && event.speechSegment.length > 0 && !this.isProcessing) {
+            // Cancel any pending debounce timer since we're processing now
+            if (this.debounceTimer) {
+              clearTimeout(this.debounceTimer);
+              this.debounceTimer = null;
+            }
+            
+            // Process the current segment immediately
+            await this.processVADSpeechSegment(event.speechSegment);
+            
+            // Set a timer to clear the debounce state if no new speech comes
+            this.debounceTimer = setTimeout(() => {
+              this.debounceTimer = null;
+            }, this.debounceTimeoutMs);
+          } else if (this.isProcessing) {
+            console.log('Skipping speech segment - already processing');
           }
-          this.scheduleDebouncedProcessing();
         } catch (error) {
-          console.error('Error buffering speech segment for debounce:', error);
+          console.error('Error processing speech segment:', error);
         }
       });
       
@@ -456,21 +469,33 @@ export class AudioProcessor {
           // Handle TTS output stream
           TTSOutputStream: async (ttsStreamIterator: GraphTypes.TTSOutputStream) => {
             console.log('VAD Processing TTS audio stream...');
+            let isFirstChunk = true;
             for await (const ttsChunk of ttsStreamIterator) {
               if (ttsChunk.audio && ttsChunk.audio.data) {
+                // Log first chunk for latency tracking
+                if (isFirstChunk) {
+                  console.log('Sending first TTS chunk immediately');
+                }
+                
                 const audioData = new Float32Array(ttsChunk.audio.data);
                 const int16Array = new Int16Array(audioData.length);
                 for (let i = 0; i < audioData.length; i++) {
                   int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
                 }
                 const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
+                
+                // Send immediately without buffering
                 this.websocket.send(JSON.stringify({
                   type: 'audio_stream',
                   audio: base64Audio,
                   sampleRate: ttsChunk.audio.sampleRate || 16000,
                   timestamp: Date.now(),
-                  text: ttsChunk.text || ''
+                  text: ttsChunk.text || '',
+                  isFirstChunk: isFirstChunk
                 }));
+                
+                // Mark that we've sent the first chunk
+                isFirstChunk = false;
               }
             }
             // Send completion signal for iOS
@@ -517,11 +542,14 @@ export class AudioProcessor {
   // Minimal interruption: cancel current execution and tell client to stop playback
   private interrupt(reason?: string) {
     try {
+      // Don't reset VAD - it needs to maintain its speech detection state
+      
       if (this.executor) {
         if (this.currentOutputStream) {
           try {
             this.executor.closeExecution(this.currentOutputStream);
           } catch (e) {
+            console.warn('Failed to close specific execution, cleaning up all:', e);
             // Fallback: cleanup all executions if closing specific stream fails
             try { this.executor.cleanupAllExecutions(); } catch (_) {}
           } finally {
@@ -532,6 +560,9 @@ export class AudioProcessor {
         }
       }
     } finally {
+      // Reset processing flag to allow new processing
+      this.isProcessing = false;
+      
       // Notify frontend to stop any ongoing audio playback
       if (this.websocket) {
         try {
@@ -543,37 +574,4 @@ export class AudioProcessor {
     }
   }
 
-  private scheduleDebouncedProcessing() {
-    // Reset debounce timer
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-    this.debounceTimer = setTimeout(async () => {
-      try {
-        // Combine all pending buffers into a single segment
-        const combined = this.combinePendingSpeech();
-        if (combined && combined.length > 0) {
-          await this.processVADSpeechSegment(combined);
-        }
-      } catch (error) {
-        console.error('Error during debounced processing:', error);
-      }
-    }, this.debounceTimeoutMs);
-  }
-
-  private combinePendingSpeech(): Float32Array {
-    if (this.pendingSpeechBuffers.length === 0) {
-      return new Float32Array(0);
-    }
-    const totalLength = this.pendingSpeechBuffers.reduce((sum, arr) => sum + arr.length, 0);
-    const combined = new Float32Array(totalLength);
-    let offset = 0;
-    for (const buf of this.pendingSpeechBuffers) {
-      combined.set(buf, offset);
-      offset += buf.length;
-    }
-    // Clear buffer after combining
-    this.pendingSpeechBuffers = [];
-    return combined;
-  }
 }
