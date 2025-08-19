@@ -273,7 +273,7 @@ export class AudioProcessor {
       const amplifiedSegment = this.amplifyAudio(speechSegment, 2.0);
 
       // Save debug audio before sending to STT
-      await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
+      // await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
 
       // Create Audio instance for STT node
       const audioInput = new GraphTypes.Audio({
