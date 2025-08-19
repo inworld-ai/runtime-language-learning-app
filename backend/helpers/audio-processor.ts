@@ -448,56 +448,8 @@ export class AudioProcessor {
               this.trimConversationHistory(40);
               console.log('Updated conversation state with full exchange');
               
-              // Trigger flashcard generation immediately after LLM response
-              if (transcription && llmResponse) {
-                console.log('Triggering flashcard generation with conversation context');
-                
-                // Send conversation update to frontend
-                if (this.websocket) {
-                  this.websocket.send(JSON.stringify({
-                    type: 'conversation_update',
-                    messages: this.conversationState.messages,
-                    timestamp: Date.now()
-                  }));
-                }
-                
-                // Generate flashcards
-                if (this.flashcardCallback) {
-                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                  }));
-                  
-                  this.flashcardCallback(recentMessages).catch(error => {
-                    console.error('Error in flashcard generation callback:', error);
-                  });
-                }
-
-                // Run introduction-state extraction while incomplete
-                const isIntroComplete = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
-                if (!isIntroComplete && this.introductionStateCallback) {
-                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                  }));
-                  this.introductionStateCallback(recentMessages)
-                    .then((state) => {
-                      if (state) {
-                        this.introductionState = state;
-                        if (this.websocket) {
-                          this.websocket.send(JSON.stringify({
-                            type: 'introduction_state_updated',
-                            introduction_state: this.introductionState,
-                            timestamp: Date.now()
-                          }));
-                        }
-                      }
-                    })
-                    .catch((error) => {
-                      console.error('Error in introduction-state callback:', error);
-                    });
-                }
-              }
+              // Mark that we'll need to trigger flashcard generation after TTS completes
+              // We'll do this after all TTS chunks have been sent
             }
           },
           
@@ -539,6 +491,58 @@ export class AudioProcessor {
               type: 'audio_stream_complete',
               timestamp: Date.now()
             }));
+            
+            // Now that TTS is complete, trigger flashcard generation and other post-processing
+            if (transcription && llmResponse) {
+              console.log('Triggering flashcard generation after TTS completion');
+              
+              // Send conversation update to frontend
+              if (this.websocket) {
+                this.websocket.send(JSON.stringify({
+                  type: 'conversation_update',
+                  messages: this.conversationState.messages,
+                  timestamp: Date.now()
+                }));
+              }
+              
+              // Generate flashcards - fire and forget
+              if (this.flashcardCallback) {
+                const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                  role: msg.role,
+                  content: msg.content
+                }));
+                
+                this.flashcardCallback(recentMessages).catch(error => {
+                  console.error('Error in flashcard generation callback:', error);
+                });
+              }
+
+              // Run introduction-state extraction while incomplete
+              const isIntroComplete = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
+              if (!isIntroComplete && this.introductionStateCallback) {
+                const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                  role: msg.role,
+                  content: msg.content
+                }));
+                
+                this.introductionStateCallback(recentMessages)
+                  .then((state) => {
+                    if (state) {
+                      this.introductionState = state;
+                      if (this.websocket) {
+                        this.websocket.send(JSON.stringify({
+                          type: 'introduction_state_updated',
+                          introduction_state: this.introductionState,
+                          timestamp: Date.now()
+                        }));
+                      }
+                    }
+                  })
+                  .catch((error) => {
+                    console.error('Error in introduction-state callback:', error);
+                  });
+              }
+            }
           },
           
           // Handle any other type
