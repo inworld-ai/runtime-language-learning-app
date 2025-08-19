@@ -16,6 +16,10 @@ export class AudioProcessor {
   private isReady = false;
   private websocket: any = null;
   private debugCounter = 0;
+  private currentOutputStream: any | null = null;
+  private debounceTimeoutMs: number = 2000;
+  private debounceTimer: NodeJS.Timeout | null = null;
+  private pendingSpeechBuffers: Float32Array[] = [];
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
   };
@@ -121,11 +125,26 @@ export class AudioProcessor {
       
       this.vad.on('speechStart', (event) => {
         console.log('🎤 Speech started');
+        // If we are waiting to process a recently ended utterance, cancel that and keep accumulating
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+          this.debounceTimer = null;
+        }
+        // Minimal interruption handling: cancel current graph execution and notify client to stop audio
+        this.interrupt('speech_start');
       });
       
       this.vad.on('speechEnd', async (event) => {
         console.log('🔇 Speech ended, duration:', event.speechDuration.toFixed(2) + 's');
-        await this.processVADSpeechSegment(event.speechSegment);
+        // Buffer the segment and schedule debounced processing
+        try {
+          if (event.speechSegment && event.speechSegment.length > 0) {
+            this.pendingSpeechBuffers.push(event.speechSegment);
+          }
+          this.scheduleDebouncedProcessing();
+        } catch (error) {
+          console.error('Error buffering speech segment for debounce:', error);
+        }
       });
       
     } catch (error) {
@@ -290,6 +309,9 @@ export class AudioProcessor {
 
       let transcription = '';
       let llmResponse = '';
+
+      // Track the current output stream so it can be cancelled on interruption
+      this.currentOutputStream = outputStream;
 
       for await (const chunk of outputStream) {
         console.log(`VAD Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
@@ -474,6 +496,8 @@ export class AudioProcessor {
       console.error('Error processing VAD speech segment:', error);
     } finally {
       this.isProcessing = false;
+      // Clear tracked stream reference
+      this.currentOutputStream = null;
     }
   }
 
@@ -488,5 +512,68 @@ export class AudioProcessor {
       this.vad.destroy();
       this.vad = null;
     }
+  }
+
+  // Minimal interruption: cancel current execution and tell client to stop playback
+  private interrupt(reason?: string) {
+    try {
+      if (this.executor) {
+        if (this.currentOutputStream) {
+          try {
+            this.executor.closeExecution(this.currentOutputStream);
+          } catch (e) {
+            // Fallback: cleanup all executions if closing specific stream fails
+            try { this.executor.cleanupAllExecutions(); } catch (_) {}
+          } finally {
+            this.currentOutputStream = null;
+          }
+        } else {
+          try { this.executor.cleanupAllExecutions(); } catch (_) {}
+        }
+      }
+    } finally {
+      // Notify frontend to stop any ongoing audio playback
+      if (this.websocket) {
+        try {
+          this.websocket.send(JSON.stringify({ type: 'interrupt', reason: reason || '' }));
+        } catch (_) {
+          // ignore send errors
+        }
+      }
+    }
+  }
+
+  private scheduleDebouncedProcessing() {
+    // Reset debounce timer
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+    this.debounceTimer = setTimeout(async () => {
+      try {
+        // Combine all pending buffers into a single segment
+        const combined = this.combinePendingSpeech();
+        if (combined && combined.length > 0) {
+          await this.processVADSpeechSegment(combined);
+        }
+      } catch (error) {
+        console.error('Error during debounced processing:', error);
+      }
+    }, this.debounceTimeoutMs);
+  }
+
+  private combinePendingSpeech(): Float32Array {
+    if (this.pendingSpeechBuffers.length === 0) {
+      return new Float32Array(0);
+    }
+    const totalLength = this.pendingSpeechBuffers.reduce((sum, arr) => sum + arr.length, 0);
+    const combined = new Float32Array(totalLength);
+    let offset = 0;
+    for (const buf of this.pendingSpeechBuffers) {
+      combined.set(buf, offset);
+      offset += buf.length;
+    }
+    // Clear buffer after combining
+    this.pendingSpeechBuffers = [];
+    return combined;
   }
 }
