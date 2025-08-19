@@ -7,84 +7,83 @@ export class AudioHandler {
         this.microphone = null;
         this.isStreaming = false;
         this.listeners = new Map();
-        
+
         // Check for iOS and use iOS handler if available
-        this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         this.iosHandler = window.iosAudioHandler || null;
-        
+
         if (this.isIOS && this.iosHandler) {
             console.log('[AudioHandler] Using iOS audio workarounds');
             this.setupIOSEventListeners();
         }
     }
-    
+
     setupIOSEventListeners() {
         // Listen for iOS audio unlock event
         window.addEventListener('ios-audio-unlocked', (event) => {
             console.log('[AudioHandler] iOS audio unlocked');
             this.audioContext = event.detail.audioContext;
         });
-        
+
         // Listen for iOS audio errors
         window.addEventListener('ios-audio-error', (event) => {
             console.error('[AudioHandler] iOS audio error:', event.detail.message);
             this.emit('error', event.detail);
         });
-        
+
         // Listen for iOS audio ended
         window.addEventListener('ios-audio-ended', () => {
             console.log('[AudioHandler] iOS audio playback ended');
             this.emit('playback_finished');
         });
     }
-    
+
     on(event, callback) {
         if (!this.listeners.has(event)) {
             this.listeners.set(event, []);
         }
         this.listeners.get(event).push(callback);
     }
-    
+
     emit(event, data) {
         const callbacks = this.listeners.get(event);
         if (callbacks) {
             callbacks.forEach(callback => callback(data));
         }
     }
-    
+
     async startStreaming() {
         try {
             console.log('Starting continuous audio streaming...');
-            
+
             // Use iOS handler if available
             if (this.isIOS && this.iosHandler) {
                 console.log('[AudioHandler] Using iOS audio handler for microphone');
-                
+
                 // First unlock audio context if needed
                 await this.iosHandler.unlockAudioContext();
-                
+
                 // Start microphone with iOS workarounds
                 const success = await this.iosHandler.startMicrophone((audioData) => {
                     if (this.isStreaming) {
                         this.emit('audioChunk', audioData);
                     }
                 });
-                
+
                 if (success) {
                     this.isStreaming = true;
                     console.log('[AudioHandler] iOS microphone started successfully');
                     return;
                 }
             }
-            
+
             // Fallback to standard implementation
             const constraints = {
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true,
-                    sampleRate: 16000,
                     channelCount: 1
                 }
             };
@@ -93,9 +92,7 @@ export class AudioHandler {
             console.log('Microphone access granted for continuous streaming');
 
             // Create AudioContext for real-time processing
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 16000
-            });
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
             // Resume AudioContext if suspended (required on many browsers)
             if (this.audioContext.state === 'suspended') {
@@ -116,40 +113,23 @@ export class AudioHandler {
 
             this.isStreaming = true;
             console.log('Continuous audio streaming started');
-            
+
         } catch (error) {
             console.error('Error starting continuous audio:', error);
             throw error;
         }
     }
-    
-    async setupAudioWorklet() {
-        const workletCode = `
-            class AudioProcessor extends AudioWorkletProcessor {
-                process(inputs) {
-                    const inputChannel = inputs[0][0];
-                    if (!inputChannel) return true;
-                    
-                    // Convert Float32Array to Int16Array
-                    const int16Array = new Int16Array(inputChannel.length);
-                    for (let i = 0; i < inputChannel.length; i++) {
-                        int16Array[i] = Math.max(-32768, Math.min(32767, inputChannel[i] * 32768));
-                    }
-                    
-                    this.port.postMessage(int16Array.buffer, [int16Array.buffer]);
-                    return true;
-                }
-            }
-            registerProcessor('audio-processor', AudioProcessor);
-        `;
 
+    async setupAudioWorklet() {
         try {
-            const blob = new Blob([workletCode], { type: 'application/javascript' });
-            const workletURL = URL.createObjectURL(blob);
-            await this.audioContext.audioWorklet.addModule(workletURL);
+            await this.audioContext.audioWorklet.addModule('js/audio-processor.js');
             console.log('AudioWorklet processor loaded');
 
-            this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-processor');
+            this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-processor', {
+                processorOptions: {
+                    sourceSampleRate: this.audioContext.sampleRate
+                }
+            });
 
             this.workletNode.port.onmessage = (event) => {
                 if (this.isStreaming) {
@@ -164,7 +144,7 @@ export class AudioHandler {
             // Connect the audio pipeline
             this.microphone.connect(this.workletNode);
             this.workletNode.connect(this.audioContext.destination);
-            
+
         } catch (error) {
             console.error('Error loading AudioWorklet processor:', error);
             this.setupScriptProcessorNode();
@@ -173,19 +153,54 @@ export class AudioHandler {
 
     setupScriptProcessorNode() {
         console.log('Setting up ScriptProcessorNode for compatibility...');
-        
+
         const bufferSize = 4096;
         this.scriptProcessor = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
 
+        const targetSampleRate = 16000;
+        const sourceSampleRate = this.audioContext.sampleRate;
+        // Maybe we should check if this equals 1 to not do the whole resampling
+        const resampleRatio = sourceSampleRate / targetSampleRate;
+        let buffer = null;
+
         this.scriptProcessor.onaudioprocess = (event) => {
             if (this.isStreaming) {
-                const inputBuffer = event.inputBuffer;
-                const inputData = inputBuffer.getChannelData(0);
-                
+                const inputData = event.inputBuffer.getChannelData(0);
+
+                // Append new data to the buffer
+                const currentLength = buffer ? buffer.length : 0;
+                const newBuffer = new Float32Array(currentLength + inputData.length);
+                if (buffer) {
+                    newBuffer.set(buffer, 0);
+                }
+                newBuffer.set(inputData, currentLength);
+                buffer = newBuffer;
+
+                // Make it into 16k
+                const numOutputSamples = Math.floor(buffer.length / resampleRatio);
+                if (numOutputSamples === 0) return;
+
+                const resampledData = new Float32Array(numOutputSamples);
+                for (let i = 0; i < numOutputSamples; i++) {
+                    const correspondingInputIndex = i * resampleRatio;
+                    const lowerIndex = Math.floor(correspondingInputIndex);
+                    const upperIndex = Math.ceil(correspondingInputIndex);
+                    const interpolationFactor = correspondingInputIndex - lowerIndex;
+
+                    const lowerValue = buffer[lowerIndex] || 0;
+                    const upperValue = buffer[upperIndex] || 0;
+
+                    resampledData[i] = lowerValue + (upperValue - lowerValue) * interpolationFactor;
+                }
+
+                // Save the remainder of the buffer for the next process call
+                const consumedInputSamples = numOutputSamples * resampleRatio;
+                buffer = buffer.slice(Math.round(consumedInputSamples));
+
                 // Convert Float32Array to Int16Array
-                const int16Array = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    int16Array[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                const int16Array = new Int16Array(resampledData.length);
+                for (let i = 0; i < resampledData.length; i++) {
+                    int16Array[i] = Math.max(-32768, Math.min(32767, resampledData[i] * 32768));
                 }
 
                 const base64Audio = btoa(
@@ -199,7 +214,7 @@ export class AudioHandler {
         this.microphone.connect(this.scriptProcessor);
         this.scriptProcessor.connect(this.audioContext.destination);
     }
-    
+
     stopStreaming() {
         console.log('Stopping continuous audio streaming...');
         this.isStreaming = false;
