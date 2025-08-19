@@ -376,14 +376,8 @@ export class AudioProcessor {
                 timestamp: Date.now()
               }));
             }
-            // Update conversation state with user message
-            this.conversationState.messages.push({
-              role: 'user',
-              content: transcription.trim(),
-              timestamp: new Date().toISOString()
-            });
-            this.trimConversationHistory(40);
-            console.log('Updated conversation state with user message:', transcription);
+            // Don't add to conversation state yet - the prompt template will use it as current_input
+            // We'll add it after processing completes
 
             // Opportunistically run introduction-state extraction as soon as we have user input
             const isIntroCompleteEarly = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
@@ -438,14 +432,21 @@ export class AudioProcessor {
                   timestamp: Date.now()
                 }));
               }
-              // Update conversation state with assistant message
+              // Now update conversation state with both user and assistant messages
+              // Add user message first (it wasn't added earlier to avoid duplication)
+              this.conversationState.messages.push({
+                role: 'user',
+                content: transcription.trim(),
+                timestamp: new Date().toISOString()
+              });
+              // Then add assistant message
               this.conversationState.messages.push({
                 role: 'assistant',
                 content: llmResponse.trim(),
                 timestamp: new Date().toISOString()
               });
               this.trimConversationHistory(40);
-              console.log('Updated conversation state with assistant message:', llmResponse);
+              console.log('Updated conversation state with full exchange');
               
               // Trigger flashcard generation immediately after LLM response
               if (transcription && llmResponse) {
