@@ -19,6 +19,7 @@ export class AudioProcessor {
   private currentOutputStream: any | null = null;
   private debounceTimeoutMs: number = 2000;
   private debounceTimer: NodeJS.Timeout | null = null;
+  private pendingSpeechSegments: Float32Array[] = [];  // Accumulate speech segments
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
   };
@@ -124,39 +125,72 @@ export class AudioProcessor {
       
       this.vad.on('speechStart', (event) => {
         console.log('🎤 Speech started');
-        // Clear any pending cleanup timer
+        
+        // Always notify frontend to stop audio playback when user starts speaking
+        if (this.websocket) {
+          try {
+            this.websocket.send(JSON.stringify({ type: 'interrupt', reason: 'speech_start' }));
+          } catch (_) {
+            // ignore send errors
+          }
+        }
+        
+        // If we have a pending debounce timer, it means we were about to process
+        // but the user started speaking again - cancel processing and keep accumulating
         if (this.debounceTimer) {
+          console.log('User resumed speaking - cancelling pending processing');
           clearTimeout(this.debounceTimer);
           this.debounceTimer = null;
+          
+          // If we're currently processing, interrupt graph execution
+          if (this.isProcessing) {
+            this.interrupt('speech_resumed');
+          }
+        } else if (this.isProcessing) {
+          // User started speaking while we're processing - interrupt graph execution
+          this.interrupt('speech_start');
         }
-        // Interrupt any ongoing processing and audio playback
-        this.interrupt('speech_start');
       });
       
       this.vad.on('speechEnd', async (event) => {
         console.log('🔇 Speech ended, duration:', event.speechDuration.toFixed(2) + 's');
         
-        // Only process if not already processing to avoid race conditions
         try {
-          if (event.speechSegment && event.speechSegment.length > 0 && !this.isProcessing) {
-            // Cancel any pending debounce timer since we're processing now
+          if (event.speechSegment && event.speechSegment.length > 0) {
+            // Add this segment to pending segments
+            this.pendingSpeechSegments.push(event.speechSegment);
+            
+            // Cancel any existing debounce timer
             if (this.debounceTimer) {
               clearTimeout(this.debounceTimer);
-              this.debounceTimer = null;
             }
             
-            // Process the current segment immediately
-            await this.processVADSpeechSegment(event.speechSegment);
-            
-            // Set a timer to clear the debounce state if no new speech comes
-            this.debounceTimer = setTimeout(() => {
+            // Set a timer to process after debounce period
+            this.debounceTimer = setTimeout(async () => {
               this.debounceTimer = null;
+              
+              // Only process if not already processing
+              if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
+                // Combine all pending segments
+                const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
+                const combinedSegment = new Float32Array(totalLength);
+                let offset = 0;
+                for (const seg of this.pendingSpeechSegments) {
+                  combinedSegment.set(seg, offset);
+                  offset += seg.length;
+                }
+                
+                // Clear pending segments
+                this.pendingSpeechSegments = [];
+                
+                // Process the combined segment
+                console.log('Processing combined speech segment after debounce');
+                await this.processVADSpeechSegment(combinedSegment);
+              }
             }, this.debounceTimeoutMs);
-          } else if (this.isProcessing) {
-            console.log('Skipping speech segment - already processing');
           }
         } catch (error) {
-          console.error('Error processing speech segment:', error);
+          console.error('Error handling speech segment:', error);
         }
       });
       
@@ -539,10 +573,15 @@ export class AudioProcessor {
     }
   }
 
-  // Minimal interruption: cancel current execution and tell client to stop playback
+  // Cancel current graph execution (audio stop is handled separately in speechStart)
   private interrupt(reason?: string) {
     try {
       // Don't reset VAD - it needs to maintain its speech detection state
+      // But clear pending segments if we're interrupting due to new speech
+      if (reason === 'speech_start') {
+        this.pendingSpeechSegments = [];
+      }
+      // Keep segments if user is just resuming (speech_resumed)
       
       if (this.executor) {
         if (this.currentOutputStream) {
@@ -562,15 +601,6 @@ export class AudioProcessor {
     } finally {
       // Reset processing flag to allow new processing
       this.isProcessing = false;
-      
-      // Notify frontend to stop any ongoing audio playback
-      if (this.websocket) {
-        try {
-          this.websocket.send(JSON.stringify({ type: 'interrupt', reason: reason || '' }));
-        } catch (_) {
-          // ignore send errors
-        }
-      }
     }
   }
 
