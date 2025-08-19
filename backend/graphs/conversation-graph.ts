@@ -54,11 +54,11 @@ export function createConversationGraph(
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
-    modelName: 'gpt-4.1-nano',
+    modelName: 'gpt-4o-mini',
     stream: true,
     reportToClient: true,
     textGenerationConfig: {
-      maxNewTokens: 2500,
+      maxNewTokens: 250,
       maxPromptLength: 2000,
       repetitionPenalty: 1,
       topP: 1,
