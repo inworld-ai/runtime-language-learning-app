@@ -25,10 +25,14 @@ export function createConversationGraph(
         introduction_state: introductionState || { name: '', level: '', goal: '' }
       };
 
-      // console.log(
-      //   'Template data being sent to Jinja:',
-      //   JSON.stringify(templateData, null, 2),
-      // );
+      console.log(
+        'ConversationGraph - Introduction state being used:',
+        JSON.stringify(introductionState, null, 2),
+      );
+      console.log(
+        'ConversationGraph - Number of messages in history:',
+        conversationState.messages?.length || 0
+      );
 
       const renderedPrompt = await renderJinja(
         conversationTemplate,

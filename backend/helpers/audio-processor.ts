@@ -29,7 +29,7 @@ export class AudioProcessor {
   private targetingKey: string | null = null;
   private clientTimezone: string | null = null;
   private hasMergedInitialHistory = false;
-
+  private graphStartTime: number = 0;
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
     this.setupWebSocketMessageHandler();
@@ -340,6 +340,7 @@ export class AudioProcessor {
       const userContext = new UserContext(attributes, targetingKey);
       console.log(userContext)
       let outputStream;
+      this.graphStartTime = Date.now();
       try {
         outputStream = await this.executor.start(
           audioInput,
@@ -361,7 +362,8 @@ export class AudioProcessor {
       this.currentOutputStream = outputStream;
 
       for await (const chunk of outputStream) {
-        console.log(`VAD Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
+        console.log(`Audio Processor:Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
+        console.log(`Audio Processor:Time since graph started: ${Date.now() - this.graphStartTime}ms`);
         
         // Use processResponse for type-safe handling
         await chunk.processResponse({

@@ -107,8 +107,17 @@ wss.on('connection', (ws) => {
     // Set up introduction-state extraction callback (runs until complete)
     audioProcessor.setIntroductionStateCallback(async (messages) => {
         try {
-            if (introductionStateProcessor.isComplete()) return introductionStateProcessor.getState();
+            const currentState = introductionStateProcessor.getState();
+            console.log('Server - Current introduction state before update:', currentState);
+            console.log('Server - Is complete?', introductionStateProcessor.isComplete());
+            
+            if (introductionStateProcessor.isComplete()) {
+                console.log('Server - Introduction state is complete, returning:', currentState);
+                return currentState;
+            }
+            
             const state = await introductionStateProcessor.update(messages);
+            console.log('Server - Updated introduction state:', state);
             return state;
         } catch (error) {
             console.error('Error generating introduction state:', error);
