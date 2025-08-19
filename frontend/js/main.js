@@ -13,6 +13,10 @@ class App {
         this.audioPlayer = new AudioPlayer();
         this.chatUI = new ChatUI();
         this.flashcardUI = new FlashcardUI();
+        this.userId = this.getOrCreateUserId();
+        this.flashcardUI.onCardClick = (card) => {
+            this.wsClient.send({ type: 'flashcard_clicked', card });
+        };
         
         this.state = {
             chatHistory: [],
@@ -211,10 +215,31 @@ class App {
     async connectWebSocket() {
         try {
             await this.wsClient.connect();
+            // After connection, send lightweight user context (timezone)
+            try {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                this.wsClient.send({ type: 'user_context', timezone: tz, userId: this.userId });
+            } catch (e) {
+                // ignore
+            }
         } catch (error) {
             console.error('WebSocket connection failed:', error);
             this.state.connectionStatus = 'disconnected';
             this.render();
+        }
+    }
+
+    getOrCreateUserId() {
+        try {
+            const key = 'aprende-user-id';
+            let id = localStorage.getItem(key);
+            if (!id) {
+                id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `u_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+                localStorage.setItem(key, id);
+            }
+            return id;
+        } catch (_) {
+            return `u_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         }
     }
     

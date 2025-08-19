@@ -10,5 +10,8 @@
   },
   "ts-node": {
     "esm": true
-  }
+  },
+  "exclude": [
+    "templates/**"
+  ]
 }

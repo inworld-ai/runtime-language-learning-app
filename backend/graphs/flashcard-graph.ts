@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import fs from 'fs';
+
 import { 
   GraphBuilder, 
   CustomNode, 
@@ -75,7 +77,7 @@ export function createFlashcardGraph() {
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
-    modelName: 'gpt-4.1',
+    modelName: 'gpt-5',
     stream: false,
     textGenerationConfig: {
       maxNewTokens: 2500,
@@ -89,7 +91,10 @@ export function createFlashcardGraph() {
   });
   const parserNode = new FlashcardParserNode({ id: 'flashcard-parser' });
 
-  const executor = new GraphBuilder('flashcard-generation-graph')
+  const executor = new GraphBuilder({
+    id: 'flashcard-generation-graph',
+    enableRemoteConfig: true
+  })
     .addNode(promptBuilderNode)
     .addNode(textToChatRequestNode)
     .addNode(llmNode)
@@ -100,6 +105,8 @@ export function createFlashcardGraph() {
     .setStartNode(promptBuilderNode)
     .setEndNode(parserNode)
     .build();
+
+  fs.writeFileSync('flashcard-graph.json', executor.toJSON());
 
   return executor;
 }

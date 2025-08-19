@@ -83,6 +83,9 @@ export class FlashcardUI {
         
         card.addEventListener('click', () => {
             this.flipCard(card);
+            if (typeof this.onCardClick === 'function') {
+                this.onCardClick(flashcard);
+            }
         });
         
         return card;
