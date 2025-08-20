@@ -27,7 +27,6 @@ export class AudioProcessor {
   private introductionStateCallback: ((messages: Array<{ role: string; content: string }>) => Promise<IntroductionState | null>) | null = null;
   private targetingKey: string | null = null;
   private clientTimezone: string | null = null;
-  private hasMergedInitialHistory = false;
   private graphStartTime: number = 0;
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
@@ -50,10 +49,6 @@ export class AudioProcessor {
           const message = JSON.parse(raw);
           
           if (message.type === 'conversation_update') {
-            if (this.hasMergedInitialHistory) {
-              // Ignore subsequent client history updates to avoid duplicates; server is source of truth
-              return;
-            }
             const incoming = (message.data && message.data.messages) ? message.data.messages : [];
             const existing = this.conversationState.messages || [];
             const combined = [...existing, ...incoming];
@@ -69,7 +64,6 @@ export class AudioProcessor {
             deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             this.conversationState = { messages: deduped };
             this.trimConversationHistory(40);
-            this.hasMergedInitialHistory = true;
           } else if (message.type === 'user_context') {
             // Persist minimal attributes for user context
             const tz = message.timezone || (message.data && message.data.timezone) || '';
