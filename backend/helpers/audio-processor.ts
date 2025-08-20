@@ -13,6 +13,7 @@ export class AudioProcessor {
   private executor: any;
   private vad: SileroVAD | null = null;
   private isProcessing = false;
+  private isProcessingCancelled = false;  // Track if current processing should be cancelled
   private isReady = false;
   private websocket: any = null;
   private debugCounter = 0;
@@ -133,9 +134,11 @@ export class AudioProcessor {
           }
         }
         
-        // If we're currently processing, interrupt graph execution
+        // If we're currently processing, set cancellation flag
         if (this.isProcessing) {
-          this.interrupt('speech_start');
+          console.log('Setting cancellation flag - user started speaking during processing');
+          this.isProcessingCancelled = true;
+          // Don't clear segments - we want to accumulate them
         }
       });
       
@@ -146,6 +149,9 @@ export class AudioProcessor {
           if (event.speechSegment && event.speechSegment.length > 0) {
             // Add this segment to pending segments
             this.pendingSpeechSegments.push(event.speechSegment);
+            
+            // Reset cancellation flag for new processing
+            this.isProcessingCancelled = false;
             
             // Process immediately if not already processing
             if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
@@ -339,6 +345,12 @@ export class AudioProcessor {
       this.currentOutputStream = outputStream;
 
       for await (const chunk of outputStream) {
+        // Check if processing has been cancelled
+        if (this.isProcessingCancelled) {
+          console.log('Processing cancelled by user speech, breaking from loop');
+          break;
+        }
+        
         console.log(`Audio Processor:Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
         console.log(`Audio Processor:Time since graph started: ${Date.now() - this.graphStartTime}ms`);
         
@@ -529,6 +541,12 @@ export class AudioProcessor {
             console.log(`VAD Unknown/unhandled chunk type: ${chunk.typeName}`, data);
           }
         });
+        
+        // Check again after processing each chunk
+        if (this.isProcessingCancelled) {
+          console.log('Processing cancelled after chunk processing');
+          break;
+        }
       }
 
       if (transcription.trim()) {
@@ -541,6 +559,26 @@ export class AudioProcessor {
       this.isProcessing = false;
       // Clear tracked stream reference
       this.currentOutputStream = null;
+      
+      // If we have pending segments (user spoke while we were processing), process them now
+      if (this.pendingSpeechSegments.length > 0 && !this.isProcessingCancelled) {
+        console.log('Found pending segments after processing, processing them now');
+        
+        // Combine all pending segments
+        const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
+        const combinedSegment = new Float32Array(totalLength);
+        let offset = 0;
+        for (const seg of this.pendingSpeechSegments) {
+          combinedSegment.set(seg, offset);
+          offset += seg.length;
+        }
+        
+        // Clear pending segments
+        this.pendingSpeechSegments = [];
+        
+        // Process the combined segments recursively
+        await this.processVADSpeechSegment(combinedSegment);
+      }
     }
   }
 
@@ -557,35 +595,11 @@ export class AudioProcessor {
     }
   }
 
-  // Cancel current graph execution (audio stop is handled separately in speechStart)
+  // Simple interrupt method using cancellation flag
   private interrupt(reason?: string) {
-    try {
-      // Don't reset VAD - it needs to maintain its speech detection state
-      // But clear pending segments if we're interrupting due to new speech
-      if (reason === 'speech_start') {
-        this.pendingSpeechSegments = [];
-      }
-      // Keep segments if user is just resuming (speech_resumed)
-      
-      if (this.executor) {
-        if (this.currentOutputStream) {
-          try {
-            this.executor.closeExecution(this.currentOutputStream);
-          } catch (e) {
-            console.warn('Failed to close specific execution, cleaning up all:', e);
-            // Fallback: cleanup all executions if closing specific stream fails
-            try { this.executor.cleanupAllExecutions(); } catch (_) {}
-          } finally {
-            this.currentOutputStream = null;
-          }
-        } else {
-          try { this.executor.cleanupAllExecutions(); } catch (_) {}
-        }
-      }
-    } finally {
-      // Reset processing flag to allow new processing
-      this.isProcessing = false;
-    }
+    // Just set the cancellation flag, don't try to force-close
+    this.isProcessingCancelled = true;
+    console.log(`Interrupt requested: ${reason}`);
   }
 
 }
