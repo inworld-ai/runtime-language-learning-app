@@ -13,6 +13,9 @@ class App {
         this.audioPlayer = new AudioPlayer();
         this.chatUI = new ChatUI();
         this.flashcardUI = new FlashcardUI();
+        this.modal = document.getElementById('confirmationModal');
+        this.confirmResetBtn = document.getElementById('confirm-reset');
+        this.declineResetBtn = document.getElementById('decline-reset');
         this.userId = this.getOrCreateUserId();
         this.flashcardUI.onCardClick = (card) => {
             this.wsClient.send({ type: 'flashcard_clicked', card });
@@ -75,6 +78,8 @@ class App {
     
     setupEventListeners() {
         const micButton = document.getElementById('micButton');
+        const resetButton = document.getElementById('resetButton');
+        const resetArrow = document.getElementById('resetArrow');
         
         // Check for iOS
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -85,6 +90,39 @@ class App {
             e.preventDefault();
             this.toggleStreaming();
         });
+
+        resetButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.showModal()
+        })
+
+        resetArrow.addEventListener('animationend', (e) => {
+            e.preventDefault();
+            resetArrow.classList.remove('resetting');
+        })
+
+        this.confirmResetBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.resetConversation();
+            this.hideModal();
+        })
+
+        this.declineResetBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.hideModal()
+        })
+
+        this.modal.addEventListener('click', (e) => {
+            if (e.target === this.modal) {
+                this.hideModal();
+            }
+        })
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
+                this.hideModal();
+            }
+        })
         
         if (isIOS) {
             // Add touch event for iOS
@@ -102,6 +140,37 @@ class App {
                 }
                 lastTouchEnd = now;
             }, false);
+
+            resetButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.showModal()
+            }, { passive: false });
+
+            let lastTouchResetEnd = 0;
+            resetButton.addEventListener('touchend', (e) => {
+                const now = Date.now();
+                if (now - lastTouchResetEnd <= 300) {
+                    e.preventDefault();
+                }
+                lastTouchResetEnd = now;
+            }, false);
+
+            this.confirmResetBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.resetConversation();
+                this.hideModal();
+            }, { passive: false });
+
+            this.declineResetBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.hideModal()
+            }, { passive: false });
+
+            this.modal.addEventListener('touchend', (e) => {
+                if (e.target === this.modal) {
+                    this.hideModal();
+                }
+            }, { passive: false });
         }
         
         this.wsClient.on('connection', (status) => {
@@ -266,6 +335,33 @@ class App {
             this.state.currentTranscript = '';
         }
         this.render();
+    }
+
+    showModal() {
+        this.modal.classList.remove('hidden');
+    }
+
+    hideModal() {
+        this.modal.classList.add('hidden');
+    }
+
+    resetConversation() {
+        this.storage.clearConversation();
+        this.storage.clearFlashcards();
+        this.storage.clearState();
+
+        this.state.chatHistory = [];
+        this.state.flashcards = [];
+        this.state.currentTranscript = '';
+        this.state.pendingTranscription = '';
+        this.state.streamingLLMResponse = '';
+
+        this.chatUI.clearAllTypewriters();
+        this.render();
+        this.wsClient.send({ type: 'conversation_reset'})
+
+        const resetArrow = document.getElementById('resetArrow');
+        resetArrow.classList.add('resetting');
     }
     
     checkAndUpdateConversation() {
