@@ -13,12 +13,11 @@ export class AudioProcessor {
   private executor: any;
   private vad: SileroVAD | null = null;
   private isProcessing = false;
+  private isProcessingCancelled = false;  // Track if current processing should be cancelled
   private isReady = false;
   private websocket: any = null;
   private debugCounter = 0;
   private currentOutputStream: any | null = null;
-  private debounceTimeoutMs: number = 2000;
-  private debounceTimer: NodeJS.Timeout | null = null;
   private pendingSpeechSegments: Float32Array[] = [];  // Accumulate speech segments
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
@@ -28,8 +27,7 @@ export class AudioProcessor {
   private introductionStateCallback: ((messages: Array<{ role: string; content: string }>) => Promise<IntroductionState | null>) | null = null;
   private targetingKey: string | null = null;
   private clientTimezone: string | null = null;
-  private hasMergedInitialHistory = false;
-
+  private graphStartTime: number = 0;
   constructor(private apiKey: string, websocket?: any) {
     this.websocket = websocket;
     this.setupWebSocketMessageHandler();
@@ -51,10 +49,6 @@ export class AudioProcessor {
           const message = JSON.parse(raw);
           
           if (message.type === 'conversation_update') {
-            if (this.hasMergedInitialHistory) {
-              // Ignore subsequent client history updates to avoid duplicates; server is source of truth
-              return;
-            }
             const incoming = (message.data && message.data.messages) ? message.data.messages : [];
             const existing = this.conversationState.messages || [];
             const combined = [...existing, ...incoming];
@@ -70,7 +64,6 @@ export class AudioProcessor {
             deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             this.conversationState = { messages: deduped };
             this.trimConversationHistory(40);
-            this.hasMergedInitialHistory = true;
           } else if (message.type === 'user_context') {
             // Persist minimal attributes for user context
             const tz = message.timezone || (message.data && message.data.timezone) || '';
@@ -135,20 +128,11 @@ export class AudioProcessor {
           }
         }
         
-        // If we have a pending debounce timer, it means we were about to process
-        // but the user started speaking again - cancel processing and keep accumulating
-        if (this.debounceTimer) {
-          console.log('User resumed speaking - cancelling pending processing');
-          clearTimeout(this.debounceTimer);
-          this.debounceTimer = null;
-          
-          // If we're currently processing, interrupt graph execution
-          if (this.isProcessing) {
-            this.interrupt('speech_resumed');
-          }
-        } else if (this.isProcessing) {
-          // User started speaking while we're processing - interrupt graph execution
-          this.interrupt('speech_start');
+        // If we're currently processing, set cancellation flag
+        if (this.isProcessing) {
+          console.log('Setting cancellation flag - user started speaking during processing');
+          this.isProcessingCancelled = true;
+          // Don't clear segments - we want to accumulate them
         }
       });
       
@@ -160,34 +144,27 @@ export class AudioProcessor {
             // Add this segment to pending segments
             this.pendingSpeechSegments.push(event.speechSegment);
             
-            // Cancel any existing debounce timer
-            if (this.debounceTimer) {
-              clearTimeout(this.debounceTimer);
-            }
+            // Reset cancellation flag for new processing
+            this.isProcessingCancelled = false;
             
-            // Set a timer to process after debounce period
-            this.debounceTimer = setTimeout(async () => {
-              this.debounceTimer = null;
-              
-              // Only process if not already processing
-              if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
-                // Combine all pending segments
-                const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
-                const combinedSegment = new Float32Array(totalLength);
-                let offset = 0;
-                for (const seg of this.pendingSpeechSegments) {
-                  combinedSegment.set(seg, offset);
-                  offset += seg.length;
-                }
-                
-                // Clear pending segments
-                this.pendingSpeechSegments = [];
-                
-                // Process the combined segment
-                console.log('Processing combined speech segment after debounce');
-                await this.processVADSpeechSegment(combinedSegment);
+            // Process immediately if not already processing
+            if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
+              // Combine all pending segments
+              const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
+              const combinedSegment = new Float32Array(totalLength);
+              let offset = 0;
+              for (const seg of this.pendingSpeechSegments) {
+                combinedSegment.set(seg, offset);
+                offset += seg.length;
               }
-            }, this.debounceTimeoutMs);
+              
+              // Clear pending segments
+              this.pendingSpeechSegments = [];
+              
+              // Process immediately
+              console.log('Processing speech segment immediately');
+              await this.processVADSpeechSegment(combinedSegment);
+            }
           }
         } catch (error) {
           console.error('Error handling speech segment:', error);
@@ -340,6 +317,7 @@ export class AudioProcessor {
       const userContext = new UserContext(attributes, targetingKey);
       console.log(userContext)
       let outputStream;
+      this.graphStartTime = Date.now();
       try {
         outputStream = await this.executor.start(
           audioInput,
@@ -361,7 +339,14 @@ export class AudioProcessor {
       this.currentOutputStream = outputStream;
 
       for await (const chunk of outputStream) {
-        console.log(`VAD Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
+        // Check if processing has been cancelled
+        if (this.isProcessingCancelled) {
+          console.log('Processing cancelled by user speech, breaking from loop');
+          break;
+        }
+        
+        console.log(`Audio Processor:Chunk received - Type: ${chunk.typeName}, Has processResponse: ${typeof chunk.processResponse === 'function'}`);
+        console.log(`Audio Processor:Time since graph started: ${Date.now() - this.graphStartTime}ms`);
         
         // Use processResponse for type-safe handling
         await chunk.processResponse({
@@ -550,6 +535,12 @@ export class AudioProcessor {
             console.log(`VAD Unknown/unhandled chunk type: ${chunk.typeName}`, data);
           }
         });
+        
+        // Check again after processing each chunk
+        if (this.isProcessingCancelled) {
+          console.log('Processing cancelled after chunk processing');
+          break;
+        }
       }
 
       if (transcription.trim()) {
@@ -562,6 +553,26 @@ export class AudioProcessor {
       this.isProcessing = false;
       // Clear tracked stream reference
       this.currentOutputStream = null;
+      
+      // If we have pending segments (user spoke while we were processing), process them now
+      if (this.pendingSpeechSegments.length > 0 && !this.isProcessingCancelled) {
+        console.log('Found pending segments after processing, processing them now');
+        
+        // Combine all pending segments
+        const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
+        const combinedSegment = new Float32Array(totalLength);
+        let offset = 0;
+        for (const seg of this.pendingSpeechSegments) {
+          combinedSegment.set(seg, offset);
+          offset += seg.length;
+        }
+        
+        // Clear pending segments
+        this.pendingSpeechSegments = [];
+        
+        // Process the combined segments recursively
+        await this.processVADSpeechSegment(combinedSegment);
+      }
     }
   }
 
@@ -578,35 +589,11 @@ export class AudioProcessor {
     }
   }
 
-  // Cancel current graph execution (audio stop is handled separately in speechStart)
+  // Simple interrupt method using cancellation flag
   private interrupt(reason?: string) {
-    try {
-      // Don't reset VAD - it needs to maintain its speech detection state
-      // But clear pending segments if we're interrupting due to new speech
-      if (reason === 'speech_start') {
-        this.pendingSpeechSegments = [];
-      }
-      // Keep segments if user is just resuming (speech_resumed)
-      
-      if (this.executor) {
-        if (this.currentOutputStream) {
-          try {
-            this.executor.closeExecution(this.currentOutputStream);
-          } catch (e) {
-            console.warn('Failed to close specific execution, cleaning up all:', e);
-            // Fallback: cleanup all executions if closing specific stream fails
-            try { this.executor.cleanupAllExecutions(); } catch (_) {}
-          } finally {
-            this.currentOutputStream = null;
-          }
-        } else {
-          try { this.executor.cleanupAllExecutions(); } catch (_) {}
-        }
-      }
-    } finally {
-      // Reset processing flag to allow new processing
-      this.isProcessing = false;
-    }
+    // Just set the cancellation flag, don't try to force-close
+    this.isProcessingCancelled = true;
+    console.log(`Interrupt requested: ${reason}`);
   }
 
 }

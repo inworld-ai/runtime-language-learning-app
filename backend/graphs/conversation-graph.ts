@@ -25,10 +25,14 @@ export function createConversationGraph(
         introduction_state: introductionState || { name: '', level: '', goal: '' }
       };
 
-      // console.log(
-      //   'Template data being sent to Jinja:',
-      //   JSON.stringify(templateData, null, 2),
-      // );
+      console.log(
+        'ConversationGraph - Introduction state being used:',
+        JSON.stringify(introductionState, null, 2),
+      );
+      console.log(
+        'ConversationGraph - Number of messages in history:',
+        conversationState.messages?.length || 0
+      );
 
       const renderedPrompt = await renderJinja(
         conversationTemplate,
@@ -54,11 +58,11 @@ export function createConversationGraph(
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
-    modelName: 'gpt-4.1-nano',
+    modelName: 'gpt-4o-mini',
     stream: true,
     reportToClient: true,
     textGenerationConfig: {
-      maxNewTokens: 2500,
+      maxNewTokens: 250,
       maxPromptLength: 2000,
       repetitionPenalty: 1,
       topP: 1,

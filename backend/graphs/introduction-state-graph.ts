@@ -50,9 +50,13 @@ class IntroductionStateParserNode extends CustomNode {
     try {
       const content = (input && (input as any).content) || input;
       const textContent = typeof content === 'string' ? content : JSON.stringify(content);
+      console.log('IntroductionStateParserNode - Raw LLM response:', textContent);
+      
       const jsonMatch = textContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+        console.log('IntroductionStateParserNode - Parsed JSON:', parsed);
+        
         const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
         const level = normalizeLevel(parsed.level);
         const goal = typeof parsed.goal === 'string' ? parsed.goal.trim() : '';
@@ -62,6 +66,7 @@ class IntroductionStateParserNode extends CustomNode {
           goal,
           timestamp: new Date().toISOString(),
         };
+        console.log('IntroductionStateParserNode - Returning state:', state);
         return state;
       }
     } catch (error) {
@@ -74,6 +79,7 @@ class IntroductionStateParserNode extends CustomNode {
       goal: '',
       timestamp: new Date().toISOString(),
     };
+    console.log('IntroductionStateParserNode - Returning fallback state');
     return fallback;
   }
 }
