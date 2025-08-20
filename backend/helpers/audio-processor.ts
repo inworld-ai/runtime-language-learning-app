@@ -17,8 +17,6 @@ export class AudioProcessor {
   private websocket: any = null;
   private debugCounter = 0;
   private currentOutputStream: any | null = null;
-  private debounceTimeoutMs: number = 2000;
-  private debounceTimer: NodeJS.Timeout | null = null;
   private pendingSpeechSegments: Float32Array[] = [];  // Accumulate speech segments
   private conversationState: { messages: Array<{ role: string; content: string; timestamp: string }> } = {
     messages: []
@@ -135,19 +133,8 @@ export class AudioProcessor {
           }
         }
         
-        // If we have a pending debounce timer, it means we were about to process
-        // but the user started speaking again - cancel processing and keep accumulating
-        if (this.debounceTimer) {
-          console.log('User resumed speaking - cancelling pending processing');
-          clearTimeout(this.debounceTimer);
-          this.debounceTimer = null;
-          
-          // If we're currently processing, interrupt graph execution
-          if (this.isProcessing) {
-            this.interrupt('speech_resumed');
-          }
-        } else if (this.isProcessing) {
-          // User started speaking while we're processing - interrupt graph execution
+        // If we're currently processing, interrupt graph execution
+        if (this.isProcessing) {
           this.interrupt('speech_start');
         }
       });
@@ -160,34 +147,24 @@ export class AudioProcessor {
             // Add this segment to pending segments
             this.pendingSpeechSegments.push(event.speechSegment);
             
-            // Cancel any existing debounce timer
-            if (this.debounceTimer) {
-              clearTimeout(this.debounceTimer);
-            }
-            
-            // Set a timer to process after debounce period
-            this.debounceTimer = setTimeout(async () => {
-              this.debounceTimer = null;
-              
-              // Only process if not already processing
-              if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
-                // Combine all pending segments
-                const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
-                const combinedSegment = new Float32Array(totalLength);
-                let offset = 0;
-                for (const seg of this.pendingSpeechSegments) {
-                  combinedSegment.set(seg, offset);
-                  offset += seg.length;
-                }
-                
-                // Clear pending segments
-                this.pendingSpeechSegments = [];
-                
-                // Process the combined segment
-                console.log('Processing combined speech segment after debounce');
-                await this.processVADSpeechSegment(combinedSegment);
+            // Process immediately if not already processing
+            if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
+              // Combine all pending segments
+              const totalLength = this.pendingSpeechSegments.reduce((sum, seg) => sum + seg.length, 0);
+              const combinedSegment = new Float32Array(totalLength);
+              let offset = 0;
+              for (const seg of this.pendingSpeechSegments) {
+                combinedSegment.set(seg, offset);
+                offset += seg.length;
               }
-            }, this.debounceTimeoutMs);
+              
+              // Clear pending segments
+              this.pendingSpeechSegments = [];
+              
+              // Process immediately
+              console.log('Processing speech segment immediately');
+              await this.processVADSpeechSegment(combinedSegment);
+            }
           }
         } catch (error) {
           console.error('Error handling speech segment:', error);
