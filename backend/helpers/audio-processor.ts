@@ -391,7 +391,40 @@ export class AudioProcessor {
             }
           },
           
-          // Handle ContentStream (from LLM)
+          // non streaming LLM response
+          Content: async (content: GraphTypes.Content) => {
+            console.log('VAD Processing LLM Content...');
+            console.log(content)
+            let llmResponse = '';
+            if (content.content) {
+              llmResponse = content.content;
+              console.log(`VAD Complete LLM Response: "${llmResponse}"`);
+              if (this.websocket) {
+                this.websocket.send(JSON.stringify({
+                  type: 'llm_response_complete',
+                  text: llmResponse,
+                  timestamp: Date.now()
+                }));
+              }
+              // Now update conversation state with both user and assistant messages
+              // Add user message first (it wasn't added earlier to avoid duplication)
+              this.conversationState.messages.push({
+                role: 'user',
+                content: transcription.trim(),
+                timestamp: new Date().toISOString()
+              });
+              // Then add assistant message
+              this.conversationState.messages.push({
+                role: 'assistant',
+                content: llmResponse.trim(),
+                timestamp: new Date().toISOString()
+              });
+              this.trimConversationHistory(40);
+              console.log('Updated conversation state with full exchange');
+            }
+          },
+
+          // Handle ContentStream (from LLM 2)
           ContentStream: async (streamIterator: GraphTypes.ContentStream) => {
             console.log('VAD Processing LLM ContentStream...');
             let currentLLMResponse = '';
