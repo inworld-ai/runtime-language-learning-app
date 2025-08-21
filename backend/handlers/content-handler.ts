@@ -1,5 +1,6 @@
 import { GraphTypes } from '@inworld/runtime/common';
 import type { ChunkHandler, HandlerContext } from './types.ts';
+import { handleToolCallInitiation } from './tool-call-handler.ts';
 
 /**
  * Handles non-streaming LLM response (Content type)
@@ -10,6 +11,9 @@ export const handleContent: ChunkHandler<GraphTypes.Content> = async (
 ) => {
   console.log('VAD Processing LLM Content...');
   console.log(content);
+  
+  // Check for tool calls and notify frontend
+  handleToolCallInitiation(content, context);
   
   if (content.content) {
     const llmResponse = content.content;

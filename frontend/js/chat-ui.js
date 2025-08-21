@@ -13,9 +13,14 @@ export class ChatUI {
     }
     
     renderMessages(messages, pendingTranscription, streamingLLMResponse) {
-        // Only clear and rebuild if the conversation history changed
+        // Track if we should scroll to bottom after rendering
+        const shouldScroll = this.isNearBottom();
+        
+        // Only rebuild if conversation history changed
         const currentHistoryLength = this.messagesContainer.querySelectorAll('.message:not(.streaming)').length;
-        if (currentHistoryLength !== messages.length) {
+        const hasNewMessages = currentHistoryLength !== messages.length;
+        
+        if (hasNewMessages) {
             this.messagesContainer.innerHTML = '';
             
             // Render existing conversation history
@@ -64,13 +69,49 @@ export class ChatUI {
             this.clearTypewriter('streaming-llm-response');
         }
         
-        this.scrollToBottom();
+        // Only scroll if we were near the bottom before rendering
+        if (shouldScroll) {
+            this.scrollToBottom();
+        }
+    }
+    
+    isNearBottom() {
+        const threshold = 100; // pixels from bottom
+        const { scrollHeight, scrollTop, clientHeight } = this.messagesContainer;
+        return scrollHeight - scrollTop - clientHeight < threshold;
     }
     
     createMessageElement(message) {
         const div = document.createElement('div');
-        div.className = `message ${message.role}`;
-        div.textContent = message.content;
+        
+        // Handle tool messages specially
+        if (message.role === 'tool') {
+            div.className = 'message tool-call-notification';
+            
+            const icon = document.createElement('span');
+            icon.className = 'tool-icon';
+            icon.textContent = '🔧';
+            
+            const text = document.createElement('span');
+            text.className = 'tool-text';
+            text.textContent = message.content;
+            
+            // Add checkmark if complete
+            if (message.metadata && message.metadata.status === 'complete') {
+                const checkmark = document.createElement('span');
+                checkmark.className = 'tool-complete';
+                checkmark.textContent = ' ✓';
+                text.appendChild(checkmark);
+            }
+            
+            div.appendChild(icon);
+            div.appendChild(text);
+        } else {
+            // Regular message
+            div.className = `message ${message.role}`;
+            div.textContent = message.content;
+        }
+        
         return div;
     }
     
@@ -162,5 +203,14 @@ export class ChatUI {
     
     scrollToBottom() {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+    }
+    
+    // Keep these methods for backward compatibility but they're not used anymore
+    addToolCallNotification(toolName, status = 'initiated') {
+        console.log(`Tool call notification: ${toolName} (${status})`);
+    }
+    
+    updateToolCallNotification(toolCallId, status) {
+        console.log(`Tool call ${toolCallId} status: ${status}`);
     }
 }

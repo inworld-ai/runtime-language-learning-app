@@ -205,6 +205,29 @@ class App {
             try { this.audioPlayer.stop(); } catch (_) {}
         });
         
+        // Tool call event handlers
+        this.wsClient.on('tool_call_initiated', (data) => {
+            console.log('[Main] Tool call initiated:', data.toolName);
+            // Add tool call as a special message in chat history
+            this.addMessageToHistory('tool', `Using tool: ${data.toolName}`, {
+                toolCallId: data.toolCallId || `tool-${Date.now()}`,
+                toolName: data.toolName,
+                status: 'initiated'
+            });
+        });
+        
+        this.wsClient.on('tool_call_complete', (data) => {
+            console.log('[Main] Tool call complete:', data.toolCallId);
+            // Find and update the tool message status
+            const toolMessage = this.state.chatHistory.find(
+                msg => msg.role === 'tool' && msg.metadata && msg.metadata.toolCallId === data.toolCallId
+            );
+            if (toolMessage && toolMessage.metadata) {
+                toolMessage.metadata.status = 'complete';
+                this.render();
+            }
+        });
+        
         this.audioHandler.on('audioChunk', (audioData) => {
             this.wsClient.sendAudioChunk(audioData);
         });
@@ -312,8 +335,15 @@ class App {
         this.addMessageToHistory(role, content);
     }
     
-    addMessageToHistory(role, content) {
-        const message = { role, content };
+    addMessageToHistory(role, content, metadata = null) {
+        const message = { 
+            role, 
+            content,
+            timestamp: new Date().toISOString()
+        };
+        if (metadata) {
+            message.metadata = metadata;
+        }
         this.state.chatHistory.push(message);
         this.saveState();
         this.render();

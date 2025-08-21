@@ -1,5 +1,6 @@
 import { GraphTypes } from '@inworld/runtime/common';
 import type { ChunkHandler, HandlerContext } from './types.ts';
+import { handleToolCallInitiation } from './tool-call-handler.ts';
 
 /**
  * Handles streaming LLM response (ContentStream type)
@@ -10,6 +11,7 @@ export const handleContentStream: ChunkHandler<GraphTypes.ContentStream> = async
 ) => {
   console.log('VAD Processing LLM ContentStream...');
   let currentLLMResponse = '';
+  let toolCallsHandled = false;
   
   for await (const streamChunk of streamIterator) {
     if (streamChunk.text) {

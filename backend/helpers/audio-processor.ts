@@ -11,6 +11,7 @@ import { handleString } from '../handlers/string-handler.js';
 import { handleContent } from '../handlers/content-handler.js';
 import { handleContentStream } from '../handlers/content-stream-handler.js';
 import { handleTTSOutputStream } from '../handlers/tts-output-stream-handler.js';
+import { handleToolCallResponse } from '../handlers/tool-call-handler.js';
 
 const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
@@ -382,6 +383,11 @@ export class AudioProcessor {
           // Handle TTS output stream
           TTSOutputStream: async (ttsStreamIterator: GraphTypes.TTSOutputStream) => {
             await handleTTSOutputStream(ttsStreamIterator, handlerContext);
+          },
+          
+          // Handle tool call responses
+          ToolCallResponse: async (toolResponse: GraphTypes.ToolCallResponse) => {
+            await handleToolCallResponse(toolResponse, handlerContext);
           },
           
           // Handle any other type

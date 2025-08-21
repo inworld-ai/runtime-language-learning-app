@@ -178,6 +178,21 @@ export class WebSocketClient {
                 this.emit('interrupt', { reason: message.reason });
                 break;
                 
+            case 'tool_call_initiated':
+                this.emit('tool_call_initiated', {
+                    toolName: message.toolName,
+                    toolCallId: message.toolCallId,
+                    timestamp: message.timestamp
+                });
+                break;
+                
+            case 'tool_call_complete':
+                this.emit('tool_call_complete', {
+                    toolCallId: message.toolCallId,
+                    timestamp: message.timestamp
+                });
+                break;
+                
             default:
                 console.log('Unknown message type:', message.type);
         }
