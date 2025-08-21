@@ -90,19 +90,6 @@ export function createConversationGraph(
   let availableTools: any[] = [];
   let firstLLMContent: GraphTypes.Content | null = null;
 
-  // System prompt for Spanish learning with tools
-  const SYSTEM_PROMPT_WITH_TOOLS = `You are a Spanish language learning assistant with access to web search tools.
-
-IMPORTANT: When a user explicitly asks you to search for something, use the brave_web_search tool, even if you haven't collected their onboarding information yet.
-Keywords that indicate search requests: "search", "find", "what's the weather", "latest", "recent", "current", "news about", etc.
-
-You have access to the brave_web_search tool for searching the internet. Use it when:
-- The user explicitly asks for a search
-- The user asks about current events, weather, or recent information
-- The user wants information that requires up-to-date data
-
-After using the tool, incorporate the results naturally into your Spanish teaching conversation.`;
-
   // Custom node to combine user input with available tools
   class ToolsToLLMRequestNode extends CustomNode {
     async process(
@@ -128,7 +115,8 @@ After using the tool, incorporate the results naturally into your Spanish teachi
       const templateData = {
         messages: conversationState.messages || [],
         current_input: userInput,
-        introduction_state: introductionState || { name: '', level: '', goal: '' }
+        introduction_state: introductionState || { name: '', level: '', goal: '' },
+        tools: availableTools
       };
 
       const renderedPrompt = await renderJinja(
@@ -137,7 +125,6 @@ After using the tool, incorporate the results naturally into your Spanish teachi
       );
 
       const messages: LLMMessageInterface[] = [
-        { role: 'system', content: SYSTEM_PROMPT_WITH_TOOLS },
         { role: 'user', content: renderedPrompt }
       ];
 
@@ -173,22 +160,29 @@ After using the tool, incorporate the results naturally into your Spanish teachi
 
   // Custom node to transform tool call results into LLM request
   class ToolCallToLLMRequestNode extends CustomNode {
-    process(
+    async process(
       _context: ProcessContext,
       toolResults: GraphTypes.ToolCallResponse
-    ): GraphTypes.LLMChatRequest {
+    ): Promise<GraphTypes.LLMChatRequest> {
       console.log('📊 ToolCallToLLMRequestNode - Building request with tool results');
       
+      const conversationState = getConversationState();
       const introductionState = getIntroductionState();
 
-      // Build messages including the original context and tool results
+      // Build the prompt with conversation context, same as first LLM call
+      const templateData = {
+        messages: conversationState.messages || [],
+        current_input: lastUserInput,
+        introduction_state: introductionState || { name: '', level: '', goal: '' },
+      };
+
+      const renderedPrompt = await renderJinja(
+        conversationTemplate,
+        JSON.stringify(templateData),
+      );
+
       const messages: LLMMessageInterface[] = [
-        { 
-          role: 'system', 
-          content: `You are a Spanish language learning assistant. The user's level is ${introductionState.level}.
-Provide a helpful, conversational response based on the search results. Incorporate Spanish naturally as appropriate for their level.` 
-        },
-        { role: 'user', content: lastUserInput },  // Use stored user input
+        { role: 'user', content: renderedPrompt }
       ];
 
       // Add the assistant's tool call message if we have it

@@ -88,11 +88,6 @@ export function createTestConversationGraph(
   let lastUserInput: string = '';
   let availableTools: any[] = [];
 
-  // System prompt for Spanish learning with tools
-  const SYSTEM_PROMPT_WITH_TOOLS = `You are a Spanish language learning assistant with access to web search tools.
-When a user asks a question that would benefit from current information (news, events, facts, etc.), use the brave_web_search tool.
-Always respond conversationally and incorporate Spanish naturally based on the user's level.`;
-
   // Custom node to combine user input with available tools
   class ToolsToLLMRequestNode extends CustomNode {
     async process(
@@ -118,7 +113,8 @@ Always respond conversationally and incorporate Spanish naturally based on the u
       const templateData = {
         messages: conversationState.messages || [],
         current_input: userInput,
-        introduction_state: introductionState || { name: '', level: '', goal: '' }
+        introduction_state: introductionState || { name: '', level: '', goal: '' },
+        tools: availableTools
       };
 
       const renderedPrompt = await renderJinja(
@@ -127,7 +123,6 @@ Always respond conversationally and incorporate Spanish naturally based on the u
       );
 
       const messages: LLMMessageInterface[] = [
-        { role: 'system', content: SYSTEM_PROMPT_WITH_TOOLS },
         { role: 'user', content: renderedPrompt }
       ];
 
@@ -160,25 +155,32 @@ Always respond conversationally and incorporate Spanish naturally based on the u
 
   // Custom node to build final response after tool execution
   class ToolResultsToLLMRequestNode extends CustomNode {
-    process(
+    async process(
       _context: ProcessContext,
       llmContent: GraphTypes.Content,
       storedQuery: string,
       toolResults: GraphTypes.ToolCallResponse
-    ): GraphTypes.LLMChatRequest {
+    ): Promise<GraphTypes.LLMChatRequest> {
       console.log('📊 ToolResultsToLLMRequestNode - Building final request with tool results');
       
       const conversationState = getConversationState();
       const introductionState = getIntroductionState();
 
-      // Build messages including tool results
+      // Build the prompt with conversation context, same as first LLM call
+      const templateData = {
+        messages: conversationState.messages || [],
+        current_input: storedQuery,
+        introduction_state: introductionState || { name: '', level: '', goal: '' },
+        tools: availableTools
+      };
+
+      const renderedPrompt = await renderJinja(
+        conversationTemplate,
+        JSON.stringify(templateData),
+      );
+
       const messages: LLMMessageInterface[] = [
-        { 
-          role: 'system', 
-          content: `You are a Spanish language learning assistant. The user's level is ${introductionState.level}.
-Provide a helpful, conversational response based on the search results. Incorporate Spanish naturally as appropriate for their level.` 
-        },
-        { role: 'user', content: storedQuery },
+        { role: 'user', content: renderedPrompt },
         {
           role: 'assistant',
           content: llmContent.content || '',

@@ -421,6 +421,58 @@ export class AudioProcessor {
               });
               this.trimConversationHistory(40);
               console.log('Updated conversation state with full exchange');
+              
+              // Trigger flashcard generation after updating conversation state
+              if (transcription && llmResponse) {
+                console.log('Triggering flashcard generation after Content response');
+                
+                // Send conversation update to frontend
+                if (this.websocket) {
+                  this.websocket.send(JSON.stringify({
+                    type: 'conversation_update',
+                    messages: this.conversationState.messages,
+                    timestamp: Date.now()
+                  }));
+                }
+                
+                // Generate flashcards - fire and forget
+                if (this.flashcardCallback) {
+                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                  }));
+                  
+                  this.flashcardCallback(recentMessages).catch(error => {
+                    console.error('Error in flashcard generation callback:', error);
+                  });
+                }
+                
+                // Run introduction-state extraction while incomplete
+                const isIntroComplete = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
+                if (!isIntroComplete && this.introductionStateCallback) {
+                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                  }));
+                  
+                  this.introductionStateCallback(recentMessages)
+                    .then((state) => {
+                      if (state) {
+                        this.introductionState = state;
+                        if (this.websocket) {
+                          this.websocket.send(JSON.stringify({
+                            type: 'introduction_state_updated',
+                            introduction_state: this.introductionState,
+                            timestamp: Date.now()
+                          }));
+                        }
+                      }
+                    })
+                    .catch((error) => {
+                      console.error('Error in introduction-state callback:', error);
+                    });
+                }
+              }
             }
           },
 
