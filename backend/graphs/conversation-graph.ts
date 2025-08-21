@@ -7,7 +7,6 @@ import {
   RemoteSTTNode, 
   RemoteTTSNode, 
   TextChunkingNode,
-  MCPClientComponent,
   MCPCallToolNode,
   MCPListToolsNode,
   GraphTypes
@@ -16,23 +15,10 @@ import { LLMMessageInterface } from '@inworld/runtime';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { conversationTemplate } from '../helpers/prompt-templates.ts';
 import type { IntroductionState } from '../helpers/introduction-state-processor.ts';
-import { execSync } from 'child_process';
+import { MCPManager } from '../helpers/mcp.ts';
 
 export interface ConversationGraphConfig {
   apiKey: string;
-}
-
-function findNpxPath(): string {
-  try {
-    const isWin = process.platform === 'win32';
-    const command = isWin ? 'where npx.cmd' : 'which npx';
-    const npxPath = execSync(command, { encoding: 'utf8' }).trim();
-    const firstPath = npxPath.split('\n')[0];
-    return isWin ? `cmd.exe /c ${firstPath}` : firstPath;
-  } catch (error) {
-    console.error('❌ npx not found in PATH. Please install Node.js and npm to get npx:', error);
-    throw error;
-  }
 }
 
 export function createConversationGraph(
@@ -40,49 +26,25 @@ export function createConversationGraph(
   getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> },
   getIntroductionState: () => IntroductionState
 ) {
-  // Initialize MCP component if Brave API key is available
-  let mcpComponent: MCPClientComponent | null = null;
+  // Initialize MCP nodes via centralized MCPManager
   let mcpCallToolNode: MCPCallToolNode | null = null;
   let mcpListToolsNode: MCPListToolsNode | null = null;
-  const isMCPEnabled = !!process.env.BRAVE_API_KEY;
-  
-  if (isMCPEnabled) {
-    try {
-      const npxPath = findNpxPath();
-      mcpComponent = new MCPClientComponent({
-        id: 'brave_mcp_component',
-        sessionConfig: {
-          transport: 'stdio',
-          endpoint: `${npxPath} -y @modelcontextprotocol/server-brave-search`,
-          authConfig: {
-            type: 'stdio',
-            config: {
-              env: {
-                BRAVE_API_KEY: process.env.BRAVE_API_KEY,
-              },
-            },
-          },
-        },
-      });
-
-      mcpListToolsNode = new MCPListToolsNode({
-        id: 'mcp_list_tools_node',
-        mcpComponent,
-        reportToClient: false,
-      });
-
-      mcpCallToolNode = new MCPCallToolNode({
-        id: 'mcp_call_tool_node',
-        mcpComponent,
-        reportToClient: true,
-      });
-      
-      console.log('✅ MCP Brave search component initialized in conversation graph');
-    } catch (error) {
-      console.error('❌ Failed to initialize MCP component:', error);
+  try {
+    const nodes = MCPManager.createNodes('brave', {
+      listId: 'mcp_list_tools_node',
+      callId: 'mcp_call_tool_node',
+      reportListToClient: false,
+      reportCallToClient: true,
+    });
+    if (nodes) {
+      mcpListToolsNode = nodes.list;
+      mcpCallToolNode = nodes.call;
+      console.log('✅ MCP Brave search nodes initialized via MCPManager');
+    } else {
+      console.log('ℹ️ MCP disabled or not configured - using non-MCP flow');
     }
-  } else {
-    console.log('ℹ️ MCP disabled - no BRAVE_API_KEY found');
+  } catch (error) {
+    console.error('❌ Failed to initialize MCP nodes via MCPManager:', error);
   }
 
   // Store context between nodes

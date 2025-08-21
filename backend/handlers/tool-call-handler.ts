@@ -13,6 +13,7 @@ export const handleToolCallResponse: ChunkHandler<GraphTypes.ToolCallResponse> =
   if (toolResponse.toolCallResults && toolResponse.toolCallResults.length > 0) {
     for (const result of toolResponse.toolCallResults) {
       console.log(`Tool call completed: ${result.toolCallId}`);
+      console.log(result)
       
       // Send tool completion notification to frontend
       context.sendWebSocketMessage({

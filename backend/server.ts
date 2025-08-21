@@ -14,6 +14,7 @@ import { WebSocketServer } from 'ws';
 import { telemetry } from '@inworld/runtime';
 import { MetricType } from '@inworld/runtime/telemetry';
 import { UserContext } from '@inworld/runtime/graph';
+import { MCPManager } from './helpers/mcp.ts';
 
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.ts';
@@ -51,6 +52,14 @@ try {
   }
 } catch (err) {
   console.error('[Telemetry] Initialization failed:', err);
+}
+
+// Initialize MCP servers once at startup
+try {
+  MCPManager.initFromEnv();
+  MCPManager.startAll();
+} catch (err) {
+  console.error('[MCP] Initialization failed:', err);
 }
 
 // Store audio processors per connection
@@ -224,15 +233,17 @@ server.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully');
+    try { await MCPManager.shutdown(); } catch {}
     server.close(() => {
         console.log('Process terminated');
     });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     console.log('SIGINT received, shutting down gracefully');
+    try { await MCPManager.shutdown(); } catch {}
     server.close(() => {
         console.log('Process terminated');
     });
