@@ -28,7 +28,7 @@ class App {
             pendingTranscription: null,
             pendingLLMResponse: null,
             streamingLLMResponse: '',
-            lastPendingTranscription: null
+            pendingToolCall: null  // Store tool call info to add before agent response
         };
         
         this.init();
@@ -161,11 +161,7 @@ class App {
             this.state.pendingTranscription = data.text;
             this.state.currentTranscript = '';
             this.state.streamingLLMResponse = ''; // Reset LLM streaming for new conversation
-            // Only render if the transcription changed to avoid restarting typewriter
-            if (this.state.lastPendingTranscription !== data.text) {
-                this.state.lastPendingTranscription = data.text;
-                this.render();
-            }
+            this.render();
             this.checkAndUpdateConversation();
         });
         
@@ -176,6 +172,9 @@ class App {
         
         this.wsClient.on('llm_response_complete', (data) => {
             console.log('[Main] LLM response complete, starting typewriter with:', data.text);
+            
+            // We will render the pending tool badge until this point
+            
             // Start the typewriter effect with the complete text
             this.state.streamingLLMResponse = data.text; // Set the complete text for typewriter
             console.log('[Main] About to render for typewriter effect');
@@ -203,17 +202,19 @@ class App {
         this.wsClient.on('interrupt', (_data) => {
             console.log('[Main] Interrupt received, stopping audio playback');
             try { this.audioPlayer.stop(); } catch (_) {}
+            // Clear any pending tool call on interrupt
+            this.state.pendingToolCall = null;
         });
         
         // Tool call event handlers
         this.wsClient.on('tool_call_initiated', (data) => {
             console.log('[Main] Tool call initiated:', data.toolName);
-            // Add tool call as a special message in chat history
-            this.addMessageToHistory('tool', `Using tool: ${data.toolName}`, {
+            // Store tool call info to add before agent response
+            this.state.pendingToolCall = {
                 toolCallId: data.toolCallId || `tool-${Date.now()}`,
                 toolName: data.toolName,
                 status: 'initiated'
-            });
+            };
         });
         
         this.wsClient.on('tool_call_complete', (data) => {
@@ -306,7 +307,13 @@ class App {
             console.log('Assistant message added, total messages:', assistantHistory.messages.length);
             
             // Add to chat history for display
+            // 1) user message
             this.addMessageToHistory('learner', this.state.pendingTranscription);
+            // 2) tool message (insert between user and assistant if one was used)
+            if (this.state.pendingToolCall) {
+                this.addMessageToHistory('tool', `Using tool: ${this.state.pendingToolCall.toolName}`, this.state.pendingToolCall);
+            }
+            // 3) assistant message
             this.addMessageToHistory('teacher', this.state.pendingLLMResponse);
             
             // Get updated conversation history and send to backend
@@ -322,7 +329,7 @@ class App {
             this.state.pendingTranscription = null;
             this.state.pendingLLMResponse = null;
             this.state.streamingLLMResponse = '';
-            this.state.lastPendingTranscription = null;
+            this.state.pendingToolCall = null;
             
             // Clear any active typewriters before rendering final state
             this.chatUI.clearAllTypewriters();
@@ -403,7 +410,8 @@ class App {
             this.state.currentTranscript, 
             this.state.currentLLMResponse,
             this.state.pendingTranscription,
-            this.state.streamingLLMResponse
+            this.state.streamingLLMResponse,
+            this.state.pendingToolCall
         );
         this.flashcardUI.render(this.state.flashcards);
         

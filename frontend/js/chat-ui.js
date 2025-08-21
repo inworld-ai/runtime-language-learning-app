@@ -7,12 +7,12 @@ export class ChatUI {
         this.llmTypewriterCallback = null; // Callback for when LLM typewriter completes
     }
     
-    render(chatHistory, currentTranscript, currentLLMResponse, pendingTranscription, streamingLLMResponse) {
-        this.renderMessages(chatHistory, pendingTranscription, streamingLLMResponse);
+    render(chatHistory, currentTranscript, currentLLMResponse, pendingTranscription, streamingLLMResponse, pendingToolCall = null) {
+        this.renderMessages(chatHistory, pendingTranscription, streamingLLMResponse, pendingToolCall);
         this.renderCurrentTranscript(currentTranscript);
     }
     
-    renderMessages(messages, pendingTranscription, streamingLLMResponse) {
+    renderMessages(messages, pendingTranscription, streamingLLMResponse, pendingToolCall = null) {
         // Track if we should scroll to bottom after rendering
         const shouldScroll = this.isNearBottom();
         
@@ -45,9 +45,21 @@ export class ChatUI {
                 this.startTypewriter('pending-transcription', pendingTranscription, this.typewriterSpeed * 0.8);
             }
             // Don't restart typewriter if element already exists
+            // Render a temporary tool badge right after the streaming user message
+            const existingToolBadge = document.getElementById('pending-tool-call');
+            if (pendingToolCall && !existingToolBadge) {
+                const toolBadge = this.createToolBadgeElement(`Using tool: ${pendingToolCall.toolName}`);
+                toolBadge.id = 'pending-tool-call';
+                this.messagesContainer.appendChild(toolBadge);
+            } else if (!pendingToolCall && existingToolBadge) {
+                existingToolBadge.remove();
+            }
         } else if (existingUserStreaming) {
             existingUserStreaming.remove();
             this.clearTypewriter('pending-transcription');
+            // Remove temporary tool badge if present
+            const existingToolBadge = document.getElementById('pending-tool-call');
+            if (existingToolBadge) existingToolBadge.remove();
         }
         
         // Handle streaming LLM response
@@ -129,6 +141,17 @@ export class ChatUI {
         cursor.textContent = '▊';
         div.appendChild(cursor);
         
+        return div;
+    }
+
+    createToolBadgeElement(text) {
+        const div = document.createElement('div');
+        // Mark as streaming so it doesn't trigger a full rebuild of history
+        div.className = 'message tool-call-notification streaming';
+        const span = document.createElement('span');
+        span.className = 'tool-text';
+        span.textContent = text;
+        div.appendChild(span);
         return div;
     }
     
