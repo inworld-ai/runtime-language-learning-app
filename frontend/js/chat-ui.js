@@ -48,7 +48,7 @@ export class ChatUI {
             // Render a temporary tool badge right after the streaming user message
             const existingToolBadge = document.getElementById('pending-tool-call');
             if (pendingToolCall && !existingToolBadge) {
-                const toolBadge = this.createToolBadgeElement(`Using tool: ${pendingToolCall.toolName}`);
+                const toolBadge = this.createToolBadgeElement(`Used tool: ${pendingToolCall.toolName}`);
                 toolBadge.id = 'pending-tool-call';
                 this.messagesContainer.appendChild(toolBadge);
             } else if (!pendingToolCall && existingToolBadge) {
@@ -100,10 +100,6 @@ export class ChatUI {
         if (message.role === 'tool') {
             div.className = 'message tool-call-notification';
             
-            const icon = document.createElement('span');
-            icon.className = 'tool-icon';
-            icon.textContent = '🔧';
-            
             const text = document.createElement('span');
             text.className = 'tool-text';
             text.textContent = message.content;
@@ -116,7 +112,6 @@ export class ChatUI {
                 text.appendChild(checkmark);
             }
             
-            div.appendChild(icon);
             div.appendChild(text);
         } else {
             // Regular message

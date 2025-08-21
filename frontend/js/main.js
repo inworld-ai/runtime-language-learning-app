@@ -311,7 +311,7 @@ class App {
             this.addMessageToHistory('learner', this.state.pendingTranscription);
             // 2) tool message (insert between user and assistant if one was used)
             if (this.state.pendingToolCall) {
-                this.addMessageToHistory('tool', `Using tool: ${this.state.pendingToolCall.toolName}`, this.state.pendingToolCall);
+                this.addMessageToHistory('tool', `Used tool: ${this.state.pendingToolCall.toolName}`, this.state.pendingToolCall);
             }
             // 3) assistant message
             this.addMessageToHistory('teacher', this.state.pendingLLMResponse);
