@@ -6,6 +6,11 @@ import { UserContext } from '@inworld/runtime/graph';
 import { SileroVAD, VADConfig } from './silero-vad.js';
 import { createConversationGraph } from '../graphs/conversation-graph.js';
 import type { IntroductionState } from './introduction-state-processor.ts';
+import { HandlerContextImpl } from '../handlers/handler-context.js';
+import { handleString } from '../handlers/string-handler.js';
+import { handleContent } from '../handlers/content-handler.js';
+import { handleContentStream } from '../handlers/content-stream-handler.js';
+import { handleTTSOutputStream } from '../handlers/tts-output-stream-handler.js';
 
 const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
@@ -333,8 +338,16 @@ export class AudioProcessor {
         );
       }
 
-      let transcription = '';
-      let llmResponse = '';
+      // Create handler context with all necessary dependencies
+      const handlerContext = new HandlerContextImpl(
+        this.websocket,
+        this.conversationState,
+        this.introductionState,
+        this.graphStartTime,
+        this.flashcardCallback,
+        this.introductionStateCallback,
+        (maxTurns: number) => this.trimConversationHistory(maxTurns)
+      );
 
       // Track the current output stream so it can be cancelled on interruption
       this.currentOutputStream = outputStream;
@@ -352,268 +365,23 @@ export class AudioProcessor {
         // Use processResponse for type-safe handling
         await chunk.processResponse({
           // Handle string output (from ProxyNode with STT transcription)
-          string: (data: string) => {
-            transcription = data;
-            console.log(`VAD STT Transcription (via ProxyNode): "${transcription}"`);
-            if (this.websocket) {
-              this.websocket.send(JSON.stringify({
-                type: 'transcription',
-                text: transcription.trim(),
-                timestamp: Date.now()
-              }));
-            }
-            // Don't add to conversation state yet - the prompt template will use it as current_input
-            // We'll add it after processing completes
-
-            // Opportunistically run introduction-state extraction as soon as we have user input
-            const isIntroCompleteEarly = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
-            if (!isIntroCompleteEarly && this.introductionStateCallback) {
-              const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                role: msg.role,
-                content: msg.content
-              }));
-              this.introductionStateCallback(recentMessages)
-                .then((state) => {
-                  if (state) {
-                    this.introductionState = state;
-                    if (this.websocket) {
-                      this.websocket.send(JSON.stringify({
-                        type: 'introduction_state_updated',
-                        introduction_state: this.introductionState,
-                        timestamp: Date.now()
-                      }));
-                    }
-                  }
-                })
-                .catch((error) => {
-                  console.error('Error in introduction-state callback (early):', error);
-                });
-            }
+          string: async (data: string) => {
+            await handleString(data, handlerContext);
           },
           
           // non streaming LLM response
           Content: async (content: GraphTypes.Content) => {
-            console.log('VAD Processing LLM Content...');
-            console.log(content)
-            let llmResponse = '';
-            if (content.content) {
-              llmResponse = content.content;
-              console.log(`VAD Complete LLM Response: "${llmResponse}"`);
-              if (this.websocket) {
-                this.websocket.send(JSON.stringify({
-                  type: 'llm_response_complete',
-                  text: llmResponse,
-                  timestamp: Date.now()
-                }));
-              }
-              // Now update conversation state with both user and assistant messages
-              // Add user message first (it wasn't added earlier to avoid duplication)
-              this.conversationState.messages.push({
-                role: 'user',
-                content: transcription.trim(),
-                timestamp: new Date().toISOString()
-              });
-              // Then add assistant message
-              this.conversationState.messages.push({
-                role: 'assistant',
-                content: llmResponse.trim(),
-                timestamp: new Date().toISOString()
-              });
-              this.trimConversationHistory(40);
-              console.log('Updated conversation state with full exchange');
-              
-              // Trigger flashcard generation after updating conversation state
-              if (transcription && llmResponse) {
-                console.log('Triggering flashcard generation after Content response');
-                
-                // Send conversation update to frontend
-                if (this.websocket) {
-                  this.websocket.send(JSON.stringify({
-                    type: 'conversation_update',
-                    messages: this.conversationState.messages,
-                    timestamp: Date.now()
-                  }));
-                }
-                
-                // Generate flashcards - fire and forget
-                if (this.flashcardCallback) {
-                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                  }));
-                  
-                  this.flashcardCallback(recentMessages).catch(error => {
-                    console.error('Error in flashcard generation callback:', error);
-                  });
-                }
-                
-                // Run introduction-state extraction while incomplete
-                const isIntroComplete = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
-                if (!isIntroComplete && this.introductionStateCallback) {
-                  const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                  }));
-                  
-                  this.introductionStateCallback(recentMessages)
-                    .then((state) => {
-                      if (state) {
-                        this.introductionState = state;
-                        if (this.websocket) {
-                          this.websocket.send(JSON.stringify({
-                            type: 'introduction_state_updated',
-                            introduction_state: this.introductionState,
-                            timestamp: Date.now()
-                          }));
-                        }
-                      }
-                    })
-                    .catch((error) => {
-                      console.error('Error in introduction-state callback:', error);
-                    });
-                }
-              }
-            }
+            await handleContent(content, handlerContext);
           },
 
           // Handle ContentStream (from LLM 2)
           ContentStream: async (streamIterator: GraphTypes.ContentStream) => {
-            console.log('VAD Processing LLM ContentStream...');
-            let currentLLMResponse = '';
-            for await (const streamChunk of streamIterator) {
-              if (streamChunk.text) {
-                currentLLMResponse += streamChunk.text;
-                // console.log('VAD LLM chunk:', streamChunk.text);
-                if (this.websocket) {
-                  this.websocket.send(JSON.stringify({
-                    type: 'llm_response_chunk',
-                    text: streamChunk.text,
-                    timestamp: Date.now()
-                  }));
-                }
-              }
-            }
-            if (currentLLMResponse.trim()) {
-              llmResponse = currentLLMResponse;
-              console.log(`VAD Complete LLM Response: "${llmResponse}"`);
-              if (this.websocket) {
-                this.websocket.send(JSON.stringify({
-                  type: 'llm_response_complete',
-                  text: llmResponse.trim(),
-                  timestamp: Date.now()
-                }));
-              }
-              // Now update conversation state with both user and assistant messages
-              // Add user message first (it wasn't added earlier to avoid duplication)
-              this.conversationState.messages.push({
-                role: 'user',
-                content: transcription.trim(),
-                timestamp: new Date().toISOString()
-              });
-              // Then add assistant message
-              this.conversationState.messages.push({
-                role: 'assistant',
-                content: llmResponse.trim(),
-                timestamp: new Date().toISOString()
-              });
-              this.trimConversationHistory(40);
-              console.log('Updated conversation state with full exchange');
-              
-              // Mark that we'll need to trigger flashcard generation after TTS completes
-              // We'll do this after all TTS chunks have been sent
-            }
+            await handleContentStream(streamIterator, handlerContext);
           },
           
           // Handle TTS output stream
           TTSOutputStream: async (ttsStreamIterator: GraphTypes.TTSOutputStream) => {
-            console.log('VAD Processing TTS audio stream...');
-            let isFirstChunk = true;
-            for await (const ttsChunk of ttsStreamIterator) {
-              if (ttsChunk.audio && ttsChunk.audio.data) {
-                // Log first chunk for latency tracking
-                if (isFirstChunk) {
-                  console.log('Sending first TTS chunk immediately');
-                }
-                
-                const audioData = new Float32Array(ttsChunk.audio.data);
-                const int16Array = new Int16Array(audioData.length);
-                for (let i = 0; i < audioData.length; i++) {
-                  int16Array[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32767));
-                }
-                const base64Audio = Buffer.from(int16Array.buffer).toString('base64');
-                
-                // Send immediately without buffering
-                this.websocket.send(JSON.stringify({
-                  type: 'audio_stream',
-                  audio: base64Audio,
-                  sampleRate: ttsChunk.audio.sampleRate || 16000,
-                  timestamp: Date.now(),
-                  text: ttsChunk.text || '',
-                  isFirstChunk: isFirstChunk
-                }));
-                
-                // Mark that we've sent the first chunk
-                isFirstChunk = false;
-              }
-            }
-            // Send completion signal for iOS
-            console.log('VAD TTS stream complete, sending completion signal');
-            this.websocket.send(JSON.stringify({
-              type: 'audio_stream_complete',
-              timestamp: Date.now()
-            }));
-            
-            // Now that TTS is complete, trigger flashcard generation and other post-processing
-            if (transcription && llmResponse) {
-              console.log('Triggering flashcard generation after TTS completion');
-              
-              // Send conversation update to frontend
-              if (this.websocket) {
-                this.websocket.send(JSON.stringify({
-                  type: 'conversation_update',
-                  messages: this.conversationState.messages,
-                  timestamp: Date.now()
-                }));
-              }
-              
-              // Generate flashcards - fire and forget
-              if (this.flashcardCallback) {
-                const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                  role: msg.role,
-                  content: msg.content
-                }));
-                
-                this.flashcardCallback(recentMessages).catch(error => {
-                  console.error('Error in flashcard generation callback:', error);
-                });
-              }
-
-              // Run introduction-state extraction while incomplete
-              const isIntroComplete = Boolean(this.introductionState?.name && this.introductionState?.level && this.introductionState?.goal);
-              if (!isIntroComplete && this.introductionStateCallback) {
-                const recentMessages = this.conversationState.messages.slice(-6).map(msg => ({
-                  role: msg.role,
-                  content: msg.content
-                }));
-                
-                this.introductionStateCallback(recentMessages)
-                  .then((state) => {
-                    if (state) {
-                      this.introductionState = state;
-                      if (this.websocket) {
-                        this.websocket.send(JSON.stringify({
-                          type: 'introduction_state_updated',
-                          introduction_state: this.introductionState,
-                          timestamp: Date.now()
-                        }));
-                      }
-                    }
-                  })
-                  .catch((error) => {
-                    console.error('Error in introduction-state callback:', error);
-                  });
-              }
-            }
+            await handleTTSOutputStream(ttsStreamIterator, handlerContext);
           },
           
           // Handle any other type
@@ -629,8 +397,11 @@ export class AudioProcessor {
         }
       }
 
-      if (transcription.trim()) {
-        return transcription;
+      // Update internal state from handler context
+      this.introductionState = handlerContext.introductionState;
+      
+      if (handlerContext.transcription.trim()) {
+        return handlerContext.transcription;
       }
 
     } catch (error) {
