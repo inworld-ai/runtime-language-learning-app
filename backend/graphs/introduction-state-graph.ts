@@ -100,7 +100,7 @@ export function createIntroductionStateGraph() {
   });
   const parserNode = new IntroductionStateParserNode({ id: 'introduction-state-parser' });
 
-  const executor = new GraphBuilder('introduction-state-graph')
+  const executor = new GraphBuilder({id: 'introduction-state-graph', enableRemoteConfig: true})
     .addNode(promptBuilderNode)
     .addNode(textToChatRequestNode)
     .addNode(llmNode)

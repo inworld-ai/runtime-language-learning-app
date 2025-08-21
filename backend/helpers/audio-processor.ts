@@ -183,6 +183,7 @@ export class AudioProcessor {
       () => this.getConversationState(),
       () => this.getIntroductionState()
     );
+    this.executor.visualize('conversation-graph.png');
     this.isReady = true;
     console.log('AudioProcessor: Initialization complete, ready for audio processing');
   }

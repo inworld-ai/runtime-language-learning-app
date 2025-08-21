@@ -4,8 +4,6 @@ import {
   ProcessContext, 
   ProxyNode, 
   RemoteLLMChatNode, 
-  RemoteSTTNode, 
-  RemoteTTSNode, 
   TextChunkingNode,
   MCPClientComponent,
   MCPCallToolNode,
@@ -35,7 +33,8 @@ function findNpxPath(): string {
   }
 }
 
-export function createConversationGraph(
+// Test version without STT/TTS for easier testing
+export function createTestConversationGraph(
   _config: ConversationGraphConfig,
   getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> },
   getIntroductionState: () => IntroductionState
@@ -77,7 +76,7 @@ export function createConversationGraph(
         reportToClient: true,
       });
       
-      console.log('✅ MCP Brave search component initialized in conversation graph');
+      console.log('✅ MCP Brave search component initialized in test graph');
     } catch (error) {
       console.error('❌ Failed to initialize MCP component:', error);
     }
@@ -88,20 +87,11 @@ export function createConversationGraph(
   // Store context between nodes
   let lastUserInput: string = '';
   let availableTools: any[] = [];
-  let firstLLMContent: GraphTypes.Content | null = null;
 
   // System prompt for Spanish learning with tools
   const SYSTEM_PROMPT_WITH_TOOLS = `You are a Spanish language learning assistant with access to web search tools.
-
-IMPORTANT: When a user explicitly asks you to search for something, use the brave_web_search tool, even if you haven't collected their onboarding information yet.
-Keywords that indicate search requests: "search", "find", "what's the weather", "latest", "recent", "current", "news about", etc.
-
-You have access to the brave_web_search tool for searching the internet. Use it when:
-- The user explicitly asks for a search
-- The user asks about current events, weather, or recent information
-- The user wants information that requires up-to-date data
-
-After using the tool, incorporate the results naturally into your Spanish teaching conversation.`;
+When a user asks a question that would benefit from current information (news, events, facts, etc.), use the brave_web_search tool.
+Always respond conversationally and incorporate Spanish naturally based on the user's level.`;
 
   // Custom node to combine user input with available tools
   class ToolsToLLMRequestNode extends CustomNode {
@@ -150,55 +140,51 @@ After using the tool, incorporate the results naturally into your Spanish teachi
     }
   }
 
-  // Custom node to convert LLM Content to ToolCallRequest for MCP
+  // Custom node to convert LLM response to tool calls
   class LLMResponseToToolCallsNode extends CustomNode {
     process(
       _context: ProcessContext,
       content: GraphTypes.Content
     ): GraphTypes.ToolCallRequest {
-      console.log('🔄 LLMResponseToToolCallsNode - Converting Content to ToolCallRequest');
-      
-      // Store the content for later use in final LLM request
-      firstLLMContent = content;
+      console.log('🔍 LLMResponseToToolCallsNode - Processing LLM response');
       
       if (content.toolCalls && content.toolCalls.length > 0) {
-        console.log('  🔧 Tool calls found:', content.toolCalls.map(tc => tc.name).join(', '));
-        return new GraphTypes.ToolCallRequest(content.toolCalls);
+        console.log('🔧 Tool calls found:', content.toolCalls.map(tc => tc.name).join(', '));
+      } else {
+        console.log('💭 No tool calls in response');
       }
       
-      console.log('  💭 No tool calls in response (should not reach here with conditional edge)');
-      return new GraphTypes.ToolCallRequest([]);
+      return new GraphTypes.ToolCallRequest(content.toolCalls || []);
     }
   }
 
-  // Custom node to transform tool call results into LLM request
-  class ToolCallToLLMRequestNode extends CustomNode {
+  // Custom node to build final response after tool execution
+  class ToolResultsToLLMRequestNode extends CustomNode {
     process(
       _context: ProcessContext,
+      llmContent: GraphTypes.Content,
+      storedQuery: string,
       toolResults: GraphTypes.ToolCallResponse
     ): GraphTypes.LLMChatRequest {
-      console.log('📊 ToolCallToLLMRequestNode - Building request with tool results');
+      console.log('📊 ToolResultsToLLMRequestNode - Building final request with tool results');
       
+      const conversationState = getConversationState();
       const introductionState = getIntroductionState();
 
-      // Build messages including the original context and tool results
+      // Build messages including tool results
       const messages: LLMMessageInterface[] = [
         { 
           role: 'system', 
           content: `You are a Spanish language learning assistant. The user's level is ${introductionState.level}.
 Provide a helpful, conversational response based on the search results. Incorporate Spanish naturally as appropriate for their level.` 
         },
-        { role: 'user', content: lastUserInput },  // Use stored user input
-      ];
-
-      // Add the assistant's tool call message if we have it
-      if (firstLLMContent) {
-        messages.push({
+        { role: 'user', content: storedQuery },
+        {
           role: 'assistant',
-          content: firstLLMContent.content || '',
-          toolCalls: firstLLMContent.toolCalls
-        });
-      }
+          content: llmContent.content || '',
+          toolCalls: llmContent.toolCalls
+        }
+      ];
 
       // Add tool results
       for (const result of toolResults.toolCallResults) {
@@ -216,13 +202,8 @@ Provide a helpful, conversational response based on the search results. Incorpor
   }
 
   // Create nodes
-  const sttNode = new RemoteSTTNode({
-    id: 'stt_node',
-    sttConfig: {},
-  });
-  
-  const proxyNode = new ProxyNode({ 
-    id: 'proxy_node', 
+  const inputNode = new ProxyNode({ 
+    id: 'input_node', 
     reportToClient: true 
   });
 
@@ -230,13 +211,13 @@ Provide a helpful, conversational response based on the search results. Incorpor
   const toolsToLLMRequestNode = new ToolsToLLMRequestNode({ 
     id: 'tools_to_llm_request_node' 
   });
-
+  
   const llmResponseToToolCallsNode = new LLMResponseToToolCallsNode({
     id: 'llm_response_to_tool_calls_node'
   });
 
-  const toolCallToLLMRequestNode = new ToolCallToLLMRequestNode({
-    id: 'tool_call_to_llm_request_node'
+  const toolResultsToLLMRequestNode = new ToolResultsToLLMRequestNode({
+    id: 'tool_results_to_llm_request_node'
   });
 
   // First LLM node (may generate tool calls)
@@ -244,7 +225,7 @@ Provide a helpful, conversational response based on the search results. Incorpor
     id: 'first_llm_node',
     provider: 'openai',
     modelName: 'gpt-4o-mini',
-    stream: false,  // Non-streaming to properly detect tool calls
+    stream: false,
     reportToClient: true,
     textGenerationConfig: {
       maxNewTokens: 250,
@@ -262,7 +243,7 @@ Provide a helpful, conversational response based on the search results. Incorpor
     id: 'final_llm_node',
     provider: 'openai',
     modelName: 'gpt-4o-mini',
-    stream: true,  // Stream the final response for better UX
+    stream: false,
     reportToClient: true,
     textGenerationConfig: {
       maxNewTokens: 250,
@@ -274,132 +255,70 @@ Provide a helpful, conversational response based on the search results. Incorpor
       presencePenalty: 0,
     }
   });
-  
-  const chunkerNode = new TextChunkingNode({ 
-    id: 'chunker_node' 
-  });
-
-  const chunkerFinalNode = new TextChunkingNode({ 
-    id: 'chunker_final_node' 
-  });
-  
-  const ttsNode = new RemoteTTSNode({
-    id: 'tts_node',
-    speakerId: 'Diego',
-    modelId: 'inworld-tts-1',
-    sampleRate: 16000,
-    speakingRate: 1,
-    temperature: 0.7,
-  });
-
-  const ttsFinalNode = new RemoteTTSNode({
-    id: 'tts_final_node',
-    speakerId: 'Diego',
-    modelId: 'inworld-tts-1',
-    sampleRate: 16000,
-    speakingRate: 1,
-    temperature: 0.7,
-  });
-
-  // Non-MCP flow nodes (simpler path when MCP is not available)
-  class SimplePromptBuilderNode extends CustomNode {
-    async process(_context: ProcessContext, userInput: string) {
-      console.log('📝 SimplePromptBuilderNode - Processing without MCP');
-      
-      const conversationState = getConversationState();
-      const introductionState = getIntroductionState();
-
-      const templateData = {
-        messages: conversationState.messages || [],
-        current_input: userInput,
-        introduction_state: introductionState || { name: '', level: '', goal: '' }
-      };
-
-      const renderedPrompt = await renderJinja(
-        conversationTemplate,
-        JSON.stringify(templateData),
-      );
-
-      return new GraphTypes.LLMChatRequest({
-        messages: [{ role: 'user', content: renderedPrompt }]
-      });
-    }
-  }
 
   // Build the graph
   const graphBuilder = new GraphBuilder({
-    id: 'conversation_graph',
+    id: 'test_conversation_graph',
     enableRemoteConfig: false
   });
 
   // Add MCP flow if available
   if (mcpListToolsNode && mcpCallToolNode) {
-    console.log('🚀 Building graph WITH MCP support');
+    console.log('🚀 Building test graph WITH MCP support');
     
     graphBuilder
       // Add all nodes
-      .addNode(sttNode)
-      .addNode(proxyNode)
+      .addNode(inputNode)
       .addNode(mcpListToolsNode)
       .addNode(toolsToLLMRequestNode)
       .addNode(firstLLMNode)
       .addNode(llmResponseToToolCallsNode)
       .addNode(mcpCallToolNode)
-      .addNode(toolCallToLLMRequestNode)
+      .addNode(toolResultsToLLMRequestNode)
       .addNode(finalLLMNode)
-      .addNode(chunkerNode)
-      .addNode(chunkerFinalNode)
-      .addNode(ttsNode)
-      .addNode(ttsFinalNode)
       
-      // Wire up the main flow
-      .addEdge(sttNode, proxyNode)
-      .addEdge(proxyNode, toolsToLLMRequestNode)
+      // Wire up the flow (following the example pattern)
+      .addEdge(inputNode, toolsToLLMRequestNode)
       .addEdge(mcpListToolsNode, toolsToLLMRequestNode)
       .addEdge(toolsToLLMRequestNode, firstLLMNode)
-      
-      // Conditional routing from firstLLMNode based on whether it has tool calls
-      // Path 1: If LLM returns tool calls, convert and execute them
-      .addEdge(firstLLMNode, llmResponseToToolCallsNode, {
-        condition: (content: GraphTypes.Content) => {
-          const hasToolCalls = !!(content && content.toolCalls && content.toolCalls.length > 0);
-          console.log(`🔀 Conditional edge (firstLLM → toolConverter): hasToolCalls=${hasToolCalls}`);
-          if (hasToolCalls) {
-            console.log(`   Tool calls: ${content.toolCalls.map(tc => tc.name).join(', ')}`);
-          }
-          return hasToolCalls;
-        },
-      })
-      
-      // Path 2: If LLM returns just content (no tools), go straight to chunker/TTS
-      .addEdge(firstLLMNode, chunkerNode, {
-        condition: (content: GraphTypes.Content) => {
-          const hasNoToolCalls = !content || !content.toolCalls || content.toolCalls.length === 0;
-          const hasContent = !!(content && content.content);
-          const shouldChunk = hasNoToolCalls && hasContent;
-          console.log(`🔀 Conditional edge (firstLLM → chunker): hasNoToolCalls=${hasNoToolCalls}, hasContent=${hasContent}, shouldChunk=${shouldChunk}`);
-          return shouldChunk;
-        },
-      })
-      
-      // Tool execution path
+      .addEdge(firstLLMNode, llmResponseToToolCallsNode)
       .addEdge(llmResponseToToolCallsNode, mcpCallToolNode)
-      .addEdge(mcpCallToolNode, toolCallToLLMRequestNode)
-      .addEdge(toolCallToLLMRequestNode, finalLLMNode)
-      .addEdge(finalLLMNode, chunkerFinalNode)
-      .addEdge(chunkerFinalNode, ttsFinalNode)
+      .addEdge(firstLLMNode, toolResultsToLLMRequestNode)
+      .addEdge(inputNode, toolResultsToLLMRequestNode)
+      .addEdge(mcpCallToolNode, toolResultsToLLMRequestNode)
+      .addEdge(toolResultsToLLMRequestNode, finalLLMNode)
       
-      // Direct path (no tools)
-      .addEdge(chunkerNode, ttsNode)
-      
-      // Set start nodes (STT and list tools)
-      .setStartNodes([sttNode, mcpListToolsNode])
-      // Set multiple end nodes
-      .setEndNodes([ttsNode, ttsFinalNode]);
+      // Set start nodes (input and list tools)
+      .setStartNodes([inputNode, mcpListToolsNode])
+      .setEndNode(finalLLMNode);
   } else {
     // Simpler flow without MCP
-    console.log('🚀 Building graph WITHOUT MCP support');
+    console.log('🚀 Building test graph WITHOUT MCP support');
     
+    class SimplePromptBuilderNode extends CustomNode {
+      async process(_context: ProcessContext, userInput: string) {
+        console.log('📝 SimplePromptBuilderNode - Processing without MCP');
+        
+        const conversationState = getConversationState();
+        const introductionState = getIntroductionState();
+
+        const templateData = {
+          messages: conversationState.messages || [],
+          current_input: userInput,
+          introduction_state: introductionState || { name: '', level: '', goal: '' }
+        };
+
+        const renderedPrompt = await renderJinja(
+          conversationTemplate,
+          JSON.stringify(templateData),
+        );
+
+        return new GraphTypes.LLMChatRequest({
+          messages: [{ role: 'user', content: renderedPrompt }]
+        });
+      }
+    }
+
     const simplePromptBuilderNode = new SimplePromptBuilderNode({
       id: 'simple_prompt_builder_node'
     });
@@ -408,7 +327,7 @@ Provide a helpful, conversational response based on the search results. Incorpor
       id: 'simple_llm_node',
       provider: 'openai',
       modelName: 'gpt-4o-mini',
-      stream: true,
+      stream: false,
       reportToClient: true,
       textGenerationConfig: {
         maxNewTokens: 250,
@@ -422,19 +341,13 @@ Provide a helpful, conversational response based on the search results. Incorpor
     });
 
     graphBuilder
-      .addNode(sttNode)
-      .addNode(proxyNode)
+      .addNode(inputNode)
       .addNode(simplePromptBuilderNode)
       .addNode(simpleLLMNode)
-      .addNode(chunkerNode)
-      .addNode(ttsNode)
-      .setStartNode(sttNode)
-      .addEdge(sttNode, proxyNode)
-      .addEdge(proxyNode, simplePromptBuilderNode)
+      .setStartNode(inputNode)
+      .addEdge(inputNode, simplePromptBuilderNode)
       .addEdge(simplePromptBuilderNode, simpleLLMNode)
-      .addEdge(simpleLLMNode, chunkerNode)
-      .addEdge(chunkerNode, ttsNode)
-      .setEndNode(ttsNode);
+      .setEndNode(simpleLLMNode);
   }
 
   return graphBuilder.build();

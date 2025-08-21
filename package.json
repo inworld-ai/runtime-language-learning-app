@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --loader ts-node/esm backend/server.ts",
     "dev": "npx nodemon --exec \"node --loader ts-node/esm backend/server.ts\" --ext ts",
-    "test-stt": "node --loader ts-node/esm backend/test-stt.ts"
+    "test-stt": "node --loader ts-node/esm backend/test-stt.ts",
+    "test-mcp": "node --loader ts-node/esm backend/test-mcp.ts"
   },
   "author": "Inworld AI",
   "license": "MIT",
