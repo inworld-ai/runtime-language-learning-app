@@ -84,8 +84,10 @@ export class MCPManager {
 
     for (const [serverId, cfg] of this.configs.entries()) {
       try {
+        console.log(`[MCP] Starting server '${serverId}' with endpoint: ${cfg.endpoint}`);
+        const componentId = `${serverId}_mcp_component_${Date.now()}`; // Add timestamp to ensure uniqueness
         const component = new MCPClientComponent({
-          id: `${serverId}_mcp_component`,
+          id: componentId,
           sessionConfig: {
             transport: cfg.transport,
             endpoint: cfg.endpoint,
@@ -98,7 +100,9 @@ export class MCPManager {
           },
         });
         this.components.set(serverId, component);
-        console.log(`✅ MCP component started: ${serverId}`);
+        console.log(`✅ MCP component started: ${serverId} with ID: ${componentId}`);
+        console.log(`   Endpoint: ${cfg.endpoint}`);
+        console.log(`   Environment:`, cfg.env ? Object.keys(cfg.env) : 'none');
       } catch (error) {
         console.error(`❌ Failed to start MCP component: ${serverId}`, error);
       }
@@ -134,6 +138,7 @@ export class MCPManager {
     const component = this.getComponent(serverId);
     if (!component) return null;
 
+    console.log(`[MCPManager] Creating list node for ${serverId} with component ID: ${component.id}`);
     const list = new MCPListToolsNode({
       id: opts?.listId || `${serverId}_mcp_list_tools_node`,
       mcpComponent: component,
@@ -143,8 +148,10 @@ export class MCPManager {
     const call = new MCPCallToolNode({
       id: opts?.callId || `${serverId}_mcp_call_tool_node`,
       mcpComponent: component,
-      reportToClient: opts?.reportCallToClient ?? true,
+      reportToClient: opts?.reportCallToClient ?? true,  // Default to true like in working version
     });
+
+    console.log(`[MCPManager] Created nodes for ${serverId}: list(reportToClient=${opts?.reportListToClient ?? false}), call(reportToClient=${opts?.reportCallToClient ?? false})`);
 
     return { list, call };
   }
