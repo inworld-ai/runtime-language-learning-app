@@ -1,7 +1,7 @@
 import { MCPClientComponent, MCPListToolsNode, MCPCallToolNode } from '@inworld/runtime/graph';
 import { execSync } from 'child_process';
 
-export type MCPServerId = 'brave';
+export type MCPServerId = string;
 
 interface MCPServerConfig {
   serverId: MCPServerId;
@@ -54,6 +54,23 @@ export class MCPManager {
         };
         this.configs.set('brave', config);
       }
+
+      // Weather (AccuWeather) server via @timlukahorstmann/mcp-weather
+      const weatherDisabled = process.env.MCP_WEATHER_DISABLE === 'true';
+      const accuweatherKey = process.env.ACCUWEATHER_API_KEY;
+      if (!weatherDisabled && accuweatherKey) {
+        const npxPath = findNpxPath();
+        const endpoint = `${npxPath} -y @timlukahorstmann/mcp-weather`;
+        const config: MCPServerConfig = {
+          serverId: 'weather',
+          transport: 'stdio',
+          endpoint,
+          env: {
+            ACCUWEATHER_API_KEY: accuweatherKey,
+          },
+        };
+        this.configs.set('weather', config);
+      }
     } catch (err) {
       console.error('❌ MCP initFromEnv failed:', err);
     } finally {
@@ -93,6 +110,11 @@ export class MCPManager {
   static isEnabled(serverId: MCPServerId): boolean {
     this.initFromEnv();
     return this.configs.has(serverId);
+  }
+
+  static getEnabledServerIds(): MCPServerId[] {
+    this.initFromEnv();
+    return Array.from(this.configs.keys());
   }
 
   static getComponent(serverId: MCPServerId): MCPClientComponent | null {

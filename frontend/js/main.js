@@ -75,6 +75,7 @@ class App {
     
     setupEventListeners() {
         const micButton = document.getElementById('micButton');
+        const textInput = document.getElementById('textInput');
         
         // Check for iOS
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -102,6 +103,30 @@ class App {
                 }
                 lastTouchEnd = now;
             }, false);
+        }
+
+        if (textInput) {
+            textInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const value = textInput.value.trim();
+                    if (value) {
+                        // Stop recording if active
+                        if (this.state.isRecording) {
+                            this.audioHandler.stopStreaming();
+                            this.state.isRecording = false;
+                            this.state.currentTranscript = '';
+                        }
+                        // Send to backend as text_input
+                        this.wsClient.send({ type: 'text_input', text: value });
+                        // Show pending transcript immediately for UX parity
+                        this.state.pendingTranscription = value;
+                        this.state.streamingLLMResponse = '';
+                        this.render();
+                        // Clear input
+                        textInput.value = '';
+                    }
+                }
+            });
         }
         
         this.wsClient.on('connection', (status) => {

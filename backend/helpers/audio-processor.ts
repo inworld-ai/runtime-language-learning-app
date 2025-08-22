@@ -47,6 +47,85 @@ export class AudioProcessor {
     }
   }
 
+  // Public method to process direct text input (bypasses STT)
+  async processTextInput(text: string): Promise<void> {
+    try {
+      if (!this.executor) {
+        console.warn('Executor not ready yet');
+        return;
+      }
+
+      // Update transcription state and notify frontend like STT would
+      const transcription = text.trim();
+      const handlerContext = new HandlerContextImpl(
+        this.websocket,
+        this.conversationState,
+        this.introductionState,
+        Date.now(),
+        this.flashcardCallback,
+        this.introductionStateCallback,
+        (maxTurns: number) => this.trimConversationHistory(maxTurns)
+      );
+      handlerContext.updateTranscription(transcription);
+      handlerContext.sendWebSocketMessage({
+        type: 'transcription',
+        text: transcription,
+        timestamp: Date.now()
+      });
+
+      // Build user context similar to audio path
+      const attributes: Record<string, string> = {
+        timezone: this.clientTimezone || '',
+      };
+      attributes.name = (this.introductionState?.name && this.introductionState.name.trim()) || 'unknown';
+      attributes.level = (this.introductionState?.level && (this.introductionState.level as string)) || 'unknown';
+      attributes.goal = (this.introductionState?.goal && this.introductionState.goal.trim()) || 'unknown';
+      const targetingKey = this.targetingKey || uuidv4();
+      const userContext = new UserContext(attributes, targetingKey);
+
+      // Start graph with text input via input_router_node
+      let outputStream;
+      this.graphStartTime = Date.now();
+      try {
+        outputStream = await this.executor.start(transcription, uuidv4(), userContext, 'input_router_node');
+      } catch (err) {
+        console.warn('Executor.start(text) with UserContext failed, falling back without context:', err);
+        outputStream = await this.executor.start(transcription, uuidv4(), undefined, 'input_router_node');
+      }
+
+      this.currentOutputStream = outputStream;
+      for await (const chunk of outputStream) {
+        await chunk.processResponse({
+          string: async (data: string) => {
+            // When starting from text, we already sent transcription; still update internal state
+            await handleString(data, handlerContext);
+          },
+          Content: async (content: GraphTypes.Content) => {
+            await handleContent(content, handlerContext);
+          },
+          ContentStream: async (streamIterator: GraphTypes.ContentStream) => {
+            await handleContentStream(streamIterator, handlerContext);
+          },
+          TTSOutputStream: async (ttsStreamIterator: GraphTypes.TTSOutputStream) => {
+            await handleTTSOutputStream(ttsStreamIterator, handlerContext);
+          },
+          ToolCallResponse: async (toolResponse: GraphTypes.ToolCallResponse) => {
+            await handleToolCallResponse(toolResponse, handlerContext);
+          },
+          default: (data: any) => {
+            console.log(`TextInput Unknown/unhandled chunk type: ${chunk.typeName}`, data);
+          }
+        });
+      }
+
+      this.introductionState = handlerContext.introductionState;
+    } catch (error) {
+      console.error('Error processing text input:', error);
+    } finally {
+      this.currentOutputStream = null;
+    }
+  }
+
   private setupWebSocketMessageHandler() {
     if (this.websocket) {
       this.websocket.on('message', (data: any) => {
@@ -330,12 +409,15 @@ export class AudioProcessor {
           audioInput,
           uuidv4(),
           userContext,
+          'input_router_node'
         );
       } catch (err) {
         console.warn('Executor.start with UserContext failed, falling back without context:', err);
         outputStream = await this.executor.start(
           audioInput,
           uuidv4(),
+          undefined,
+          'input_router_node'
         );
       }
 

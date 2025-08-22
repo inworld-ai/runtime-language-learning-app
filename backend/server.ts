@@ -171,6 +171,15 @@ wss.on('connection', (ws) => {
                 catch (err) {
                     console.error('Error recording flashcard click metric:', err);
                 }
+            } else if (message.type === 'text_input') {
+                const text = (message.text && typeof message.text === 'string') ? message.text : '';
+                if (text && text.trim()) {
+                    try {
+                        audioProcessor.processTextInput(text.trim());
+                    } catch (err) {
+                        console.error('Error processing text input:', err);
+                    }
+                }
             } else {
                 console.log('Received non-audio message:', message.type);
             }
