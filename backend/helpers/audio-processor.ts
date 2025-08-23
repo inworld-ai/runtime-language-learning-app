@@ -17,6 +17,8 @@ const AUDIO_DEBUG_DIR = path.join(process.cwd(), 'backend', 'audio');
 
 export class AudioProcessor {
   private executor: any;
+  private textGraphExecutor: any;
+  private audioGraphExecutor: any;
   private vad: SileroVAD | null = null;
   private isProcessing = false;
   private isProcessingCancelled = false;  // Track if current processing should be cancelled
@@ -50,8 +52,10 @@ export class AudioProcessor {
   // Public method to process direct text input (bypasses STT)
   async processTextInput(text: string): Promise<void> {
     try {
+      // Use text graph for text input
+      this.executor = this.textGraphExecutor;
       if (!this.executor) {
-        console.warn('Executor not ready yet');
+        console.warn('Text executor not ready yet');
         return;
       }
 
@@ -83,14 +87,14 @@ export class AudioProcessor {
       const targetingKey = this.targetingKey || uuidv4();
       const userContext = new UserContext(attributes, targetingKey);
 
-      // Start graph with text input via input_router_node
+      // For text graph, send text to the text_input_node
       let outputStream;
       this.graphStartTime = Date.now();
       try {
-        outputStream = await this.executor.start(transcription, uuidv4(), userContext, 'input_router_node');
+        outputStream = await this.executor.start(transcription, uuidv4(), userContext, 'text_input_node');
       } catch (err) {
         console.warn('Executor.start(text) with UserContext failed, falling back without context:', err);
-        outputStream = await this.executor.start(transcription, uuidv4(), undefined, 'input_router_node');
+        outputStream = await this.executor.start(transcription, uuidv4(), undefined, 'text_input_node');
       }
 
       this.currentOutputStream = outputStream;
@@ -263,14 +267,61 @@ export class AudioProcessor {
     
     // Initialize conversation graph
     console.log('AudioProcessor: Creating conversation graph...');
-    this.executor = createConversationGraph(
-      { apiKey: this.apiKey },
-      () => this.getConversationState(),
-      () => this.getIntroductionState()
-    );
-    this.executor.visualize('conversation-graph.png');
-    this.isReady = true;
-    console.log('AudioProcessor: Initialization complete, ready for audio processing');
+    // Create both graphs for testing
+    try {
+      console.log('Creating TEXT graph...');
+      this.textGraphExecutor = createConversationGraph(
+        { apiKey: this.apiKey, withAudioInput: false },
+        () => this.getConversationState(),
+        () => this.getIntroductionState()
+      );
+      
+      console.log('Creating AUDIO graph...');
+      this.audioGraphExecutor = createConversationGraph(
+        { apiKey: this.apiKey, withAudioInput: true },
+        () => this.getConversationState(),
+        () => this.getIntroductionState()
+      );
+      
+      // Visualize both graphs
+      console.log('Visualizing graphs...');
+      this.textGraphExecutor.visualize('conversation-graph-text.png');
+      this.audioGraphExecutor.visualize('conversation-graph-audio.png');
+      
+      // Default to text graph
+      this.executor = this.textGraphExecutor;
+      
+      this.isReady = true;
+      console.log('AudioProcessor: Initialization complete, ready for text processing');
+    } catch (error) {
+      console.error('Failed to create conversation graph:', error);
+      throw error;
+    }
+  }
+  
+  // Method to enable audio processing (creates audio graph if needed)
+  async enableAudioProcessing(): Promise<void> {
+    if (!this.audioGraphExecutor) {
+      console.log('Creating AUDIO graph for microphone input...');
+      try {
+        this.audioGraphExecutor = createConversationGraph(
+          { apiKey: this.apiKey, withAudioInput: true },
+          () => this.getConversationState(),
+          () => this.getIntroductionState()
+        );
+        
+        // Visualize audio graph
+        console.log('Visualizing audio graph...');
+        this.audioGraphExecutor.visualize('conversation-graph-audio.png');
+        
+        console.log('Audio graph created successfully');
+      } catch (error) {
+        console.error('Failed to create audio graph:', error);
+        throw error;
+      }
+    } else {
+      console.log('Audio graph already exists');
+    }
   }
 
   addAudioChunk(base64Audio: string) {
@@ -377,19 +428,54 @@ export class AudioProcessor {
       return;
     }
     
+    // Check if audio graph is available
+    if (!this.audioGraphExecutor) {
+      console.warn('Audio graph not created yet. Call enableAudioProcessing() first.');
+      return;
+    }
+    
+    // Check minimum audio length (at least 0.5 seconds at 16kHz)
+    const minSamples = 16000 * 0.5;
+    if (speechSegment.length < minSamples) {
+      console.log(`Audio segment too short: ${speechSegment.length} samples (min: ${minSamples})`);
+      return;
+    }
+    
+    // Log audio segment details
+    console.log(`🎤 Processing audio segment: ${speechSegment.length} samples (${(speechSegment.length / 16000).toFixed(2)}s)`);
+    
+    // Check audio content (not just silence)
+    const maxAmplitude = Math.max(...speechSegment.map(Math.abs));
+    const avgAmplitude = speechSegment.reduce((sum, val) => sum + Math.abs(val), 0) / speechSegment.length;
+    console.log(`📊 Audio stats: max amplitude=${maxAmplitude.toFixed(4)}, avg amplitude=${avgAmplitude.toFixed(4)}`);
+    
     this.isProcessing = true;
 
     try {
-      const amplifiedSegment = this.amplifyAudio(speechSegment, 2.0);
+      // Use audio graph for audio input
+      this.executor = this.audioGraphExecutor;
+      
+      const amplifiedSegment = this.amplifyAudio(speechSegment, 2.0);  // Increased from 2.0 to 4.0
 
       // Save debug audio before sending to STT
       // await this.saveAudioDebug(amplifiedSegment, 'vad-segment');
 
-      // Create Audio instance for STT node
+      // Log amplified audio stats
+      const amplifiedMax = Math.max(...amplifiedSegment.map(Math.abs));
+      const amplifiedAvg = amplifiedSegment.reduce((sum, val) => sum + Math.abs(val), 0) / amplifiedSegment.length;
+      console.log(`🔊 Amplified audio: max=${amplifiedMax.toFixed(4)}, avg=${amplifiedAvg.toFixed(4)}`);
+      
+      // For audio graph, create GraphTypes.Audio and send to STT node
       const audioInput = new GraphTypes.Audio({
         data: Array.from(amplifiedSegment),
         sampleRate: 16000,
       });
+      
+      console.log(`🎯 Sending audio to STT node: ${audioInput.data.length} samples at ${audioInput.sampleRate}Hz`);
+      console.log(`📐 Audio format check:`);
+      console.log(`  - Is Array: ${Array.isArray(audioInput.data)}`);
+      console.log(`  - First 5 samples: ${audioInput.data.slice(0, 5).map(v => v.toFixed(4)).join(', ')}`);
+      console.log(`  - GraphTypes.Audio instance: ${audioInput instanceof GraphTypes.Audio}`);
 
       // Build user context for experiments
       const attributes: Record<string, string> = {
@@ -409,7 +495,7 @@ export class AudioProcessor {
           audioInput,
           uuidv4(),
           userContext,
-          'input_router_node'
+          'stt_node'  // Start at STT node for audio graph
         );
       } catch (err) {
         console.warn('Executor.start with UserContext failed, falling back without context:', err);
@@ -417,7 +503,7 @@ export class AudioProcessor {
           audioInput,
           uuidv4(),
           undefined,
-          'input_router_node'
+          'stt_node'  // Start at STT node for audio graph
         );
       }
 

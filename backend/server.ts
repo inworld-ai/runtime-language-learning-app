@@ -134,11 +134,15 @@ wss.on('connection', (ws) => {
         }
     });
     
-    ws.on('message', (data) => {
+    ws.on('message', async (data) => {
         try {
             const message = JSON.parse(data.toString());
             
-            if (message.type === 'audio_chunk' && message.audio_data) {
+            if (message.type === 'enable_audio') {
+                // Enable audio processing (creates audio graph if needed)
+                await audioProcessor.enableAudioProcessing();
+                ws.send(JSON.stringify({ type: 'audio_enabled', success: true }));
+            } else if (message.type === 'audio_chunk' && message.audio_data) {
                 // Process audio chunk
                 audioProcessor.addAudioChunk(message.audio_data);
             } else if (message.type === 'reset_flashcards') {

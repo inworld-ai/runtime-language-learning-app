@@ -301,12 +301,33 @@ class App {
     async toggleStreaming() {
         if (!this.state.isRecording) {
             try {
+                console.log('Starting audio streaming...');
+                
+                // Start streaming first to get microphone permissions
                 await this.audioHandler.startStreaming();
+                
+                // Then enable audio processing on the server (creates audio graph if needed)
+                console.log('Enabling audio processing on server...');
+                this.wsClient.send({
+                    type: 'enable_audio'
+                });
                 this.state.isRecording = true;
                 this.state.currentTranscript = 'Listening...';
+                console.log('Audio streaming started successfully');
             } catch (error) {
-                console.error('Failed to start streaming:', error);
-                alert('Microphone access denied. Please enable microphone permissions.');
+                console.error('Failed to start streaming - Full error:', error);
+                console.error('Error name:', error.name);
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                
+                // More specific error messages
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    alert('Microphone access denied. Please enable microphone permissions in your browser settings.');
+                } else if (error.name === 'NotFoundError') {
+                    alert('No microphone found. Please connect a microphone and try again.');
+                } else {
+                    alert(`Failed to start microphone: ${error.message || error}`);
+                }
                 return;
             }
         } else {

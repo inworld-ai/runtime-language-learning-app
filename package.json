@@ -22,7 +22,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@inworld/runtime": "^0.5.1",
+    "@inworld/runtime": "^0.5.2",
     "anki-apkg-export": "^4.0.3",
     "dotenv": "^17.2.1",
     "express": "^4.19.2",

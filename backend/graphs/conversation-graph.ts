@@ -11,6 +11,8 @@ import {
   MCPListToolsNode,
   GraphTypes
 } from '@inworld/runtime/graph';
+
+
 import { LLMMessageInterface } from '@inworld/runtime';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { conversationTemplate } from '../helpers/prompt-templates.ts';
@@ -19,10 +21,11 @@ import { MCPManager } from '../helpers/mcp.ts';
 
 export interface ConversationGraphConfig {
   apiKey: string;
+  withAudioInput?: boolean; // Add flag to determine graph type
 }
 
 export function createConversationGraph(
-  _config: ConversationGraphConfig,
+  config: ConversationGraphConfig,
   getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> },
   getIntroductionState: () => IntroductionState
 ) {
@@ -59,6 +62,8 @@ export function createConversationGraph(
   // Global accumulators to avoid relying on `this` in custom node methods
   const aggregatedSeenTools: Set<string> = new Set();
   let aggregatedToolsArray: any[] = [];
+
+
 
   // Custom node to combine user input with available tools
   class ToolsToLLMRequestNode extends CustomNode {
@@ -307,18 +312,41 @@ export function createConversationGraph(
     }
   }
 
-  // Create nodes
-  const sttNode = new RemoteSTTNode({
-    id: 'stt_node',
-    sttConfig: {},
-  });
-  // Input router that conditionally forwards Audio to STT or string to proxy
-  const inputRouterNode = new ProxyNode({ id: 'input_router_node', reportToClient: false });
+  // Create nodes based on input type
+  const sttNode = config.withAudioInput ? new RemoteSTTNode({ 
+    id: 'stt_node', 
+    sttConfig: {
+      languageCode: 'en-US'
+    },
+    reportToClient: false  // Don't report directly, use proxy instead
+  }) : null;
   
-  const proxyNode = new ProxyNode({ 
-    id: 'proxy_node', 
-    reportToClient: true 
-  });
+  // Debug node to inspect STT output
+  class STTDebugNode extends CustomNode {
+    process(_context: ProcessContext, input: any) {
+      console.log('🔍 STT Output Debug:');
+      console.log('  Type:', typeof input);
+      console.log('  Value:', input);
+      if (input && typeof input === 'object') {
+        console.log('  Keys:', Object.keys(input));
+        console.log('  Content:', (input as any).content);
+        console.log('  Text:', (input as any).text);
+      }
+      return input;  // Pass through
+    }
+  }
+  
+  // ProxyNode to report STT transcription to client
+  const sttProxyNode = config.withAudioInput ? new ProxyNode({
+    id: 'stt_proxy_node',
+    reportToClient: true  // Report transcription to client
+  }) : null;
+  
+  const sttDebugNode = config.withAudioInput ? new STTDebugNode({
+    id: 'stt_debug_node'
+  }) : null;
+  
+  const textInputNode = !config.withAudioInput ? new ProxyNode({ id: 'text_input_node', reportToClient: false }) : null;
 
   // Nodes for MCP flow
   const toolsToLLMRequestNode = new ToolsToLLMRequestNode({ 
@@ -398,26 +426,35 @@ export function createConversationGraph(
   // Add MCP flow if available
   if (haveAnyMCP) {
     console.log('🚀 Building graph WITH MCP support');
+    console.log(`📊 Graph mode: ${config.withAudioInput ? 'AUDIO input' : 'TEXT input'}`);
     
+    // Add common nodes
     graphBuilder
-      // Add all nodes
-      .addNode(sttNode)
-      .addNode(inputRouterNode)
-      .addNode(proxyNode)
       .addNode(aggregateToolsNode)
       .addNode(toolsToLLMRequestNode)
       .addNode(firstLLMNode)
       .addNode(llmResponseToToolCallsNode)
       .addNode(chunkerNode)
-      .addNode(ttsNode)
-      // Start tools aggregation
-      .addEdge(inputRouterNode, sttNode, {
-        condition: (input: any) => input instanceof GraphTypes.Audio,
-      })
-      .addEdge(inputRouterNode, proxyNode, {
-        condition: (input: any) => typeof input === 'string',
-      })
-      .addEdge(proxyNode, toolsToLLMRequestNode)
+      .addNode(ttsNode);
+    
+    if (config.withAudioInput && sttNode && sttProxyNode && sttDebugNode) {
+      // Audio input graph: audio -> STT -> debug -> proxy (reports to client) -> toolsToLLMRequest
+      graphBuilder
+        .addNode(sttNode)
+        .addNode(sttDebugNode)
+        .addNode(sttProxyNode)
+        .addEdge(sttNode, sttDebugNode)
+        .addEdge(sttDebugNode, sttProxyNode)
+        .addEdge(sttProxyNode, toolsToLLMRequestNode);
+    } else if (textInputNode) {
+      // Text input graph: textInput -> toolsToLLMRequest
+      graphBuilder
+        .addNode(textInputNode)
+        .addEdge(textInputNode, toolsToLLMRequestNode);
+    }
+    
+    // Common edges
+    graphBuilder
       .addEdge(aggregateToolsNode, toolsToLLMRequestNode)
       .addEdge(toolsToLLMRequestNode, firstLLMNode)
       
@@ -447,13 +484,15 @@ export function createConversationGraph(
       })
       
       // Direct path (no tools)
-      .addEdge(chunkerNode, ttsNode)
+      .addEdge(chunkerNode, ttsNode);
       
-      // Set start nodes (STT and list tools)
-      .setStartNodes([sttNode]);
-
     // Add and wire per-server list and call nodes
-    const startNodes: any[] = [inputRouterNode];
+    const startNodes: any[] = [];
+    if (config.withAudioInput && sttNode) {
+      startNodes.push(sttNode);
+    } else if (textInputNode) {
+      startNodes.push(textInputNode);
+    }
     
     // Create all record nodes first to ensure they're distinct
     const recordNodes: Record<string, CustomNode> = {};
@@ -572,22 +611,43 @@ export function createConversationGraph(
       }
     });
 
+    // Build graph based on input type
+    if (config.withAudioInput && sttNode && sttProxyNode && sttDebugNode) {
+      // Audio input graph with proxy for transcription reporting
+      graphBuilder
+        .addNode(sttNode)
+        .addNode(sttDebugNode)
+        .addNode(sttProxyNode)
+        .addNode(simplePromptBuilderNode)
+        .addNode(simpleLLMNode)
+        .addNode(chunkerNode)
+        .addNode(ttsNode)
+        .setStartNode(sttNode)
+        .addEdge(sttNode, sttDebugNode)
+        .addEdge(sttDebugNode, sttProxyNode)
+        .addEdge(sttProxyNode, simplePromptBuilderNode);
+    } else if (textInputNode) {
+      // Text input graph - need a proxy node to receive text
+      graphBuilder
+        .addNode(textInputNode)
+        .addNode(simplePromptBuilderNode)
+        .addNode(simpleLLMNode)
+        .addNode(chunkerNode)
+        .addNode(ttsNode)
+        .setStartNode(textInputNode)
+        .addEdge(textInputNode, simplePromptBuilderNode);
+    } else {
+      // Fallback
+      graphBuilder
+        .addNode(simplePromptBuilderNode)
+        .addNode(simpleLLMNode)
+        .addNode(chunkerNode)
+        .addNode(ttsNode)
+        .setStartNode(simplePromptBuilderNode);
+    }
+    
     graphBuilder
-      .addNode(sttNode)
-      .addNode(inputRouterNode)
-      .addNode(proxyNode)
-      .addNode(simplePromptBuilderNode)
-      .addNode(simpleLLMNode)
-      .addNode(chunkerNode)
-      .addNode(ttsNode)
-      .setStartNode(inputRouterNode)
-      .addEdge(inputRouterNode, sttNode, {
-        condition: (input: any) => input instanceof GraphTypes.Audio,
-      })
-      .addEdge(inputRouterNode, proxyNode, {
-        condition: (input: any) => typeof input === 'string',
-      })
-      .addEdge(proxyNode, simplePromptBuilderNode)
+      // Continue the flow
       .addEdge(simplePromptBuilderNode, simpleLLMNode)
       .addEdge(simpleLLMNode, chunkerNode)
       .addEdge(chunkerNode, ttsNode)
