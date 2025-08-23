@@ -258,6 +258,70 @@ export function createConversationGraph(
     return new RecordToolsNodeImpl({ id });
   }
 
+  // Factory: Creates the complete MCP processing subgraph for a server
+  interface MCPSubgraphNodes {
+    filterNode: CustomNode;
+    callNode: MCPCallToolNode;
+    toolCallToLLMNode: ToolCallToLLMRequestNode;
+    finalLLMNode: RemoteLLMChatNode;
+    chunkerFinalNode: TextChunkingNode;
+    ttsFinalNode: RemoteTTSNode;
+  }
+
+  function createMCPProcessingSubgraph(
+    serverId: string,
+    callNode: MCPCallToolNode
+  ): MCPSubgraphNodes {
+    console.log(`🔧 Creating MCP processing subgraph for server: ${serverId}`);
+    
+    // Create filter node for this server
+    const filterNode = createFilterToolCallsNode(serverId, `${serverId}_filter_tool_calls_node`);
+    
+    // Create dedicated processing nodes for this server's path
+    const toolCallToLLMNode = new ToolCallToLLMRequestNode({ 
+      id: `${serverId}_tool_call_to_llm_request_node` 
+    });
+    
+    const finalLLMNode = new RemoteLLMChatNode({
+      id: `${serverId}_final_llm_node`,
+      provider: 'openai',
+      modelName: 'gpt-4o-mini',
+      stream: true,
+      reportToClient: true,
+      textGenerationConfig: {
+        maxNewTokens: 250,
+        maxPromptLength: 2000,
+        repetitionPenalty: 1,
+        topP: 1,
+        temperature: 1,
+        frequencyPenalty: 0,
+        presencePenalty: 0,
+      }
+    });
+    
+    const chunkerFinalNode = new TextChunkingNode({ 
+      id: `${serverId}_chunker_final_node` 
+    });
+    
+    const ttsFinalNode = new RemoteTTSNode({
+      id: `${serverId}_tts_final_node`,
+      speakerId: 'Diego',
+      modelId: 'inworld-tts-1',
+      sampleRate: 16000,
+      speakingRate: 1,
+      temperature: 0.7,
+    });
+    
+    return {
+      filterNode,
+      callNode,
+      toolCallToLLMNode,
+      finalLLMNode,
+      chunkerFinalNode,
+      ttsFinalNode
+    };
+  }
+
 
   // Custom node to transform tool call results into LLM request
   class ToolCallToLLMRequestNode extends CustomNode {
@@ -517,57 +581,28 @@ export function createConversationGraph(
     // Collect all end nodes
     const endNodes = [ttsNode]; // Start with the non-tool path TTS
     
-    // Create separate path for each server to avoid conflicts
+    // Create separate path for each server using the factory function
     for (const serverId of Object.keys(perServerCallNodes)) {
-      const filterNode = createFilterToolCallsNode(serverId, `${serverId}_filter_tool_calls_node`);
       const callNode = perServerCallNodes[serverId];
       
-      // Create dedicated nodes for this server's path
-      const serverToolCallToLLMNode = new ToolCallToLLMRequestNode({ 
-        id: `${serverId}_tool_call_to_llm_request_node` 
-      });
-      const serverFinalLLMNode = new RemoteLLMChatNode({
-        id: `${serverId}_final_llm_node`,
-        provider: 'openai',
-        modelName: 'gpt-4o-mini',
-        stream: true,
-        reportToClient: true,
-        textGenerationConfig: {
-          maxNewTokens: 250,
-          maxPromptLength: 2000,
-          repetitionPenalty: 1,
-          topP: 1,
-          temperature: 1,
-          frequencyPenalty: 0,
-          presencePenalty: 0,
-        }
-      });
-      const serverChunkerFinalNode = new TextChunkingNode({ 
-        id: `${serverId}_chunker_final_node` 
-      });
-      const serverTtsFinalNode = new RemoteTTSNode({
-        id: `${serverId}_tts_final_node`,
-        speakerId: 'Diego',
-        modelId: 'inworld-tts-1',
-        sampleRate: 16000,
-        speakingRate: 1,
-        temperature: 0.7,
-      });
+      // Use factory to create the complete processing subgraph
+      const subgraph = createMCPProcessingSubgraph(serverId, callNode);
       
       // Add this server's TTS to end nodes
-      endNodes.push(serverTtsFinalNode);
+      endNodes.push(subgraph.ttsFinalNode);
       
+      // Add all nodes to the graph
       graphBuilder
-        .addNode(filterNode)
+        .addNode(subgraph.filterNode)
         .addNode(callNode)
-        .addNode(serverToolCallToLLMNode)
-        .addNode(serverFinalLLMNode)
-        .addNode(serverChunkerFinalNode)
-        .addNode(serverTtsFinalNode)
+        .addNode(subgraph.toolCallToLLMNode)
+        .addNode(subgraph.finalLLMNode)
+        .addNode(subgraph.chunkerFinalNode)
+        .addNode(subgraph.ttsFinalNode)
         // From LLM response to filter
-        .addEdge(llmResponseToToolCallsNode, filterNode)
+        .addEdge(llmResponseToToolCallsNode, subgraph.filterNode)
         // From filter to call (only if has matching tools)
-        .addEdge(filterNode, callNode, {
+        .addEdge(subgraph.filterNode, callNode, {
           condition: (request: GraphTypes.ToolCallRequest) => {
             const calls = (request as any).toolCalls || (request as any).tool_calls || [];
             const hasTools = Array.isArray(calls) && calls.length > 0;
@@ -577,11 +612,11 @@ export function createConversationGraph(
             return hasTools;
           },
         })
-        // Complete path for this server (like working version)
-        .addEdge(callNode, serverToolCallToLLMNode)
-        .addEdge(serverToolCallToLLMNode, serverFinalLLMNode)
-        .addEdge(serverFinalLLMNode, serverChunkerFinalNode)
-        .addEdge(serverChunkerFinalNode, serverTtsFinalNode);
+        // Complete path for this server
+        .addEdge(callNode, subgraph.toolCallToLLMNode)
+        .addEdge(subgraph.toolCallToLLMNode, subgraph.finalLLMNode)
+        .addEdge(subgraph.finalLLMNode, subgraph.chunkerFinalNode)
+        .addEdge(subgraph.chunkerFinalNode, subgraph.ttsFinalNode);
     }
     
     // Set all end nodes at once

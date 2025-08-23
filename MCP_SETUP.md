@@ -1,65 +1,109 @@
-# MCP (Model Context Protocol) Setup for Brave Search
+# MCP (Model Context Protocol) Setup
 
-This application now supports Brave search integration through MCP. When users ask questions like "search brave for mexican novellas coming out in 2025", the system will automatically perform a web search and incorporate the results into the conversation.
+This application supports multiple MCP servers. The system automatically detects and integrates available MCP servers based on your environment configuration.
 
-## Setup Instructions
+## Supported MCP Servers
 
-### 1. Get a Brave Search API Key
+### 1. Brave Search
+Web search integration for finding current information.
+
+**Setup:**
 1. Visit [Brave Search API](https://brave.com/search/api/)
 2. Sign up for a free account
 3. Create a new API key
+4. Add to `.env`: `BRAVE_API_KEY=your_brave_api_key_here`
 
-### 2. Configure Environment Variable
-Add your Brave API key to the `.env` file:
+### 2. Weather (AccuWeather)
+Weather information and forecasts.
+
+**Setup:**
+1. Visit [AccuWeather Developer](https://developer.accuweather.com/)
+2. Create a developer account
+3. Get your API key
+4. Add to `.env`: `ACCUWEATHER_API_KEY=your_accuweather_key_here`
+
+### 3. Exa Search
+Advanced neural search capabilities.
+
+**Setup:**
+1. Visit [Exa](https://exa.ai/)
+2. Sign up for an account
+3. Get your API key
+4. Add to `.env`: `EXA_API_KEY=your_exa_api_key_here`
+
+## Configuration
+
+### Environment Variables
+Add the API keys for the services you want to use to your `.env` file:
 ```
+# Brave Search
 BRAVE_API_KEY=your_brave_api_key_here
+
+# AccuWeather
+ACCUWEATHER_API_KEY=your_accuweather_key_here
+
+# Exa Search
+EXA_API_KEY=your_exa_api_key_here
+
+# Optional: Disable specific MCP servers
+# MCP_DISABLE=true           # Disable all MCP servers
+# MCP_BRAVE_DISABLE=true      # Disable only Brave
+# MCP_WEATHER_DISABLE=true    # Disable only Weather
+# MCP_EXA_DISABLE=true        # Disable only Exa
 ```
 
-### 3. Install Dependencies
-The MCP server for Brave search will be automatically downloaded when needed via npx.
-
-## Testing the Integration
-
-Run the test script to verify MCP is working:
-```bash
-npm run test-mcp
-```
-
-This will test various search query patterns and show you the results.
+### Automatic Installation
+MCP servers are automatically downloaded when needed via npx. No manual installation required!
 
 ## How It Works
 
-When a user's message contains search-related keywords and patterns, the system will:
-1. Detect the search intent
-2. Execute a Brave web search via MCP
-3. Format the search results
-4. Include them in the conversation context
-5. Generate a response based on the search results
+The system automatically:
+1. Detects available MCP servers based on environment variables
+2. Initializes connections to enabled servers
+3. Lists available tools from each server
+4. Routes tool calls to the appropriate server
+5. Processes results and integrates them into the conversation
 
-## Supported Query Patterns
+## Adding New MCP Servers
 
-The system recognizes various search patterns:
-- "search brave for [query]"
-- "brave search [query]"
-- "look up [query] on brave"
-- "find [query] on the web"
-- "search for [query]"
-- "what is [query] according to the web"
+To add a new MCP server:
+
+1. **Update `backend/helpers/mcp.ts`:**
+   - Add environment variable checks in `initFromEnv()`
+   - Configure the server endpoint and environment
+
+2. **Set Environment Variables:**
+   - Add the required API keys to `.env`
+   - Optionally add disable flags
+
+3. **Test:**
+   - Run `npm run test-mcp` to verify the integration
+   - The graph will automatically create processing subgraphs for new servers
+
+The system uses a factory pattern to automatically generate the processing pipeline for each MCP server, making it easy to add new integrations without modifying the core graph logic.
 
 ## Architecture
 
-- **mcp-processor.ts**: Handles MCP initialization, tool detection, and execution
-- **conversation-graph.ts**: Integrates MCP results into the conversation flow
-- **audio-processor.ts**: Initializes MCP during startup
+- **backend/helpers/mcp.ts**: Centralized MCP server management and configuration
+- **backend/graphs/conversation-graph.ts**: Dynamic graph construction with MCP integration
+  - `createMCPProcessingSubgraph()`: Factory function for creating server-specific processing pipelines
+  - Automatic routing of tool calls to appropriate servers
+  - Parallel processing of tool lists from multiple servers
 
 ## Troubleshooting
 
-If search is not working:
-1. Check that BRAVE_API_KEY is set in your .env file
+If MCP servers are not working:
+1. Check that the required API keys are set in your `.env` file
 2. Run `npm run test-mcp` to verify the integration
 3. Check console logs for any error messages
 4. Ensure npx is installed (`npm install -g npx`)
+5. Look for initialization messages like:
+   - `✅ MCP nodes initialized via MCPManager for server: [serverId]`
+   - `🔧 Enabled MCP servers: brave, weather, exa`
 
-## Note
+## Notes
 
-The MCP integration is optional. If no BRAVE_API_KEY is provided, the system will continue to work normally without search capabilities.
+- MCP integration is optional. The system works normally without any MCP servers configured.
+- Each MCP server is independent - you can enable any combination of servers.
+- The graph automatically adapts to available servers at runtime.
+- Tool calls are routed intelligently to the appropriate server based on tool names.

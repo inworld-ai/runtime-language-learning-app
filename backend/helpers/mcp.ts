@@ -71,6 +71,23 @@ export class MCPManager {
         };
         this.configs.set('weather', config);
       }
+
+      // Exa search server
+      const exaDisabled = process.env.MCP_EXA_DISABLE === 'true';
+      const exaKey = process.env.EXA_API_KEY;
+      if (!exaDisabled && exaKey) {
+        const npxPath = findNpxPath();
+        const endpoint = `${npxPath} -y exa-mcp-server`;
+        const config: MCPServerConfig = {
+          serverId: 'exa',
+          transport: 'stdio',
+          endpoint,
+          env: {
+            EXA_API_KEY: exaKey,
+          },
+        };
+        this.configs.set('exa', config);
+      }
     } catch (err) {
       console.error('❌ MCP initFromEnv failed:', err);
     } finally {
