@@ -1,6 +1,6 @@
 import { v4 } from 'uuid';
 import { createFlashcardGraph } from '../graphs/flashcard-graph.ts';
-import { UserContext } from '@inworld/runtime/graph';
+import { UserContextExternal as UserContext } from '@inworld/runtime/common';
 
 export interface Flashcard {
   id: string;
@@ -68,15 +68,19 @@ export class FlashcardProcessor {
         flashcards: this.existingFlashcards
       };
 
-      let outputStream;
+      let executionResult;
       try {
-        outputStream = await executor.start(input, v4(), userContext);
+        const executionContext = {
+          executionId: v4(),
+          userContext: userContext,
+        };
+        executionResult = await executor.start(input, executionContext);
       } catch (err) {
-        console.warn('Flashcard executor.start with UserContext failed, falling back without context:', err);
-        outputStream = await executor.start(input, v4());
+        console.warn('Flashcard executor.start with ExecutionContext failed, falling back without context:', err);
+        executionResult = await executor.start(input);
       }
       let finalData: any = null;
-      for await (const res of outputStream) {
+      for await (const res of executionResult.outputStream) {
         finalData = res.data;
       }
       const flashcard = finalData as Flashcard;

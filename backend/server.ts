@@ -13,7 +13,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { telemetry } from '@inworld/runtime';
 import { MetricType } from '@inworld/runtime/telemetry';
-import { UserContext } from '@inworld/runtime/graph';
+import { UserContextExternal as UserContext } from '@inworld/runtime/common';
 
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.ts';
