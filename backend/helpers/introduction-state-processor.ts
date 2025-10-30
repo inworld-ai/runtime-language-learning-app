@@ -59,9 +59,12 @@ export class IntroductionStateProcessor {
       console.log('IntroductionStateProcessor - Current state before update:', this.state);
       console.log('IntroductionStateProcessor - Messages for extraction:', messages);
 
-      const outputStream = await this.executor.start(input, uuidv4());
+      const executionContext = {
+        executionId: uuidv4(),
+      };
+      const executionResult = await this.executor.start(input, executionContext);
       let finalData: any = null;
-      for await (const res of outputStream) {
+      for await (const res of executionResult.outputStream) {
         finalData = res.data;
       }
       const parsed = finalData as IntroductionState;

@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GraphTypes } from '@inworld/runtime/common';
-import { UserContext } from '@inworld/runtime/graph';
+import { UserContextExternal as UserContext } from '@inworld/runtime/common';
 import { SileroVAD, VADConfig } from './silero-vad.js';
 import { createConversationGraph } from '../graphs/conversation-graph.js';
 import type { IntroductionState } from './introduction-state-processor.ts';
@@ -316,29 +316,26 @@ export class AudioProcessor {
       const targetingKey = this.targetingKey || uuidv4();
       const userContext = new UserContext(attributes, targetingKey);
       console.log(userContext)
-      let outputStream;
+      let executionResult;
       this.graphStartTime = Date.now();
       try {
-        outputStream = await this.executor.start(
-          audioInput,
-          uuidv4(),
-          userContext,
-        );
+        const executionContext = {
+          executionId: uuidv4(),
+          userContext: userContext,
+        };
+        executionResult = await this.executor.start(audioInput, executionContext);
       } catch (err) {
-        console.warn('Executor.start with UserContext failed, falling back without context:', err);
-        outputStream = await this.executor.start(
-          audioInput,
-          uuidv4(),
-        );
+        console.warn('Executor.start with ExecutionContext failed, falling back without context:', err);
+        executionResult = await this.executor.start(audioInput);
       }
 
       let transcription = '';
       let llmResponse = '';
 
       // Track the current output stream so it can be cancelled on interruption
-      this.currentOutputStream = outputStream;
+      this.currentOutputStream = executionResult.outputStream;
 
-      for await (const chunk of outputStream) {
+      for await (const chunk of executionResult.outputStream) {
         // Check if processing has been cancelled
         if (this.isProcessingCancelled) {
           console.log('Processing cancelled by user speech, breaking from loop');
