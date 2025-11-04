@@ -350,7 +350,13 @@ export class AudioProcessor {
           // Handle string output (from ProxyNode with STT transcription)
           string: (data: string) => {
             transcription = data;
+
+            if (transcription.trim() === '') {
+              return;
+            }
+
             console.log(`VAD STT Transcription (via ProxyNode): "${transcription}"`);
+
             if (this.websocket) {
               this.websocket.send(JSON.stringify({
                 type: 'transcription',
