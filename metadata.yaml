@@ -1,0 +1,69 @@
+# --------------------------------------------------------------------------------------------------------------------
+# Required input variables
+# --------------------------------------------------------------------------------------------------------------------
+
+# Description: Name of the template
+# Type: string
+name: Language Learning
+
+# Description: a description of the template
+# Type: string
+description: A language tutor that coaches you and creates flashcards
+
+# Description: the link to the readme of the template
+# Type: string
+# example: https://github.com/inworld-ai/runtime-multimodal-companion-node/blob/main/README.md
+readmeLink: https://github.com/inworld-ai/runtime-language-learning-app/blob/main/README.md
+
+# --------------------------------------------------------------------------------------------------------------------
+# Other input variables
+# --------------------------------------------------------------------------------------------------------------------
+
+# Description: the input modalities that the template supports
+# Type: array of strings, allowed values: text, audio, images, video
+inputModality:
+  - audio
+
+# Description: the output modalities that the template supports
+# Type: array of strings, allowed values: text, audio, images, video
+outputModality:
+  - text
+  - audio
+
+# Description: the use cases that the template supports
+# Type: array of strings, allowed values: Language Learning, Customer Support, AI Companion, Games, Fitness Trainer, Social Media
+useCase:
+  - Language Learning
+  - AI Companion
+
+# Description: the SDK that the template is built with
+# Type: string
+sdk: Node.js
+
+# Description: the SDK version used by the template
+# Type: string
+sdkVersion:
+
+# Description: the web demo url of the template
+# Type: string
+webDemo:
+
+# Description: the video demo url of the template
+# Type: string
+videoDemo: https://www.youtube.com/playlist?list=PLs_RyYO6XhFvYZO7Y-_0f3_uAhNLpvIBK
+
+# Description: the docs link of the template
+# Type: string
+docsLink: https://docs.inworld.ai/docs/node/templates/language-app
+
+# Description: the type of the template,
+# Type: string, allowed values: app, endpoint
+type: app
+
+# Description: the image URL to be shown as the background preview image for the template
+# Type: string
+backgroundImage:
+
+# Description: the image URL to be shown as the foreground preview image for the template
+# Type: string
+foregroundImage:
