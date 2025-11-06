@@ -53,7 +53,7 @@ export function createConversationGraph(
     id: 'stt_node',
     sttConfig: {},
   });
-  const proxyNode = new ProxyNode({ id: 'proxy_node', reportToClient: true });
+  const sttOutputNode = new ProxyNode({ id: 'proxy_node', reportToClient: true });
   const promptBuilderNode = new EnhancedPromptBuilderNode({ id: 'enhanced_prompt_builder_node' });
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
@@ -86,17 +86,22 @@ export function createConversationGraph(
     enableRemoteConfig: false
   })
     .addNode(sttNode)
-    .addNode(proxyNode)
+    .addNode(sttOutputNode)
     .addNode(promptBuilderNode)
     .addNode(llmNode)
     .addNode(chunkerNode)
     .addNode(ttsNode)
     .setStartNode(sttNode)
-    .addEdge(sttNode, proxyNode)
-    .addEdge(proxyNode, promptBuilderNode)
+    .addEdge(sttNode, sttOutputNode)
+    .addEdge(sttNode, promptBuilderNode, {
+      condition: async (input: string) => {
+        return input.trim().length > 0;
+      },
+    })
     .addEdge(promptBuilderNode, llmNode)
     .addEdge(llmNode, chunkerNode)
     .addEdge(chunkerNode, ttsNode)
+    .setEndNode(sttOutputNode)
     .setEndNode(ttsNode)
     .build();
 
