@@ -1,20 +1,23 @@
 import 'dotenv/config';
 import fs from 'fs';
 
-import { 
-  GraphBuilder, 
-  CustomNode, 
-  ProcessContext, 
-  RemoteLLMChatNode 
+import {
+  GraphBuilder,
+  CustomNode,
+  ProcessContext,
+  RemoteLLMChatNode,
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
-import { flashcardPromptTemplate } from '../helpers/prompt-templates.ts';
+import { flashcardPromptTemplate } from '../helpers/prompt-templates.js';
 import { v4 } from 'uuid';
-import { Flashcard } from '../helpers/flashcard-processor.ts';
+import { Flashcard } from '../helpers/flashcard-processor.js';
 
 class FlashcardPromptBuilderNode extends CustomNode {
-  async process(_context: ProcessContext, input: any) {
+  async process(
+    _context: ProcessContext,
+    input: GraphTypes.Content | Record<string, unknown>
+  ) {
     const renderedPrompt = await renderJinja(
       flashcardPromptTemplate,
       JSON.stringify(input)
@@ -32,9 +35,14 @@ class TextToChatRequestNode extends CustomNode {
 }
 
 class FlashcardParserNode extends CustomNode {
-  process(_context: ProcessContext, input: any) {
+  process(_context: ProcessContext, input: GraphTypes.Content) {
     try {
-      const content = (input && (input as any).content) || input;
+      const content =
+        (input &&
+          typeof input === 'object' &&
+          'content' in input &&
+          (input as { content?: unknown }).content) ||
+        input;
       const textContent =
         typeof content === 'string' ? content : JSON.stringify(content);
 
@@ -72,8 +80,12 @@ export function createFlashcardGraph() {
     throw new Error('INWORLD_API_KEY environment variable is required');
   }
 
-  const promptBuilderNode = new FlashcardPromptBuilderNode({ id: 'flashcard-prompt-builder' });
-  const textToChatRequestNode = new TextToChatRequestNode({ id: 'text-to-chat-request' });
+  const promptBuilderNode = new FlashcardPromptBuilderNode({
+    id: 'flashcard-prompt-builder',
+  });
+  const textToChatRequestNode = new TextToChatRequestNode({
+    id: 'text-to-chat-request',
+  });
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
@@ -87,13 +99,13 @@ export function createFlashcardGraph() {
       temperature: 1,
       frequencyPenalty: 0,
       presencePenalty: 0,
-    }
+    },
   });
   const parserNode = new FlashcardParserNode({ id: 'flashcard-parser' });
 
   const executor = new GraphBuilder({
     id: 'flashcard-generation-graph',
-    enableRemoteConfig: true
+    enableRemoteConfig: true,
   })
     .addNode(promptBuilderNode)
     .addNode(textToChatRequestNode)

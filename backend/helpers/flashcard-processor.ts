@@ -1,6 +1,8 @@
 import { v4 } from 'uuid';
-import { createFlashcardGraph } from '../graphs/flashcard-graph.ts';
+import { Graph } from '@inworld/runtime/graph';
+import { GraphTypes } from '@inworld/runtime/common';
 import { UserContextExternal as UserContext } from '@inworld/runtime/common';
+import { createFlashcardGraph } from '../graphs/flashcard-graph.js';
 
 export interface Flashcard {
   id: string;
@@ -29,25 +31,27 @@ export class FlashcardProcessor {
     userContext?: UserContext
   ): Promise<Flashcard[]> {
     const executor = createFlashcardGraph();
-    
+
     // Generate flashcards in parallel
     const promises: Promise<Flashcard>[] = [];
-    
+
     for (let i = 0; i < count; i++) {
-      promises.push(this.generateSingleFlashcard(executor, messages, userContext));
+      promises.push(
+        this.generateSingleFlashcard(executor, messages, userContext)
+      );
     }
-    
+
     try {
       const flashcards = await Promise.all(promises);
-      
+
       // Filter out any failed generations and duplicates
       const validFlashcards = flashcards.filter(
         (card) => card.spanish && card.english
       );
-      
+
       // Add to existing flashcards to track for future duplicates
       this.existingFlashcards.push(...validFlashcards);
-      
+
       return validFlashcards;
     } catch (error) {
       console.error('Error generating flashcards:', error);
@@ -56,7 +60,7 @@ export class FlashcardProcessor {
   }
 
   private async generateSingleFlashcard(
-    executor: any,
+    executor: Graph,
     messages: ConversationMessage[],
     userContext?: UserContext
   ): Promise<Flashcard> {
@@ -65,7 +69,7 @@ export class FlashcardProcessor {
         studentName: 'Student',
         teacherName: 'Señor Rosales',
         messages: messages,
-        flashcards: this.existingFlashcards
+        flashcards: this.existingFlashcards,
       };
 
       let executionResult;
@@ -76,20 +80,24 @@ export class FlashcardProcessor {
         };
         executionResult = await executor.start(input, executionContext);
       } catch (err) {
-        console.warn('Flashcard executor.start with ExecutionContext failed, falling back without context:', err);
+        console.warn(
+          'Flashcard executor.start with ExecutionContext failed, falling back without context:',
+          err
+        );
         executionResult = await executor.start(input);
       }
-      let finalData: any = null;
+      let finalData: GraphTypes.Content | null = null;
       for await (const res of executionResult.outputStream) {
         finalData = res.data;
       }
-      const flashcard = finalData as Flashcard;
-      
+      const flashcard = finalData as unknown as Flashcard;
+
       // Check if this is a duplicate
       const isDuplicate = this.existingFlashcards.some(
-        existing => existing.spanish?.toLowerCase() === flashcard.spanish?.toLowerCase()
+        (existing) =>
+          existing.spanish?.toLowerCase() === flashcard.spanish?.toLowerCase()
       );
-      
+
       if (isDuplicate) {
         // Try to generate a different one by adding a random seed to the prompt
         // For simplicity, we'll just return an empty flashcard if duplicate
@@ -100,10 +108,9 @@ export class FlashcardProcessor {
           example: '',
           mnemonic: '',
           timestamp: new Date().toISOString(),
-          error: 'Duplicate flashcard'
-        } as any;
+        } as Flashcard & { error?: string };
       }
-      
+
       return flashcard;
     } catch (error) {
       console.error('Error generating single flashcard:', error);
@@ -114,8 +121,7 @@ export class FlashcardProcessor {
         example: '',
         mnemonic: '',
         timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : 'Unknown error'
-      } as any;
+      } as Flashcard & { error?: string };
     }
   }
 

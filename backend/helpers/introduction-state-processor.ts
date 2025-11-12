@@ -1,7 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
-import { createIntroductionStateGraph } from '../graphs/introduction-state-graph.ts';
+import { Graph } from '@inworld/runtime/graph';
+import { GraphTypes } from '@inworld/runtime/common';
+import { createIntroductionStateGraph } from '../graphs/introduction-state-graph.js';
 
-export type IntroductionStateLevel = 'beginner' | 'intermediate' | 'advanced' | '';
+export type IntroductionStateLevel =
+  | 'beginner'
+  | 'intermediate'
+  | 'advanced'
+  | '';
 
 export interface IntroductionState {
   name: string;
@@ -16,8 +22,13 @@ export interface ConversationMessage {
 }
 
 export class IntroductionStateProcessor {
-  private state: IntroductionState = { name: '', level: '', goal: '', timestamp: '' };
-  private executor: any;
+  private state: IntroductionState = {
+    name: '',
+    level: '',
+    goal: '',
+    timestamp: '',
+  };
+  private executor: Graph;
 
   constructor() {
     this.executor = createIntroductionStateGraph();
@@ -46,7 +57,10 @@ export class IntroductionStateProcessor {
     }
     merged.timestamp = new Date().toISOString();
     this.state = merged;
-    console.log('IntroductionStateProcessor - After merge, state is:', this.state);
+    console.log(
+      'IntroductionStateProcessor - After merge, state is:',
+      this.state
+    );
   }
 
   async update(messages: ConversationMessage[]): Promise<IntroductionState> {
@@ -56,18 +70,27 @@ export class IntroductionStateProcessor {
         existingState: this.state,
       };
 
-      console.log('IntroductionStateProcessor - Current state before update:', this.state);
-      console.log('IntroductionStateProcessor - Messages for extraction:', messages);
+      console.log(
+        'IntroductionStateProcessor - Current state before update:',
+        this.state
+      );
+      console.log(
+        'IntroductionStateProcessor - Messages for extraction:',
+        messages
+      );
 
       const executionContext = {
         executionId: uuidv4(),
       };
-      const executionResult = await this.executor.start(input, executionContext);
-      let finalData: any = null;
+      const executionResult = await this.executor.start(
+        input,
+        executionContext
+      );
+      let finalData: GraphTypes.Content | null = null;
       for await (const res of executionResult.outputStream) {
         finalData = res.data;
       }
-      const parsed = finalData as IntroductionState;
+      const parsed = finalData as unknown as IntroductionState;
       console.log('IntroductionStateProcessor - Extracted state:', parsed);
       this.mergeState(parsed);
       console.log('IntroductionStateProcessor - Merged state:', this.state);
@@ -78,5 +101,3 @@ export class IntroductionStateProcessor {
     }
   }
 }
-
-

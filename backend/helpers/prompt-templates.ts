@@ -46,7 +46,7 @@ Previous conversation:
 
 User just said: {{ current_input }}
 
-Please respond naturally and clearly in 1-2 sentences. Vary your response style and avoid starting every response with the same greeting or exclamation.`.trim()
+Please respond naturally and clearly in 1-2 sentences. Vary your response style and avoid starting every response with the same greeting or exclamation.`.trim();
 
 export const flashcardPromptTemplate = `
 
@@ -84,7 +84,7 @@ Now, return JSON with the following format:
   "english": "string",
   "example": "string",
   "mnemonic": "string"
-}`.trim()
+}`.trim();
 
 export const introductionStatePromptTemplate = `
 
@@ -113,4 +113,4 @@ Return a single JSON object with this exact shape:
 - Do not invent values. If not explicitly provided, leave the field as an empty string.
 - Normalize level to exactly "beginner", "intermediate", or "advanced" when clearly stated; otherwise leave as "".
 - If the existing state already has a non-empty value, keep it unless the user explicitly corrects it.
-`.trim()
+`.trim();
