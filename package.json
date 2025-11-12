@@ -1,24 +1,47 @@
 {
-  "name": "Aprendemo",
+  "name": "language-learning",
   "version": "1.0.0",
-  "main": "backend/server.ts",
+  "main": "dist/backend/server.js",
   "type": "module",
   "scripts": {
-    "start": "node --loader ts-node/esm backend/server.ts",
+    "build": "tsc",
+    "start": "node dist/backend/server.js",
     "dev": "npx nodemon --exec \"node --loader ts-node/esm backend/server.ts\" --ext ts",
-    "test-stt": "node --loader ts-node/esm backend/test-stt.ts"
+    "test-stt": "node --loader ts-node/esm backend/test-stt.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "type-check": "tsc --noEmit"
   },
+  "keywords": [
+    "inworld",
+    "ai",
+    "language-learning",
+    "spanish"
+  ],
   "author": "Inworld AI",
   "license": "MIT",
   "description": "Learn Spanish with AI",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@tsconfig/node-lts": "^22.0.2",
     "@types/express": "^4.17.21",
-    "@types/node": "^24.1.0",
+    "@types/node": "^20.0.0",
     "@types/ws": "^8.5.12",
-    "nodemon": "^3.0.2",
+    "concurrently": "^8.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.0.0"
   },
   "dependencies": {
     "@inworld/runtime": "^0.6.4",

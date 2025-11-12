@@ -1,8 +1,17 @@
-import { GraphBuilder, CustomNode, ProcessContext, ProxyNode, RemoteLLMChatNode, RemoteSTTNode, RemoteTTSNode, TextChunkingNode } from '@inworld/runtime/graph';
+import {
+  GraphBuilder,
+  CustomNode,
+  ProcessContext,
+  ProxyNode,
+  RemoteLLMChatNode,
+  RemoteSTTNode,
+  RemoteTTSNode,
+  TextChunkingNode,
+} from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
-import { conversationTemplate } from '../helpers/prompt-templates.ts';
-import type { IntroductionState } from '../helpers/introduction-state-processor.ts';
+import { conversationTemplate } from '../helpers/prompt-templates.js';
+import type { IntroductionState } from '../helpers/introduction-state-processor.js';
 
 export interface ConversationGraphConfig {
   apiKey: string;
@@ -10,7 +19,9 @@ export interface ConversationGraphConfig {
 
 export function createConversationGraph(
   _config: ConversationGraphConfig,
-  getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> },
+  getConversationState: () => {
+    messages: Array<{ role: string; content: string; timestamp: string }>;
+  },
   getIntroductionState: () => IntroductionState
 ) {
   // Create the custom node class with closure over getConversationState
@@ -22,12 +33,16 @@ export function createConversationGraph(
       const templateData = {
         messages: conversationState.messages || [],
         current_input: currentInput,
-        introduction_state: introductionState || { name: '', level: '', goal: '' }
+        introduction_state: introductionState || {
+          name: '',
+          level: '',
+          goal: '',
+        },
       };
 
       console.log(
         'ConversationGraph - Introduction state being used:',
-        JSON.stringify(introductionState, null, 2),
+        JSON.stringify(introductionState, null, 2)
       );
       console.log(
         'ConversationGraph - Number of messages in history:',
@@ -36,15 +51,15 @@ export function createConversationGraph(
 
       const renderedPrompt = await renderJinja(
         conversationTemplate,
-        JSON.stringify(templateData),
+        JSON.stringify(templateData)
       );
       // console.log('=== Rendered Prompt ===');
       // console.log(renderedPrompt);
       // console.log('========================');
-      
+
       // Return LLMChatRequest for the LLM node
       return new GraphTypes.LLMChatRequest({
-        messages: [{ role: 'user', content: renderedPrompt }]
+        messages: [{ role: 'user', content: renderedPrompt }],
       });
     }
   }
@@ -52,11 +67,16 @@ export function createConversationGraph(
   const sttNode = new RemoteSTTNode({
     id: 'stt_node',
     sttConfig: {
-      languageCode: 'es-MX'
+      languageCode: 'es-MX',
     },
   });
-  const sttOutputNode = new ProxyNode({ id: 'proxy_node', reportToClient: true });
-  const promptBuilderNode = new EnhancedPromptBuilderNode({ id: 'enhanced_prompt_builder_node' });
+  const sttOutputNode = new ProxyNode({
+    id: 'proxy_node',
+    reportToClient: true,
+  });
+  const promptBuilderNode = new EnhancedPromptBuilderNode({
+    id: 'enhanced_prompt_builder_node',
+  });
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
@@ -71,7 +91,7 @@ export function createConversationGraph(
       temperature: 1,
       frequencyPenalty: 0,
       presencePenalty: 0,
-    }
+    },
   });
   const chunkerNode = new TextChunkingNode({ id: 'chunker_node' });
   const ttsNode = new RemoteTTSNode({
@@ -85,7 +105,7 @@ export function createConversationGraph(
 
   const executor = new GraphBuilder({
     id: 'conversation_graph',
-    enableRemoteConfig: false
+    enableRemoteConfig: false,
   })
     .addNode(sttNode)
     .addNode(sttOutputNode)

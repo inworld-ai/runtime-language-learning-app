@@ -1,8 +1,13 @@
 import 'dotenv/config';
-import { GraphBuilder, CustomNode, ProcessContext, RemoteLLMChatNode } from '@inworld/runtime/graph';
+import {
+  GraphBuilder,
+  CustomNode,
+  ProcessContext,
+  RemoteLLMChatNode,
+} from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
-import { introductionStatePromptTemplate } from '../helpers/prompt-templates.ts';
+import { introductionStatePromptTemplate } from '../helpers/prompt-templates.js';
 
 type IntroductionStateLevel = 'beginner' | 'intermediate' | 'advanced' | '';
 
@@ -14,7 +19,10 @@ export interface IntroductionState {
 }
 
 class IntroductionPromptBuilderNode extends CustomNode {
-  async process(_context: ProcessContext, input: any) {
+  async process(
+    _context: ProcessContext,
+    input: GraphTypes.Content | Record<string, unknown>
+  ) {
     const renderedPrompt = await renderJinja(
       introductionStatePromptTemplate,
       JSON.stringify(input)
@@ -31,9 +39,12 @@ class TextToChatRequestNode extends CustomNode {
   }
 }
 
-function normalizeLevel(level: any): IntroductionStateLevel {
+function normalizeLevel(level: unknown): IntroductionStateLevel {
   if (typeof level !== 'string') return '';
-  const lower = level.trim().toLowerCase().replace(/[\.!?,;:]+$/g, '');
+  const lower = level
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?,;:]+$/g, '');
   const mapping: Record<string, IntroductionStateLevel> = {
     beginner: 'beginner',
     intermediate: 'intermediate',
@@ -46,17 +57,26 @@ function normalizeLevel(level: any): IntroductionStateLevel {
 }
 
 class IntroductionStateParserNode extends CustomNode {
-  process(_context: ProcessContext, input: any) {
+  process(_context: ProcessContext, input: GraphTypes.Content) {
     try {
-      const content = (input && (input as any).content) || input;
-      const textContent = typeof content === 'string' ? content : JSON.stringify(content);
-      console.log('IntroductionStateParserNode - Raw LLM response:', textContent);
-      
+      const content =
+        (input &&
+          typeof input === 'object' &&
+          'content' in input &&
+          (input as { content?: unknown }).content) ||
+        input;
+      const textContent =
+        typeof content === 'string' ? content : JSON.stringify(content);
+      console.log(
+        'IntroductionStateParserNode - Raw LLM response:',
+        textContent
+      );
+
       const jsonMatch = textContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         console.log('IntroductionStateParserNode - Parsed JSON:', parsed);
-        
+
         const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
         const level = normalizeLevel(parsed.level);
         const goal = typeof parsed.goal === 'string' ? parsed.goal.trim() : '';
@@ -90,15 +110,21 @@ export function createIntroductionStateGraph() {
     throw new Error('INWORLD_API_KEY environment variable is required');
   }
 
-  const promptBuilderNode = new IntroductionPromptBuilderNode({ id: 'introduction-prompt-builder' });
-  const textToChatRequestNode = new TextToChatRequestNode({ id: 'text-to-chat-request' });
+  const promptBuilderNode = new IntroductionPromptBuilderNode({
+    id: 'introduction-prompt-builder',
+  });
+  const textToChatRequestNode = new TextToChatRequestNode({
+    id: 'text-to-chat-request',
+  });
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
     modelName: 'gpt-4.1',
     stream: false,
   });
-  const parserNode = new IntroductionStateParserNode({ id: 'introduction-state-parser' });
+  const parserNode = new IntroductionStateParserNode({
+    id: 'introduction-state-parser',
+  });
 
   const executor = new GraphBuilder('introduction-state-graph')
     .addNode(promptBuilderNode)
@@ -114,5 +140,3 @@ export function createIntroductionStateGraph() {
 
   return executor;
 }
-
-
