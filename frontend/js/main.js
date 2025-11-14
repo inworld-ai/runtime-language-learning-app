@@ -8,7 +8,7 @@ import { Storage } from './storage.js';
 class App {
   constructor() {
     this.storage = new Storage();
-    this.wsClient = new WebSocketClient('ws://localhost:3001');
+    this.wsClient = new WebSocketClient('ws://localhost:3000');
     this.audioHandler = new AudioHandler();
     this.audioPlayer = new AudioPlayer();
     this.chatUI = new ChatUI();

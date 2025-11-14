@@ -22,9 +22,6 @@
     "noFallthroughCasesInSwitch": true,
     "noEmit": false
   },
-  "ts-node": {
-    "esm": true
-  },
   "include": ["backend/**/*"],
   "exclude": [
     "node_modules",

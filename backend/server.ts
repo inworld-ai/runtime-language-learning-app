@@ -28,7 +28,7 @@ const wss = new WebSocketServer({ server });
 // Add JSON parsing middleware
 app.use(express.json());
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 
 // Initialize telemetry once at startup
 try {
