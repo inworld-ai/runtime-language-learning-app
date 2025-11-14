@@ -69,12 +69,8 @@
         "to_node": "flashcard-parser"
       }
     ],
-    "end_nodes": [
-      "flashcard-parser"
-    ],
-    "start_nodes": [
-      "flashcard-prompt-builder"
-    ]
+    "end_nodes": ["flashcard-parser"],
+    "start_nodes": ["flashcard-prompt-builder"]
   },
   "components": [
     {
