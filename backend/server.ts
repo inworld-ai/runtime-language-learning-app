@@ -11,9 +11,9 @@ const __dirname = path.dirname(__filename);
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { telemetry } from '@inworld/runtime';
+import { telemetry, stopInworldRuntime } from '@inworld/runtime';
 import { MetricType } from '@inworld/runtime/telemetry';
-import { UserContextExternal as UserContext } from '@inworld/runtime/common';
+import { UserContextInterface } from '@inworld/runtime/graph';
 
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.js';
@@ -41,7 +41,7 @@ try {
     });
 
     telemetry.configureMetric({
-      metricType: MetricType.COUNTER_UINT,
+      metricType: MetricType.CounterUInt,
       name: 'flashcard_clicks_total',
       description: 'Total flashcard clicks',
       unit: 'clicks',
@@ -85,6 +85,12 @@ wss.on('connection', (ws) => {
 
   // Set up flashcard generation callback
   audioProcessor.setFlashcardCallback(async (messages) => {
+    // Skip flashcard generation if we're shutting down
+    if (isShuttingDown) {
+      console.log('Skipping flashcard generation - server is shutting down');
+      return;
+    }
+
     try {
       // Build UserContext for flashcard graph execution
       const introState = introductionStateProcessor.getState();
@@ -101,7 +107,10 @@ wss.on('connection', (ws) => {
 
       // Prefer a stable targeting key from client if available, fallback to connectionId
       const targetingKey = attrs.userId || connectionId;
-      const userContext = new UserContext(userAttributes, targetingKey);
+      const userContext: UserContextInterface = {
+        attributes: userAttributes,
+        targetingKey: targetingKey,
+      };
 
       const flashcards = await flashcardProcessor.generateFlashcards(
         messages,
@@ -116,8 +125,14 @@ wss.on('connection', (ws) => {
           })
         );
       }
-    } catch (error) {
-      console.error('Error generating flashcards:', error);
+    } catch (error: unknown) {
+      // Suppress "Environment closed" errors during shutdown - they're expected
+      const err = error as { context?: string };
+      if (isShuttingDown && err?.context === 'Environment closed') {
+        console.log('Flashcard generation cancelled due to shutdown');
+      } else {
+        console.error('Error generating flashcards:', error);
+      }
     }
   });
 
@@ -202,13 +217,13 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('close', () => {
+  ws.on('close', async () => {
     console.log(`WebSocket connection closed: ${connectionId}`);
 
     // Clean up audio processor
     const processor = audioProcessors.get(connectionId);
     if (processor) {
-      processor.destroy();
+      await processor.destroy();
       audioProcessors.delete(connectionId);
     }
 
@@ -251,23 +266,110 @@ app.post('/api/export-anki', async (req, res) => {
 });
 
 // Serve static frontend files
-app.use(express.static(path.join(__dirname, '../frontend')));
+// When running from dist/backend/server.js, go up two levels to project root
+app.use(express.static(path.join(__dirname, '../../frontend')));
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
-  });
-});
+// Graceful shutdown - prevent multiple calls
+let isShuttingDown = false;
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
-  });
-});
+async function gracefulShutdown() {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
+  console.log('Shutting down gracefully...');
+
+  try {
+    // First, close all individual WebSocket connections
+    console.log(`Closing ${wss.clients.size} WebSocket connections...`);
+    wss.clients.forEach((ws) => {
+      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+        ws.close();
+      }
+    });
+
+    // Close WebSocket server to stop accepting new connections
+    await new Promise<void>((resolve) => {
+      wss.close(() => {
+        console.log('WebSocket server closed');
+        resolve();
+      });
+      // Timeout after 2 seconds
+      setTimeout(() => {
+        console.log('WebSocket server close timeout');
+        resolve();
+      }, 2000);
+    });
+
+    // Close all existing WebSocket connections and clean up processors
+    const cleanupPromises: Promise<void>[] = [];
+    for (const [connectionId, processor] of audioProcessors.entries()) {
+      cleanupPromises.push(
+        processor.destroy().catch((error) => {
+          console.error(
+            `Error destroying processor for ${connectionId}:`,
+            error
+          );
+        })
+      );
+    }
+
+    // Wait for all processor cleanup to complete with timeout
+    await Promise.race([
+      Promise.all(cleanupPromises),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+    console.log('All processors cleaned up');
+
+    // Give a small delay for any pending operations to complete
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Close the HTTP server with timeout
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        server.close(() => {
+          console.log('HTTP server closed');
+          resolve();
+        });
+      }),
+      new Promise<void>((resolve) => {
+        setTimeout(() => {
+          console.log('HTTP server close timeout');
+          resolve();
+        }, 2000);
+      }),
+    ]);
+
+    // Stop Inworld Runtime with error handling and timeout
+    try {
+      await Promise.race([
+        stopInworldRuntime(),
+        new Promise((resolve) => {
+          setTimeout(() => {
+            console.log('stopInworldRuntime timeout');
+            resolve(undefined);
+          }, 5000);
+        }),
+      ]);
+      console.log('Inworld Runtime stopped');
+    } catch (error) {
+      console.error('Error stopping Inworld Runtime (non-fatal):', error);
+    }
+
+    // Exit immediately after cleanup
+    console.log('Shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    // Final catch-all - log and exit gracefully
+    console.error('Unexpected error during shutdown:', error);
+    process.exit(0);
+  }
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.2.0",
   "main": {
     "id": "flashcard-generation-graph",
     "nodes": [
@@ -40,7 +40,8 @@
               "presence_penalty": 0
             },
             "stream": false,
-            "report_to_client": false
+            "report_to_client": false,
+            "response_format": "text"
           }
         }
       },

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GraphTypes } from '@inworld/runtime/common';
-import { UserContextExternal as UserContext } from '@inworld/runtime/common';
+import { UserContextInterface } from '@inworld/runtime/graph';
 import { Graph } from '@inworld/runtime/graph';
 import { WebSocket } from 'ws';
 import { SileroVAD, VADConfig } from './silero-vad.js';
@@ -310,7 +310,10 @@ export class AudioProcessor {
         'unknown';
 
       const targetingKey = this.targetingKey || uuidv4();
-      const userContext = new UserContext(attributes, targetingKey);
+      const userContext: UserContextInterface = {
+        attributes: attributes,
+        targetingKey: targetingKey,
+      };
       console.log(userContext);
       if (!this.executor) {
         throw new Error('Executor not initialized');
@@ -482,12 +485,16 @@ export class AudioProcessor {
                   console.log('Sending first TTS chunk immediately');
                 }
 
-                const audioData = new Float32Array(ttsChunk.audio.data);
-                const int16Array = new Int16Array(audioData.length);
-                for (let i = 0; i < audioData.length; i++) {
+                // Decode base64 and create Float32Array
+                const decodedData = Buffer.from(ttsChunk.audio.data, 'base64');
+                const float32Array = new Float32Array(decodedData.buffer);
+
+                // Convert Float32 to Int16 for web audio playback
+                const int16Array = new Int16Array(float32Array.length);
+                for (let i = 0; i < float32Array.length; i++) {
                   int16Array[i] = Math.max(
                     -32768,
-                    Math.min(32767, audioData[i] * 32767)
+                    Math.min(32767, float32Array[i] * 32767)
                   );
                 }
                 const base64Audio = Buffer.from(int16Array.buffer).toString(
@@ -646,10 +653,9 @@ export class AudioProcessor {
     }
   }
 
-  destroy() {
+  async destroy() {
     if (this.executor) {
-      this.executor.cleanupAllExecutions();
-      this.executor.destroy();
+      await this.executor.stop();
       this.executor = null;
     }
 
