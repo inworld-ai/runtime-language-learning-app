@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -267,7 +268,14 @@ app.post('/api/export-anki', async (req, res) => {
 
 // Serve static frontend files
 // When running from dist/backend/server.js, go up two levels to project root
-app.use(express.static(path.join(__dirname, '../../frontend')));
+// When running from backend/server.ts (dev mode), go up one level to project root
+const frontendPath = path.join(__dirname, '../../frontend');
+const devFrontendPath = path.join(__dirname, '../frontend');
+const staticPath = path.resolve(frontendPath);
+const devStaticPath = path.resolve(devFrontendPath);
+// Use the path that exists
+const finalStaticPath = existsSync(devStaticPath) ? devStaticPath : staticPath;
+app.use(express.static(finalStaticPath));
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
@@ -285,7 +293,7 @@ async function gracefulShutdown() {
   console.log('Shutting down gracefully...');
 
   try {
-    // First, close all individual WebSocket connections
+    // Close all WebSocket connections immediately
     console.log(`Closing ${wss.clients.size} WebSocket connections...`);
     wss.clients.forEach((ws) => {
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
@@ -293,82 +301,36 @@ async function gracefulShutdown() {
       }
     });
 
-    // Close WebSocket server to stop accepting new connections
-    await new Promise<void>((resolve) => {
-      wss.close(() => {
-        console.log('WebSocket server closed');
-        resolve();
+    // Close WebSocket server (non-blocking)
+    wss.close();
+
+    // Clean up processors (fire and forget - don't wait)
+    for (const processor of audioProcessors.values()) {
+      processor.destroy().catch(() => {
+        // Ignore errors during shutdown
       });
-      // Timeout after 2 seconds
-      setTimeout(() => {
-        console.log('WebSocket server close timeout');
-        resolve();
-      }, 2000);
+    }
+
+    // Close HTTP server (non-blocking)
+    server.close(() => {
+      console.log('HTTP server closed');
     });
 
-    // Close all existing WebSocket connections and clean up processors
-    const cleanupPromises: Promise<void>[] = [];
-    for (const [connectionId, processor] of audioProcessors.entries()) {
-      cleanupPromises.push(
-        processor.destroy().catch((error) => {
-          console.error(
-            `Error destroying processor for ${connectionId}:`,
-            error
-          );
-        })
-      );
-    }
+    // Stop Inworld Runtime (fire and forget - don't wait)
+    stopInworldRuntime()
+      .then(() => console.log('Inworld Runtime stopped'))
+      .catch(() => {
+        // Ignore errors during shutdown
+      });
 
-    // Wait for all processor cleanup to complete with timeout
-    await Promise.race([
-      Promise.all(cleanupPromises),
-      new Promise((resolve) => setTimeout(resolve, 5000)),
-    ]);
-    console.log('All processors cleaned up');
-
-    // Give a small delay for any pending operations to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Close the HTTP server with timeout
-    await Promise.race([
-      new Promise<void>((resolve) => {
-        server.close(() => {
-          console.log('HTTP server closed');
-          resolve();
-        });
-      }),
-      new Promise<void>((resolve) => {
-        setTimeout(() => {
-          console.log('HTTP server close timeout');
-          resolve();
-        }, 2000);
-      }),
-    ]);
-
-    // Stop Inworld Runtime with error handling and timeout
-    try {
-      await Promise.race([
-        stopInworldRuntime(),
-        new Promise((resolve) => {
-          setTimeout(() => {
-            console.log('stopInworldRuntime timeout');
-            resolve(undefined);
-          }, 5000);
-        }),
-      ]);
-      console.log('Inworld Runtime stopped');
-    } catch (error) {
-      console.error('Error stopping Inworld Runtime (non-fatal):', error);
-    }
-
-    // Exit immediately after cleanup
     console.log('Shutdown complete');
-    process.exit(0);
-  } catch (error) {
-    // Final catch-all - log and exit gracefully
-    console.error('Unexpected error during shutdown:', error);
-    process.exit(0);
+  } catch {
+    // Ignore errors during shutdown
   }
+
+  // Exit immediately - don't wait for anything
+  process.exitCode = 0;
+  process.exit(0);
 }
 
 process.on('SIGTERM', gracefulShutdown);
