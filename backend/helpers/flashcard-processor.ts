@@ -1,7 +1,7 @@
 import { v4 } from 'uuid';
 import { Graph } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
-import { UserContextExternal as UserContext } from '@inworld/runtime/common';
+import { UserContextInterface } from '@inworld/runtime/graph';
 import { createFlashcardGraph } from '../graphs/flashcard-graph.js';
 
 export interface Flashcard {
@@ -28,7 +28,7 @@ export class FlashcardProcessor {
   async generateFlashcards(
     messages: ConversationMessage[],
     count: number = 1,
-    userContext?: UserContext
+    userContext?: UserContextInterface
   ): Promise<Flashcard[]> {
     const executor = createFlashcardGraph();
 
@@ -62,7 +62,7 @@ export class FlashcardProcessor {
   private async generateSingleFlashcard(
     executor: Graph,
     messages: ConversationMessage[],
-    userContext?: UserContext
+    userContext?: UserContextInterface
   ): Promise<Flashcard> {
     try {
       const input = {

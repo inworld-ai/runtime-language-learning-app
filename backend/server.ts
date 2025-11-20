@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,9 +12,9 @@ const __dirname = path.dirname(__filename);
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { telemetry } from '@inworld/runtime';
+import { telemetry, stopInworldRuntime } from '@inworld/runtime';
 import { MetricType } from '@inworld/runtime/telemetry';
-import { UserContextExternal as UserContext } from '@inworld/runtime/common';
+import { UserContextInterface } from '@inworld/runtime/graph';
 
 // Import our audio processor
 import { AudioProcessor } from './helpers/audio-processor.js';
@@ -41,7 +42,7 @@ try {
     });
 
     telemetry.configureMetric({
-      metricType: MetricType.COUNTER_UINT,
+      metricType: MetricType.CounterUInt,
       name: 'flashcard_clicks_total',
       description: 'Total flashcard clicks',
       unit: 'clicks',
@@ -85,6 +86,12 @@ wss.on('connection', (ws) => {
 
   // Set up flashcard generation callback
   audioProcessor.setFlashcardCallback(async (messages) => {
+    // Skip flashcard generation if we're shutting down
+    if (isShuttingDown) {
+      console.log('Skipping flashcard generation - server is shutting down');
+      return;
+    }
+
     try {
       // Build UserContext for flashcard graph execution
       const introState = introductionStateProcessor.getState();
@@ -101,7 +108,10 @@ wss.on('connection', (ws) => {
 
       // Prefer a stable targeting key from client if available, fallback to connectionId
       const targetingKey = attrs.userId || connectionId;
-      const userContext = new UserContext(userAttributes, targetingKey);
+      const userContext: UserContextInterface = {
+        attributes: userAttributes,
+        targetingKey: targetingKey,
+      };
 
       const flashcards = await flashcardProcessor.generateFlashcards(
         messages,
@@ -116,8 +126,14 @@ wss.on('connection', (ws) => {
           })
         );
       }
-    } catch (error) {
-      console.error('Error generating flashcards:', error);
+    } catch (error: unknown) {
+      // Suppress "Environment closed" errors during shutdown - they're expected
+      const err = error as { context?: string };
+      if (isShuttingDown && err?.context === 'Environment closed') {
+        console.log('Flashcard generation cancelled due to shutdown');
+      } else {
+        console.error('Error generating flashcards:', error);
+      }
     }
   });
 
@@ -202,13 +218,13 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('close', () => {
+  ws.on('close', async () => {
     console.log(`WebSocket connection closed: ${connectionId}`);
 
     // Clean up audio processor
     const processor = audioProcessors.get(connectionId);
     if (processor) {
-      processor.destroy();
+      await processor.destroy();
       audioProcessors.delete(connectionId);
     }
 
@@ -251,23 +267,71 @@ app.post('/api/export-anki', async (req, res) => {
 });
 
 // Serve static frontend files
-app.use(express.static(path.join(__dirname, '../frontend')));
+// When running from dist/backend/server.js, go up two levels to project root
+// When running from backend/server.ts (dev mode), go up one level to project root
+const frontendPath = path.join(__dirname, '../../frontend');
+const devFrontendPath = path.join(__dirname, '../frontend');
+const staticPath = path.resolve(frontendPath);
+const devStaticPath = path.resolve(devFrontendPath);
+// Use the path that exists
+const finalStaticPath = existsSync(devStaticPath) ? devStaticPath : staticPath;
+app.use(express.static(finalStaticPath));
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
-  });
-});
+// Graceful shutdown - prevent multiple calls
+let isShuttingDown = false;
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
-  });
-});
+async function gracefulShutdown() {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
+  console.log('Shutting down gracefully...');
+
+  try {
+    // Close all WebSocket connections immediately
+    console.log(`Closing ${wss.clients.size} WebSocket connections...`);
+    wss.clients.forEach((ws) => {
+      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+        ws.close();
+      }
+    });
+
+    // Close WebSocket server (non-blocking)
+    wss.close();
+
+    // Clean up processors (fire and forget - don't wait)
+    for (const processor of audioProcessors.values()) {
+      processor.destroy().catch(() => {
+        // Ignore errors during shutdown
+      });
+    }
+
+    // Close HTTP server (non-blocking)
+    server.close(() => {
+      console.log('HTTP server closed');
+    });
+
+    // Stop Inworld Runtime (fire and forget - don't wait)
+    stopInworldRuntime()
+      .then(() => console.log('Inworld Runtime stopped'))
+      .catch(() => {
+        // Ignore errors during shutdown
+      });
+
+    console.log('Shutdown complete');
+  } catch {
+    // Ignore errors during shutdown
+  }
+
+  // Exit immediately - don't wait for anything
+  process.exitCode = 0;
+  process.exit(0);
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
