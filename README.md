@@ -6,7 +6,7 @@ A Node.js app where you can learn Spanish through conversation and flashcard stu
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=D58lVf55duI&list=PLs_RyYO6XhFvYZO7Y-_0f3_uAhNLpvIBK&index=1"><strong>Tutorial Videos</strong></a> ·
-  <a href="https://docs.inworld.ai/docs/node/installation"><strong>Read Docs</strong></a> ·
+  <a href="https://docs.inworld.ai/docs/node/templates/language-app"><strong>Read Docs</strong></a> ·
   <a href="https://inworld.ai/runtime"><strong>Get Runtime</strong></a> ·
   <a href="https://docs.inworld.ai/docs/models#llm"><strong>Model Providers</strong></a>
 </p>
@@ -52,6 +52,7 @@ npm run dev
 For production:
 
 ```bash
+npm run build
 npm start
 ```
 
