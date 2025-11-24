@@ -6,7 +6,7 @@ Thank you for your interest in contributing to the Language Learning App! This d
 
 ### Prerequisites
 
-- Node.js (v18 or higher)
+- Node.js (v20 or higher)
 - npm (v9 or higher)
 - Git
 - An Inworld AI account and API key
