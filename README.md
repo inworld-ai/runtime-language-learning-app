@@ -1,15 +1,13 @@
 # Language Learning - Aprendemo
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Powered by Inworld AI](https://img.shields.io/badge/Powered_by-Inworld_AI-orange)](https://inworld.ai/runtime)
+[![Documentation](https://img.shields.io/badge/Documentation-Read_Docs-blue)](https://docs.inworld.ai/docs/node/overview)
+[![Model Providers](https://img.shields.io/badge/Model_Providers-See_Models-purple)](https://docs.inworld.ai/docs/models#llm)
+
 A Node.js app where you can learn Spanish through conversation and flashcard studying, powered by Inworld AI Runtime. "Aprendemo" combines "Aprender" (Spanish for "to learn") with "demo" - it's both a language learning tool and a demonstration of the Inworld Runtime Node.js SDK.
 
 ![App](screenshot.jpg)
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=D58lVf55duI&list=PLs_RyYO6XhFvYZO7Y-_0f3_uAhNLpvIBK&index=1"><strong>Tutorial Videos</strong></a> ·
-  <a href="https://docs.inworld.ai/docs/node/templates/language-app"><strong>Read Docs</strong></a> ·
-  <a href="https://inworld.ai/runtime"><strong>Get Runtime</strong></a> ·
-  <a href="https://docs.inworld.ai/docs/models#llm"><strong>Model Providers</strong></a>
-</p>
 
 ## Prerequisites
 
