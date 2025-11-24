@@ -13,7 +13,7 @@ A Node.js app where you can learn Spanish through conversation and flashcard stu
 
 ## Prerequisites
 
-- Node.js (v22.14.0 or higher)
+- Node.js (v20 or higher)
 - An Inworld AI account and API key
 
 ## Get Started
