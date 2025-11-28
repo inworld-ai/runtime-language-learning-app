@@ -67,7 +67,7 @@ export function createConversationGraph(
   const sttNode = new RemoteSTTNode({
     id: 'stt_node',
     sttConfig: {
-      languageCode: 'es-MX',
+      languageCode: 'es',
     },
   });
   const sttOutputNode = new ProxyNode({
