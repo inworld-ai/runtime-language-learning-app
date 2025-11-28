@@ -180,6 +180,23 @@ wss.on('connection', (ws) => {
         if (processor) {
           processor.reset();
         }
+      } else if (message.type === 'restart_conversation') {
+        // Reset conversation state, introduction state, and flashcards
+        const audioProc = audioProcessors.get(connectionId);
+        const flashcardProc = flashcardProcessors.get(connectionId);
+        const introStateProc = introductionStateProcessors.get(connectionId);
+
+        if (audioProc) {
+          audioProc.reset();
+        }
+        if (flashcardProc) {
+          flashcardProc.reset();
+        }
+        if (introStateProc) {
+          introStateProc.reset();
+        }
+
+        console.log(`Conversation restarted for connection: ${connectionId}`);
       } else if (message.type === 'user_context') {
         const timezone =
           message.timezone ||

@@ -119,6 +119,36 @@ body {
     overflow: hidden;
 }
 
+.button-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.restart-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    border: 2px solid #e5e5e5;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #6b7280;
+}
+
+.restart-button:hover:not(:disabled) {
+    border-color: #1a1a1a;
+    color: #1a1a1a;
+}
+
+.restart-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .mic-button {
     width: 48px;
     height: 48px;

@@ -653,6 +653,25 @@ export class AudioProcessor {
     }
   }
 
+  reset() {
+    // Clear conversation state
+    this.conversationState = {
+      messages: [],
+    };
+    // Clear pending segments
+    this.pendingSpeechSegments = [];
+    // Reset introduction state
+    this.introductionState = {
+      name: '',
+      level: '',
+      goal: '',
+      timestamp: '',
+    };
+    // Cancel any ongoing processing
+    this.isProcessingCancelled = true;
+    console.log('AudioProcessor: Conversation reset');
+  }
+
   async destroy() {
     if (this.executor) {
       await this.executor.stop();

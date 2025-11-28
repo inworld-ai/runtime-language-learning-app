@@ -83,6 +83,7 @@ class App {
 
   setupEventListeners() {
     const micButton = document.getElementById('micButton');
+    const restartButton = document.getElementById('restartButton');
 
     // Check for iOS
     const isIOS =
@@ -118,6 +119,23 @@ class App {
           lastTouchEnd = now;
         },
         false
+      );
+    }
+
+    // Restart button event listener
+    restartButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.restartConversation();
+    });
+
+    if (isIOS) {
+      restartButton.addEventListener(
+        'touchend',
+        (e) => {
+          e.preventDefault();
+          this.restartConversation();
+        },
+        { passive: false }
       );
     }
 
@@ -303,6 +321,49 @@ class App {
     this.render();
   }
 
+  restartConversation() {
+    // Stop any ongoing recording
+    if (this.state.isRecording) {
+      this.audioHandler.stopStreaming();
+      this.state.isRecording = false;
+    }
+
+    // Stop audio playback
+    try {
+      this.audioPlayer.stop();
+    } catch (error) {
+      console.error('Error stopping audio:', error);
+    }
+
+    // Clear conversation history from storage
+    this.storage.clearConversation();
+
+    // Clear chat history from state
+    this.state.chatHistory = [];
+    this.state.currentTranscript = '';
+    this.state.currentLLMResponse = '';
+    this.state.pendingTranscription = null;
+    this.state.pendingLLMResponse = null;
+    this.state.streamingLLMResponse = '';
+    this.state.lastPendingTranscription = null;
+
+    // Clear typewriters
+    this.chatUI.clearAllTypewriters();
+
+    // Save cleared state
+    this.saveState();
+
+    // Send restart message to backend
+    if (this.wsClient && this.state.connectionStatus === 'connected') {
+      this.wsClient.send({
+        type: 'restart_conversation',
+      });
+    }
+
+    // Re-render UI
+    this.render();
+  }
+
   checkAndUpdateConversation() {
     // Only proceed when we have both transcription and LLM response
     console.log(
@@ -435,8 +496,10 @@ class App {
     this.flashcardUI.render(this.state.flashcards);
 
     const micButton = document.getElementById('micButton');
+    const restartButton = document.getElementById('restartButton');
     micButton.disabled = this.state.connectionStatus !== 'connected';
     micButton.classList.toggle('recording', this.state.isRecording);
+    restartButton.disabled = this.state.connectionStatus !== 'connected';
   }
 
   updateConnectionStatus() {
