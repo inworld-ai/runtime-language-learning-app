@@ -10,6 +10,7 @@ import {
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
+import { AsyncLocalStorage } from 'async_hooks';
 import { conversationTemplate } from '../helpers/prompt-templates.js';
 import type { IntroductionState } from '../helpers/introduction-state-processor.js';
 
@@ -17,19 +18,51 @@ export interface ConversationGraphConfig {
   apiKey: string;
 }
 
-export function createConversationGraph(
-  _config: ConversationGraphConfig,
+// Use AsyncLocalStorage to store state accessors directly per async execution context
+// This eliminates the need for a registry and connectionId lookup
+export const stateStorage = new AsyncLocalStorage<{
   getConversationState: () => {
     messages: Array<{ role: string; content: string; timestamp: string }>;
-  },
-  getIntroductionState: () => IntroductionState
-) {
-  // Create the custom node class with closure over getConversationState
+  };
+  getIntroductionState: () => IntroductionState;
+}>();
+
+export function createConversationGraph(_config: ConversationGraphConfig) {
+  // Create the custom node class that gets state from AsyncLocalStorage
   class EnhancedPromptBuilderNode extends CustomNode {
     async process(_context: ProcessContext, currentInput: string) {
-      // Access getConversationState from the closure
-      const conversationState = getConversationState();
-      const introductionState = getIntroductionState();
+      // Get state accessors directly from AsyncLocalStorage (set before graph execution)
+      const stateAccessors = stateStorage.getStore();
+
+      if (!stateAccessors) {
+        // Fallback to empty state if not available
+        const conversationState = { messages: [] };
+        const introductionState = {
+          name: '',
+          level: '',
+          goal: '',
+          timestamp: '',
+        };
+        const templateData = {
+          messages: conversationState.messages || [],
+          current_input: currentInput,
+          introduction_state: introductionState,
+        };
+
+        const renderedPrompt = await renderJinja(
+          conversationTemplate,
+          JSON.stringify(templateData)
+        );
+
+        return new GraphTypes.LLMChatRequest({
+          messages: [{ role: 'user', content: renderedPrompt }],
+        });
+      }
+
+      // Get state directly from accessors
+      const conversationState = stateAccessors.getConversationState();
+      const introductionState = stateAccessors.getIntroductionState();
+
       const templateData = {
         messages: conversationState.messages || [],
         current_input: currentInput,
@@ -53,9 +86,6 @@ export function createConversationGraph(
         conversationTemplate,
         JSON.stringify(templateData)
       );
-      // console.log('=== Rendered Prompt ===');
-      // console.log(renderedPrompt);
-      // console.log('========================');
 
       // Return LLMChatRequest for the LLM node
       return new GraphTypes.LLMChatRequest({

@@ -21,6 +21,7 @@ import { AudioProcessor } from './helpers/audio-processor.js';
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
 import { AnkiExporter } from './helpers/anki-exporter.js';
 import { IntroductionStateProcessor } from './helpers/introduction-state-processor.js';
+import { createConversationGraph } from './graphs/conversation-graph.js';
 
 const app = express();
 const server = createServer(app);
@@ -56,6 +57,10 @@ try {
   console.error('[Telemetry] Initialization failed:', err);
 }
 
+// Create a single shared conversation graph instance
+// State is passed directly through AsyncLocalStorage, no registry needed
+let sharedConversationGraph: ReturnType<typeof createConversationGraph> | null = null;
+
 // Store audio processors per connection
 const audioProcessors = new Map<string, AudioProcessor>();
 const flashcardProcessors = new Map<string, FlashcardProcessor>();
@@ -69,17 +74,29 @@ const connectionAttributes = new Map<
   { timezone?: string; userId?: string }
 >();
 
+// Initialize shared graph once at startup
+function initializeSharedGraph() {
+  if (!sharedConversationGraph) {
+    const apiKey = process.env.INWORLD_API_KEY || '';
+    sharedConversationGraph = createConversationGraph({ apiKey });
+    console.log('Shared conversation graph initialized');
+  }
+  return sharedConversationGraph;
+}
+
 // WebSocket handling with audio processing
 wss.on('connection', (ws) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   console.log(`WebSocket connection established: ${connectionId}`);
 
   // Create audio processor for this connection
-  const apiKey = process.env.INWORLD_API_KEY || '';
-  const audioProcessor = new AudioProcessor(apiKey, ws);
+  // Use the shared graph instance - state is passed via AsyncLocalStorage
+  const sharedGraph = initializeSharedGraph();
+  const audioProcessor = new AudioProcessor(sharedGraph, ws);
   const flashcardProcessor = new FlashcardProcessor();
   const introductionStateProcessor = new IntroductionStateProcessor();
 
+  // Register audio processor
   audioProcessors.set(connectionId, audioProcessor);
   flashcardProcessors.set(connectionId, flashcardProcessor);
   introductionStateProcessors.set(connectionId, introductionStateProcessor);
@@ -235,13 +252,23 @@ wss.on('connection', (ws) => {
     }
   });
 
+  ws.on('error', (error) => {
+    console.error(`WebSocket error for ${connectionId}:`, error);
+    // Don't crash - errors are handled by close event
+  });
+
   ws.on('close', async () => {
     console.log(`WebSocket connection closed: ${connectionId}`);
 
     // Clean up audio processor
     const processor = audioProcessors.get(connectionId);
     if (processor) {
-      await processor.destroy();
+      try {
+        await processor.destroy();
+      } catch (error) {
+        console.error(`Error destroying audio processor for ${connectionId}:`, error);
+        // Continue with cleanup even if destroy fails
+      }
       audioProcessors.delete(connectionId);
     }
 

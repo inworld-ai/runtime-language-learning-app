@@ -4,11 +4,11 @@ import { UserContextInterface } from '@inworld/runtime/graph';
 import { Graph } from '@inworld/runtime/graph';
 import { WebSocket } from 'ws';
 import { SileroVAD, VADConfig } from './silero-vad.js';
-import { createConversationGraph } from '../graphs/conversation-graph.js';
+import { stateStorage } from '../graphs/conversation-graph.js';
 import type { IntroductionState } from './introduction-state-processor.js';
 
 export class AudioProcessor {
-  private executor: Graph | null = null;
+  private executor: Graph;
   private vad: SileroVAD | null = null;
   private isProcessing = false;
   private isProcessingCancelled = false; // Track if current processing should be cancelled
@@ -38,12 +38,22 @@ export class AudioProcessor {
   private clientTimezone: string | null = null;
   private graphStartTime: number = 0;
   constructor(
-    private apiKey: string,
+    executor: Graph,
     websocket?: WebSocket
   ) {
+    this.executor = executor;
     this.websocket = websocket ?? null;
     this.setupWebSocketMessageHandler();
     setTimeout(() => this.initialize(), 100);
+  }
+  
+  // Public methods for state registry access
+  getConversationState() {
+    return this.conversationState;
+  }
+  
+  getIntroductionState(): IntroductionState {
+    return this.introductionState;
   }
 
   private trimConversationHistory(maxTurns: number = 40) {
@@ -105,10 +115,6 @@ export class AudioProcessor {
     }
   }
 
-  private getConversationState() {
-    return this.conversationState;
-  }
-
   setFlashcardCallback(
     callback: (
       messages: Array<{ role: string; content: string }>
@@ -125,112 +131,107 @@ export class AudioProcessor {
     this.introductionStateCallback = callback;
   }
 
-  getIntroductionState(): IntroductionState {
-    return this.introductionState;
-  }
-
   private async initialize() {
-    console.log('AudioProcessor: Starting initialization...');
-
-    // Initialize VAD
     try {
-      const vadConfig: VADConfig = {
-        modelPath: 'backend/models/silero_vad.onnx',
-        threshold: 0.5, // Following working example SPEECH_THRESHOLD
-        minSpeechDuration: 0.2, // MIN_SPEECH_DURATION_MS / 1000
-        minSilenceDuration: 0.4, // Reduced from 0.65 for faster response
-        speechResetSilenceDuration: 1.0,
-        minVolume: 0.01, // Lower threshold to start - can adjust based on testing
-        sampleRate: 16000,
-      };
+      console.log('AudioProcessor: Starting initialization...');
 
-      console.log('AudioProcessor: Creating SileroVAD with config:', vadConfig);
-      this.vad = new SileroVAD(vadConfig);
+      // Initialize VAD
+      try {
+        const vadConfig: VADConfig = {
+          modelPath: 'backend/models/silero_vad.onnx',
+          threshold: 0.5, // Following working example SPEECH_THRESHOLD
+          minSpeechDuration: 0.2, // MIN_SPEECH_DURATION_MS / 1000
+          minSilenceDuration: 0.4, // Reduced from 0.65 for faster response
+          speechResetSilenceDuration: 1.0,
+          minVolume: 0.01, // Lower threshold to start - can adjust based on testing
+          sampleRate: 16000,
+        };
 
-      console.log('AudioProcessor: Initializing VAD...');
-      await this.vad.initialize();
-      console.log('AudioProcessor: VAD initialized successfully');
+        console.log('AudioProcessor: Creating SileroVAD with config:', vadConfig);
+        this.vad = new SileroVAD(vadConfig);
 
-      this.vad.on('speechStart', () => {
-        console.log('🎤 Speech started');
+        console.log('AudioProcessor: Initializing VAD...');
+        await this.vad.initialize();
+        console.log('AudioProcessor: VAD initialized successfully');
 
-        // Always notify frontend to stop audio playback when user starts speaking
-        if (this.websocket) {
-          try {
-            this.websocket.send(
-              JSON.stringify({ type: 'interrupt', reason: 'speech_start' })
-            );
-          } catch {
-            // ignore send errors
-          }
-        }
+        this.vad.on('speechStart', () => {
+          console.log('🎤 Speech started');
 
-        // If we're currently processing, set cancellation flag
-        if (this.isProcessing) {
-          console.log(
-            'Setting cancellation flag - user started speaking during processing'
-          );
-          this.isProcessingCancelled = true;
-          // Don't clear segments - we want to accumulate them
-        }
-      });
-
-      this.vad.on('speechEnd', async (event) => {
-        console.log(
-          '🔇 Speech ended, duration:',
-          event.speechDuration.toFixed(2) + 's'
-        );
-
-        try {
-          if (event.speechSegment && event.speechSegment.length > 0) {
-            // Add this segment to pending segments
-            this.pendingSpeechSegments.push(event.speechSegment);
-
-            // Reset cancellation flag for new processing
-            this.isProcessingCancelled = false;
-
-            // Process immediately if not already processing
-            if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
-              // Combine all pending segments
-              const totalLength = this.pendingSpeechSegments.reduce(
-                (sum, seg) => sum + seg.length,
-                0
+          // Always notify frontend to stop audio playback when user starts speaking
+          if (this.websocket) {
+            try {
+              this.websocket.send(
+                JSON.stringify({ type: 'interrupt', reason: 'speech_start' })
               );
-              const combinedSegment = new Float32Array(totalLength);
-              let offset = 0;
-              for (const seg of this.pendingSpeechSegments) {
-                combinedSegment.set(seg, offset);
-                offset += seg.length;
-              }
-
-              // Clear pending segments
-              this.pendingSpeechSegments = [];
-
-              // Process immediately
-              console.log('Processing speech segment immediately');
-              await this.processVADSpeechSegment(combinedSegment);
+            } catch {
+              // ignore send errors
             }
           }
-        } catch (error) {
-          console.error('Error handling speech segment:', error);
-        }
-      });
-    } catch (error) {
-      console.error('AudioProcessor: VAD initialization failed:', error);
-      this.vad = null;
-    }
 
-    // Initialize conversation graph
-    console.log('AudioProcessor: Creating conversation graph...');
-    this.executor = createConversationGraph(
-      { apiKey: this.apiKey },
-      () => this.getConversationState(),
-      () => this.getIntroductionState()
-    );
-    this.isReady = true;
-    console.log(
-      'AudioProcessor: Initialization complete, ready for audio processing'
-    );
+          // If we're currently processing, set cancellation flag
+          if (this.isProcessing) {
+            console.log(
+              'Setting cancellation flag - user started speaking during processing'
+            );
+            this.isProcessingCancelled = true;
+            // Don't clear segments - we want to accumulate them
+          }
+        });
+
+        this.vad.on('speechEnd', async (event) => {
+          console.log(
+            '🔇 Speech ended, duration:',
+            event.speechDuration.toFixed(2) + 's'
+          );
+
+          try {
+            if (event.speechSegment && event.speechSegment.length > 0) {
+              // Add this segment to pending segments
+              this.pendingSpeechSegments.push(event.speechSegment);
+
+              // Reset cancellation flag for new processing
+              this.isProcessingCancelled = false;
+
+              // Process immediately if not already processing
+              if (!this.isProcessing && this.pendingSpeechSegments.length > 0) {
+                // Combine all pending segments
+                const totalLength = this.pendingSpeechSegments.reduce(
+                  (sum, seg) => sum + seg.length,
+                  0
+                );
+                const combinedSegment = new Float32Array(totalLength);
+                let offset = 0;
+                for (const seg of this.pendingSpeechSegments) {
+                  combinedSegment.set(seg, offset);
+                  offset += seg.length;
+                }
+
+                // Clear pending segments
+                this.pendingSpeechSegments = [];
+
+                // Process immediately
+                console.log('Processing speech segment immediately');
+                await this.processVADSpeechSegment(combinedSegment);
+              }
+            }
+          } catch (error) {
+            console.error('Error handling speech segment:', error);
+          }
+        });
+      } catch (error) {
+        console.error('AudioProcessor: VAD initialization failed:', error);
+        this.vad = null;
+      }
+
+      // Graph is already provided in constructor (shared instance)
+      // Just mark as ready
+      this.isReady = true;
+      console.log('AudioProcessor: Using shared conversation graph, ready for audio processing');
+    } catch (error) {
+      console.error('AudioProcessor: Initialization failed with unexpected error:', error);
+      this.isReady = false;
+      // Don't rethrow - prevent unhandled promise rejection
+    }
   }
 
   addAudioChunk(base64Audio: string) {
@@ -315,28 +316,33 @@ export class AudioProcessor {
         targetingKey: targetingKey,
       };
       console.log(userContext);
-      if (!this.executor) {
-        throw new Error('Executor not initialized');
-      }
 
       let executionResult;
       this.graphStartTime = Date.now();
-      try {
-        const executionContext = {
-          executionId: uuidv4(),
-          userContext: userContext,
-        };
-        executionResult = await this.executor.start(
-          audioInput,
-          executionContext
-        );
-      } catch (err) {
-        console.warn(
-          'Executor.start with ExecutionContext failed, falling back without context:',
-          err
-        );
-        executionResult = await this.executor.start(audioInput);
-      }
+      
+      // Use AsyncLocalStorage to set state accessors for this execution context
+      // This allows the graph nodes to access state directly without needing connectionId
+      executionResult = await stateStorage.run(
+        {
+          getConversationState: () => this.getConversationState(),
+          getIntroductionState: () => this.getIntroductionState(),
+        },
+        async () => {
+          try {
+            const executionContext = {
+              executionId: uuidv4(),
+              userContext: userContext,
+            };
+            return await this.executor.start(audioInput, executionContext);
+          } catch (err) {
+            console.warn(
+              'Executor.start with ExecutionContext failed, falling back without context:',
+              err
+            );
+            return await this.executor.start(audioInput);
+          }
+        }
+      );
 
       let transcription = '';
       let llmResponse = '';
@@ -673,13 +679,13 @@ export class AudioProcessor {
   }
 
   async destroy() {
-    if (this.executor) {
-      await this.executor.stop();
-      this.executor = null;
-    }
-
     if (this.vad) {
-      this.vad.destroy();
+      try {
+        this.vad.destroy();
+      } catch (error) {
+        console.error('Error destroying VAD:', error);
+        // Continue with cleanup even if destroy fails
+      }
       this.vad = null;
     }
   }
