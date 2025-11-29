@@ -27,14 +27,21 @@
                 <section class="chat-section">
                     <div class="section-header">
                         <h2>Conversation</h2>
-                        <button class="mic-button" id="micButton" disabled>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z"/>
-                                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
-                                <line x1="12" y1="19" x2="12" y2="23"/>
-                                <line x1="8" y1="23" x2="16" y2="23"/>
-                            </svg>
-                        </button>
+                        <div class="button-group">
+                            <button class="restart-button" id="restartButton" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21.5 2v6h-6M21.5 8A9.5 9.5 0 0 0 12 2.5 9.5 9.5 0 0 0 2.5 12 9.5 9.5 0 0 0 12 21.5 9.5 9.5 0 0 0 21.5 12"/>
+                                </svg>
+                            </button>
+                            <button class="mic-button" id="micButton" disabled>
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z"/>
+                                    <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                    <line x1="8" y1="23" x2="16" y2="23"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="chat-container">

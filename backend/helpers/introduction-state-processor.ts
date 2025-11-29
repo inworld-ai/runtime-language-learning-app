@@ -100,4 +100,14 @@ export class IntroductionStateProcessor {
       return this.state;
     }
   }
+
+  reset() {
+    this.state = {
+      name: '',
+      level: '',
+      goal: '',
+      timestamp: '',
+    };
+    console.log('IntroductionStateProcessor: State reset');
+  }
 }

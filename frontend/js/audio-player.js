@@ -3,6 +3,7 @@ export class AudioPlayer {
     this.audioContext = null;
     this.audioQueue = [];
     this.isPlaying = false;
+    this.isStartingPlayback = false;
     this.currentSource = null;
     this.sampleRate = 16000; // Default sample rate to match backend
     this.listeners = new Map();
@@ -116,9 +117,14 @@ export class AudioPlayer {
       this.audioQueue.push(audioBuffer);
 
       // Start playback immediately if not already playing
-      if (!this.isPlaying) {
-        // Start playing immediately without blocking
-        setTimeout(() => this.playNextBuffer(), 0);
+      // Use a flag to prevent race conditions
+      if (!this.isPlaying && !this.isStartingPlayback) {
+        this.isStartingPlayback = true;
+        // Use requestAnimationFrame for better timing
+        requestAnimationFrame(() => {
+          this.isStartingPlayback = false;
+          this.playNextBuffer();
+        });
       }
     } catch (error) {
       console.error('Error processing audio stream:', error);
@@ -150,6 +156,11 @@ export class AudioPlayer {
   }
 
   playNextBuffer() {
+    // Prevent multiple simultaneous calls
+    if (this.isPlaying && this.currentSource) {
+      return;
+    }
+
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
       this.emit('playback_finished');
@@ -174,10 +185,17 @@ export class AudioPlayer {
     };
 
     // Start playback
-    this.currentSource.start(0);
-    this.emit('playback_started');
-
-    console.log(`Playing audio buffer: ${audioBuffer.duration.toFixed(2)}s`);
+    try {
+      this.currentSource.start(0);
+      this.emit('playback_started');
+      console.log(`Playing audio buffer: ${audioBuffer.duration.toFixed(2)}s`);
+    } catch (error) {
+      console.error('Error starting audio playback:', error);
+      this.currentSource = null;
+      this.isPlaying = false;
+      // Try next buffer
+      this.playNextBuffer();
+    }
   }
 
   stop() {
@@ -185,23 +203,28 @@ export class AudioPlayer {
     if (this.isIOS && this.iosHandler) {
       this.iosHandler.stopAudioPlayback();
       this.isPlaying = false;
+      this.isStartingPlayback = false;
       this.emit('playback_stopped');
       return;
     }
 
     // Standard implementation
+    // Stop current source first
     if (this.currentSource) {
       try {
         this.currentSource.stop();
+        this.currentSource.disconnect();
         this.currentSource = null;
       } catch (error) {
+        // Source might already be stopped, ignore
         console.warn('Error stopping audio source:', error);
       }
     }
 
-    // Clear the queue
+    // Clear the queue and reset flags
     this.audioQueue = [];
     this.isPlaying = false;
+    this.isStartingPlayback = false;
     this.emit('playback_stopped');
   }
 
