@@ -59,7 +59,8 @@ try {
 
 // Create a single shared conversation graph instance
 // State is passed directly through AsyncLocalStorage, no registry needed
-let sharedConversationGraph: ReturnType<typeof createConversationGraph> | null = null;
+let sharedConversationGraph: ReturnType<typeof createConversationGraph> | null =
+  null;
 
 // Store audio processors per connection
 const audioProcessors = new Map<string, AudioProcessor>();
@@ -266,7 +267,10 @@ wss.on('connection', (ws) => {
       try {
         await processor.destroy();
       } catch (error) {
-        console.error(`Error destroying audio processor for ${connectionId}:`, error);
+        console.error(
+          `Error destroying audio processor for ${connectionId}:`,
+          error
+        );
         // Continue with cleanup even if destroy fails
       }
       audioProcessors.delete(connectionId);

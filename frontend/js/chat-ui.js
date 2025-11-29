@@ -27,7 +27,14 @@ export class ChatUI {
     this.renderCurrentTranscript(currentTranscript);
   }
 
-  renderMessages(messages, pendingTranscription, streamingLLMResponse, currentTranscript, isRecording, speechDetected) {
+  renderMessages(
+    messages,
+    pendingTranscription,
+    streamingLLMResponse,
+    currentTranscript,
+    isRecording,
+    speechDetected
+  ) {
     // Only clear and rebuild if the conversation history changed
     const currentHistoryLength = this.messagesContainer.querySelectorAll(
       '.message:not(.streaming)'
@@ -193,7 +200,9 @@ export class ChatUI {
     if (!element) {
       // Element doesn't exist, call completion callback immediately if provided
       if (onComplete) {
-        console.log(`[Typewriter] Element ${elementId} not found, calling completion callback immediately`);
+        console.log(
+          `[Typewriter] Element ${elementId} not found, calling completion callback immediately`
+        );
         onComplete();
       }
       return;
@@ -204,7 +213,7 @@ export class ChatUI {
       const existingTimer = this.typewriterTimers.get(elementId);
       clearInterval(existingTimer.timer || existingTimer);
       this.typewriterTimers.delete(elementId);
-      
+
       // If there was a previous timer with a callback, call it now since we're replacing it
       if (existingTimer.onComplete) {
         existingTimer.onComplete();
@@ -226,7 +235,9 @@ export class ChatUI {
       // Check if element still exists
       const currentElement = document.getElementById(elementId);
       if (!currentElement) {
-        console.log(`[Typewriter] Element ${elementId} removed, completing immediately`);
+        console.log(
+          `[Typewriter] Element ${elementId} removed, completing immediately`
+        );
         clearInterval(timer);
         this.typewriterTimers.delete(elementId);
         if (onComplete) {
@@ -259,14 +270,16 @@ export class ChatUI {
     if (this.typewriterTimers.has(elementId)) {
       const timerData = this.typewriterTimers.get(elementId);
       clearInterval(timerData.timer || timerData);
-      
+
       // If there's a completion callback, call it before clearing
       // This ensures the text gets finalized even if typewriter is interrupted
       if (timerData.onComplete) {
-        console.log(`[Typewriter] Clearing ${elementId}, calling completion callback`);
+        console.log(
+          `[Typewriter] Clearing ${elementId}, calling completion callback`
+        );
         timerData.onComplete();
       }
-      
+
       this.typewriterTimers.delete(elementId);
     }
   }

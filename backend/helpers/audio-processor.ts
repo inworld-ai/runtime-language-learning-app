@@ -37,21 +37,18 @@ export class AudioProcessor {
   private targetingKey: string | null = null;
   private clientTimezone: string | null = null;
   private graphStartTime: number = 0;
-  constructor(
-    executor: Graph,
-    websocket?: WebSocket
-  ) {
+  constructor(executor: Graph, websocket?: WebSocket) {
     this.executor = executor;
     this.websocket = websocket ?? null;
     this.setupWebSocketMessageHandler();
     setTimeout(() => this.initialize(), 100);
   }
-  
+
   // Public methods for state registry access
   getConversationState() {
     return this.conversationState;
   }
-  
+
   getIntroductionState(): IntroductionState {
     return this.introductionState;
   }
@@ -147,7 +144,10 @@ export class AudioProcessor {
           sampleRate: 16000,
         };
 
-        console.log('AudioProcessor: Creating SileroVAD with config:', vadConfig);
+        console.log(
+          'AudioProcessor: Creating SileroVAD with config:',
+          vadConfig
+        );
         this.vad = new SileroVAD(vadConfig);
 
         console.log('AudioProcessor: Initializing VAD...');
@@ -165,9 +165,9 @@ export class AudioProcessor {
               );
               // Notify frontend that speech was detected so it can show listening indicator
               this.websocket.send(
-                JSON.stringify({ 
-                  type: 'speech_detected', 
-                  data: { text: '' } // Empty text initially, will be updated with transcript
+                JSON.stringify({
+                  type: 'speech_detected',
+                  data: { text: '' }, // Empty text initially, will be updated with transcript
                 })
               );
             } catch {
@@ -200,7 +200,9 @@ export class AudioProcessor {
                   type: 'speech_ended',
                   data: {
                     speechDuration: event.speechDuration,
-                    hasSegment: event.speechSegment !== null && event.speechSegment.length > 0,
+                    hasSegment:
+                      event.speechSegment !== null &&
+                      event.speechSegment.length > 0,
                   },
                 })
               );
@@ -251,9 +253,14 @@ export class AudioProcessor {
       // Graph is already provided in constructor (shared instance)
       // Just mark as ready
       this.isReady = true;
-      console.log('AudioProcessor: Using shared conversation graph, ready for audio processing');
+      console.log(
+        'AudioProcessor: Using shared conversation graph, ready for audio processing'
+      );
     } catch (error) {
-      console.error('AudioProcessor: Initialization failed with unexpected error:', error);
+      console.error(
+        'AudioProcessor: Initialization failed with unexpected error:',
+        error
+      );
       this.isReady = false;
       // Don't rethrow - prevent unhandled promise rejection
     }
@@ -342,12 +349,11 @@ export class AudioProcessor {
       };
       console.log(userContext);
 
-      let executionResult;
       this.graphStartTime = Date.now();
-      
+
       // Use AsyncLocalStorage to set state accessors for this execution context
       // This allows the graph nodes to access state directly without needing connectionId
-      executionResult = await stateStorage.run(
+      const executionResult = await stateStorage.run(
         {
           getConversationState: () => this.getConversationState(),
           getIntroductionState: () => this.getIntroductionState(),
