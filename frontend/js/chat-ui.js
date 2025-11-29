@@ -129,8 +129,10 @@ export class ChatUI {
       // Don't restart typewriter if element already exists
     } else if (existingLLMStreaming) {
       console.log('[ChatUI] Removing existing LLM streaming element');
-      existingLLMStreaming.remove();
+      // Clear typewriter first (this will call the completion callback)
       this.clearTypewriter('streaming-llm-response');
+      // Then remove the element
+      existingLLMStreaming.remove();
     }
 
     this.scrollToBottom();
@@ -188,13 +190,25 @@ export class ChatUI {
 
   startTypewriter(elementId, fullText, speed, onComplete) {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element) {
+      // Element doesn't exist, call completion callback immediately if provided
+      if (onComplete) {
+        console.log(`[Typewriter] Element ${elementId} not found, calling completion callback immediately`);
+        onComplete();
+      }
+      return;
+    }
 
     // Clear any existing timer for this element
     if (this.typewriterTimers.has(elementId)) {
       const existingTimer = this.typewriterTimers.get(elementId);
       clearInterval(existingTimer.timer || existingTimer);
       this.typewriterTimers.delete(elementId);
+      
+      // If there was a previous timer with a callback, call it now since we're replacing it
+      if (existingTimer.onComplete) {
+        existingTimer.onComplete();
+      }
     }
 
     // Get the text content node (accounting for streaming cursor)
@@ -209,6 +223,18 @@ export class ChatUI {
     console.log(`[Typewriter] Starting ${elementId}, target: "${fullText}"`);
 
     const timer = setInterval(() => {
+      // Check if element still exists
+      const currentElement = document.getElementById(elementId);
+      if (!currentElement) {
+        console.log(`[Typewriter] Element ${elementId} removed, completing immediately`);
+        clearInterval(timer);
+        this.typewriterTimers.delete(elementId);
+        if (onComplete) {
+          onComplete();
+        }
+        return;
+      }
+
       if (currentIndex < fullText.length) {
         const newText = fullText.substring(0, currentIndex + 1);
         textContent.textContent = newText;
@@ -226,13 +252,21 @@ export class ChatUI {
       }
     }, speed);
 
-    this.typewriterTimers.set(elementId, { timer, fullText });
+    this.typewriterTimers.set(elementId, { timer, fullText, onComplete });
   }
 
   clearTypewriter(elementId) {
     if (this.typewriterTimers.has(elementId)) {
       const timerData = this.typewriterTimers.get(elementId);
       clearInterval(timerData.timer || timerData);
+      
+      // If there's a completion callback, call it before clearing
+      // This ensures the text gets finalized even if typewriter is interrupted
+      if (timerData.onComplete) {
+        console.log(`[Typewriter] Clearing ${elementId}, calling completion callback`);
+        timerData.onComplete();
+      }
+      
       this.typewriterTimers.delete(elementId);
     }
   }

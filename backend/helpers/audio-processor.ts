@@ -191,6 +191,24 @@ export class AudioProcessor {
             event.speechDuration.toFixed(2) + 's'
           );
 
+          // Always notify frontend that VAD stopped detecting speech
+          // This allows frontend to clear the real-time transcript bubble
+          if (this.websocket) {
+            try {
+              this.websocket.send(
+                JSON.stringify({
+                  type: 'speech_ended',
+                  data: {
+                    speechDuration: event.speechDuration,
+                    hasSegment: event.speechSegment !== null && event.speechSegment.length > 0,
+                  },
+                })
+              );
+            } catch {
+              // ignore send errors
+            }
+          }
+
           try {
             if (event.speechSegment && event.speechSegment.length > 0) {
               // Add this segment to pending segments

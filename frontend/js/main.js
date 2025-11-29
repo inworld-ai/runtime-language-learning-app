@@ -31,6 +31,8 @@ class App {
       streamingLLMResponse: '',
       lastPendingTranscription: null,
       speechDetected: false,
+      llmResponseComplete: false, // Track if LLM response is complete to prevent chunk accumulation
+      currentResponseId: null, // Track current response to match audio with text
     };
 
     this.init();
@@ -197,34 +199,81 @@ class App {
       // Use empty string or placeholder - transcript will update as it arrives
       this.state.currentTranscript = data.text || '';
       this.state.speechDetected = true;
+      
+      // Trigger interrupt behavior immediately on VAD detection
+      // This freezes the current response if one is streaming
+      this.handleInterrupt();
+      
       this.render();
     });
 
     this.wsClient.on('speech_ended', (data) => {
-      if (data.text) {
-        this.addMessage('learner', data.text);
+      // VAD stopped detecting speech - clear the real-time transcript bubble
+      console.log('[Main] VAD stopped detecting speech, clearing real-time transcript');
+      
+      // Clear speech detected state to hide the real-time transcript bubble
+      // Only clear if we don't have a pending transcription (which means speech was processed)
+      // If we have a pending transcription, it will be handled by the transcription handler
+      if (!this.state.pendingTranscription) {
+        this.state.currentTranscript = '';
+        this.state.speechDetected = false;
+        this.render();
       }
-      this.state.currentTranscript = '';
-      this.state.speechDetected = false;
-      this.render();
     });
 
     this.wsClient.on('transcription', (data) => {
+      // Stop any ongoing audio from previous response to prevent audio/text mismatch
+      // A new transcription means a new conversation turn is starting
+      this.audioPlayer.stop();
+      if (this.currentAudioElement) {
+        this.currentAudioElement.pause();
+        this.currentAudioElement.src = '';
+        this.currentAudioElement = null;
+      }
+      
       this.state.pendingTranscription = data.text;
       this.state.currentTranscript = '';
       this.state.speechDetected = false; // Clear speech detected when transcription is complete
+      
+      // If we have a frozen LLM response from an interrupt, finalize it now
+      if (this.state.pendingLLMResponse && !this.state.streamingLLMResponse) {
+        // We have a frozen response from an interrupt, finalize it with this transcription
+        console.log('[Main] Finalizing frozen LLM response with new transcription');
+        this.checkAndUpdateConversation();
+      }
+      
+      // Before resetting LLM streaming, finalize any pending LLM response
+      // This ensures the text is added to history even if typewriter was interrupted
+      if (this.state.streamingLLMResponse && this.state.streamingLLMResponse.trim() && 
+          this.state.llmResponseComplete && !this.state.pendingLLMResponse) {
+        console.log('[Main] Finalizing LLM response before clearing streaming state');
+        this.state.pendingLLMResponse = this.state.streamingLLMResponse;
+        this.checkAndUpdateConversation();
+      }
+      
+      // Reset LLM streaming for new conversation turn
       this.state.streamingLLMResponse = ''; // Reset LLM streaming for new conversation
+      this.state.llmResponseComplete = false; // Reset completion flag for new response
+      this.state.currentResponseId = null; // Reset response ID
+      
       // Only render if the transcription changed to avoid restarting typewriter
       if (this.state.lastPendingTranscription !== data.text) {
         this.state.lastPendingTranscription = data.text;
         this.render();
       }
+      
+      // Check if we can update conversation (will happen if we just finalized a frozen response)
       this.checkAndUpdateConversation();
     });
 
     this.wsClient.on('llm_response_chunk', (data) => {
-      // Just accumulate the chunks, don't render yet
-      this.state.streamingLLMResponse += data.text;
+      // Only accumulate chunks if response is not yet complete
+      // This prevents chunks from being added after llm_response_complete
+      if (!this.state.llmResponseComplete) {
+        this.state.streamingLLMResponse += data.text;
+      } else {
+        console.warn('[Main] Ignoring llm_response_chunk after response complete');
+      }
     });
 
     this.wsClient.on('llm_response_complete', (data) => {
@@ -232,15 +281,31 @@ class App {
         '[Main] LLM response complete, starting typewriter with:',
         data.text
       );
-      // Start the typewriter effect with the complete text
-      this.state.streamingLLMResponse = data.text; // Set the complete text for typewriter
+      
+      // Generate a unique ID for this response to match audio with text
+      const responseId = `response_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      this.state.currentResponseId = responseId;
+      
+      // Mark response as complete to prevent further chunk accumulation
+      this.state.llmResponseComplete = true;
+      
+      // Use the provided text (which should be the complete response)
+      // This ensures we use the backend's final text, not accumulated chunks
+      const finalText = data.text || this.state.streamingLLMResponse;
+      this.state.streamingLLMResponse = finalText;
+      
       console.log('[Main] About to render for typewriter effect');
 
       // Set up callback for when typewriter finishes
       this.chatUI.setLLMTypewriterCallback(() => {
         console.log('[Main] LLM typewriter finished, updating conversation');
-        this.state.pendingLLMResponse = data.text;
-        this.checkAndUpdateConversation();
+        // Only update if this is still the current response (not interrupted)
+        if (this.state.currentResponseId === responseId) {
+          this.state.pendingLLMResponse = finalText;
+          this.checkAndUpdateConversation();
+        } else {
+          console.log('[Main] Response was interrupted, skipping conversation update');
+        }
       });
 
       this.render(); // Start typewriter effect
@@ -255,20 +320,11 @@ class App {
       this.audioPlayer.markStreamComplete();
     });
 
-    // Minimal interruption handling: stop audio playback immediately
+    // Interrupt handling: stop audio playback and freeze current response
+    // This is triggered both by 'interrupt' message and 'speech_detected' (VAD)
     this.wsClient.on('interrupt', (_data) => {
-      console.log('[Main] Interrupt received, stopping audio playback');
-      try {
-        this.audioPlayer.stop();
-        // Also stop any Audio element playback
-        if (this.currentAudioElement) {
-          this.currentAudioElement.pause();
-          this.currentAudioElement.src = '';
-          this.currentAudioElement = null;
-        }
-      } catch (error) {
-        console.warn('Error stopping audio on interrupt:', error);
-      }
+      console.log('[Main] Interrupt message received');
+      this.handleInterrupt();
     });
 
     this.audioHandler.on('audioChunk', (audioData) => {
@@ -371,6 +427,8 @@ class App {
     this.state.streamingLLMResponse = '';
     this.state.lastPendingTranscription = null;
     this.state.speechDetected = false;
+    this.state.llmResponseComplete = false;
+    this.state.currentResponseId = null;
 
     // Clear typewriters
     this.chatUI.clearAllTypewriters();
@@ -399,6 +457,62 @@ class App {
     );
 
     if (this.state.pendingTranscription && this.state.pendingLLMResponse) {
+      // Check if we've already added both messages together to prevent duplicates
+      const lastUserMessage = this.state.chatHistory
+        .filter((m) => m.role === 'learner')
+        .pop();
+      const lastTeacherMessage = this.state.chatHistory
+        .filter((m) => m.role === 'teacher')
+        .pop();
+
+      // Check if both messages together are duplicates
+      const isDuplicate =
+        lastUserMessage?.content === this.state.pendingTranscription &&
+        lastTeacherMessage?.content === this.state.pendingLLMResponse;
+
+      if (isDuplicate) {
+        console.log(
+          '[Main] Duplicate conversation turn detected, skipping update'
+        );
+        // Still clear the pending state
+        this.state.pendingTranscription = null;
+        this.state.pendingLLMResponse = null;
+        this.state.streamingLLMResponse = '';
+        this.state.lastPendingTranscription = null;
+        this.state.llmResponseComplete = false;
+        return;
+      }
+      
+      // Check if teacher message was already added (from interrupt) but user message wasn't
+      // In this case, we just need to add the user message
+      const teacherAlreadyAdded = lastTeacherMessage?.content === this.state.pendingLLMResponse;
+      const userAlreadyAdded = lastUserMessage?.content === this.state.pendingTranscription;
+      
+      if (teacherAlreadyAdded && !userAlreadyAdded) {
+        console.log('[Main] Teacher message already added from interrupt, adding user message');
+        // Just add the user message
+        this.storage.addMessage('user', this.state.pendingTranscription);
+        this.addMessageToHistory('learner', this.state.pendingTranscription);
+        
+        // Send conversation update
+        const conversationHistory = this.storage.getConversationHistory();
+        this.wsClient.send({
+          type: 'conversation_update',
+          data: conversationHistory,
+        });
+        
+        // Clear pending state
+        this.state.pendingTranscription = null;
+        this.state.pendingLLMResponse = null;
+        this.state.streamingLLMResponse = '';
+        this.state.lastPendingTranscription = null;
+        this.state.llmResponseComplete = false;
+        this.state.currentResponseId = null;
+        
+        this.render();
+        return;
+      }
+
       console.log('Adding messages to conversation history...');
 
       // Add both messages to conversation history (with automatic truncation)
@@ -442,6 +556,8 @@ class App {
       this.state.pendingLLMResponse = null;
       this.state.streamingLLMResponse = '';
       this.state.lastPendingTranscription = null;
+      this.state.llmResponseComplete = false;
+      this.state.currentResponseId = null;
 
       // Clear any active typewriters before rendering final state
       this.chatUI.clearAllTypewriters();
@@ -488,6 +604,71 @@ class App {
       chatHistory: this.state.chatHistory.slice(-10),
       flashcards: this.state.flashcards,
     };
+  }
+
+  handleInterrupt() {
+    console.log('[Main] Handling interrupt - stopping audio and freezing current response');
+    try {
+      // Stop audio playback
+      this.audioPlayer.stop();
+      // Also stop any Audio element playback
+      if (this.currentAudioElement) {
+        this.currentAudioElement.pause();
+        this.currentAudioElement.src = '';
+        this.currentAudioElement = null;
+      }
+      
+      // Freeze the current LLM response if there is one
+      // This means finalizing it and adding it to chat history, but keeping it visible
+      if (this.state.streamingLLMResponse && this.state.streamingLLMResponse.trim()) {
+        console.log('[Main] Freezing current LLM response:', this.state.streamingLLMResponse);
+        
+        // Stop typewriter effect immediately
+        this.chatUI.clearAllTypewriters();
+        
+        // Get the frozen text
+        const frozenText = this.state.streamingLLMResponse;
+        
+        // Save the frozen response
+        this.state.pendingLLMResponse = frozenText;
+        
+        // If we have a pending transcription, finalize the conversation turn now
+        // Otherwise, we'll finalize it when the transcription arrives
+        if (this.state.pendingTranscription) {
+          // We have both, so we can finalize this conversation turn immediately
+          // This adds both messages to chat history
+          this.checkAndUpdateConversation();
+        } else {
+          // No transcription yet - add just the LLM response to chat history now
+          // so it stays visible. We'll add the user message when transcription arrives.
+          // Check if this message is already in history to avoid duplicates
+          const lastTeacherMessage = this.state.chatHistory
+            .filter((m) => m.role === 'teacher')
+            .pop();
+          
+          if (lastTeacherMessage?.content !== frozenText) {
+            console.log('[Main] Adding frozen LLM response to chat history');
+            this.addMessageToHistory('teacher', frozenText);
+          }
+        }
+        
+        // Clear streaming state - this will remove the streaming element
+        // But the message is now in chat history, so it will stay visible
+        this.state.streamingLLMResponse = '';
+        this.state.llmResponseComplete = false;
+        this.state.currentResponseId = null;
+      } else {
+        // No streaming response, just clear state
+        this.state.streamingLLMResponse = '';
+        this.state.llmResponseComplete = false;
+        this.state.currentResponseId = null;
+      }
+      
+      // Render to update UI
+      this.render();
+    } catch (error) {
+      console.warn('Error handling interrupt:', error);
+    }
   }
 
   async handleAudioStream(data) {
