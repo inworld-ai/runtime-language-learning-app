@@ -12,17 +12,22 @@ export class ChatUI {
     currentTranscript,
     currentLLMResponse,
     pendingTranscription,
-    streamingLLMResponse
+    streamingLLMResponse,
+    isRecording,
+    speechDetected
   ) {
     this.renderMessages(
       chatHistory,
       pendingTranscription,
-      streamingLLMResponse
+      streamingLLMResponse,
+      currentTranscript,
+      isRecording,
+      speechDetected
     );
     this.renderCurrentTranscript(currentTranscript);
   }
 
-  renderMessages(messages, pendingTranscription, streamingLLMResponse) {
+  renderMessages(messages, pendingTranscription, streamingLLMResponse, currentTranscript, isRecording, speechDetected) {
     // Only clear and rebuild if the conversation history changed
     const currentHistoryLength = this.messagesContainer.querySelectorAll(
       '.message:not(.streaming)'
@@ -37,11 +42,45 @@ export class ChatUI {
       });
     }
 
-    // Handle pending user transcription
+    // Handle real-time transcript updates (while recording and speech detected)
+    // Show immediately when VAD activates, even before transcript text arrives
+    const existingRealtimeTranscript = document.getElementById(
+      'realtime-transcript'
+    );
+    if (speechDetected && isRecording && !pendingTranscription) {
+      if (!existingRealtimeTranscript) {
+        const userMessage = this.createRealtimeTranscriptElement();
+        userMessage.id = 'realtime-transcript';
+        this.messagesContainer.appendChild(userMessage);
+      }
+      // Update the transcript in real-time (no typewriter effect)
+      // Show 3-dot loading animation if no text yet, otherwise show the actual transcript
+      const transcriptElement = document.getElementById('realtime-transcript');
+      if (transcriptElement) {
+        const textNode = transcriptElement.querySelector('.transcript-text');
+        const loadingDots = transcriptElement.querySelector('.loading-dots');
+        if (currentTranscript) {
+          if (textNode) textNode.textContent = currentTranscript;
+          if (loadingDots) loadingDots.style.display = 'none';
+        } else {
+          if (textNode) textNode.textContent = '';
+          if (loadingDots) loadingDots.style.display = 'flex';
+        }
+        this.scrollToBottom();
+      }
+    } else if (existingRealtimeTranscript) {
+      existingRealtimeTranscript.remove();
+    }
+
+    // Handle pending user transcription (final transcription)
     const existingUserStreaming = document.getElementById(
       'pending-transcription'
     );
     if (pendingTranscription) {
+      // Remove real-time transcript if it exists
+      if (existingRealtimeTranscript) {
+        existingRealtimeTranscript.remove();
+      }
       if (!existingUserStreaming) {
         const userMessage = this.createMessageElement({
           role: 'learner',
@@ -117,6 +156,24 @@ export class ChatUI {
     cursor.className = 'streaming-cursor';
     cursor.textContent = '▊';
     div.appendChild(cursor);
+
+    return div;
+  }
+
+  createRealtimeTranscriptElement() {
+    const div = document.createElement('div');
+    div.className = 'message learner streaming realtime';
+
+    // Create container for text
+    const textNode = document.createElement('span');
+    textNode.className = 'transcript-text';
+    div.appendChild(textNode);
+
+    // Add 3-dot loading animation
+    const loadingDots = document.createElement('span');
+    loadingDots.className = 'loading-dots';
+    loadingDots.innerHTML = '<span></span><span></span><span></span>';
+    div.appendChild(loadingDots);
 
     return div;
   }

@@ -163,6 +163,13 @@ export class AudioProcessor {
               this.websocket.send(
                 JSON.stringify({ type: 'interrupt', reason: 'speech_start' })
               );
+              // Notify frontend that speech was detected so it can show listening indicator
+              this.websocket.send(
+                JSON.stringify({ 
+                  type: 'speech_detected', 
+                  data: { text: '' } // Empty text initially, will be updated with transcript
+                })
+              );
             } catch {
               // ignore send errors
             }

@@ -14,6 +14,7 @@ class App {
     this.chatUI = new ChatUI();
     this.flashcardUI = new FlashcardUI();
     this.userId = this.getOrCreateUserId();
+    this.currentAudioElement = null; // Track current Audio element to prevent simultaneous playback
     this.flashcardUI.onCardClick = (card) => {
       this.wsClient.send({ type: 'flashcard_clicked', card });
     };
@@ -29,6 +30,7 @@ class App {
       pendingLLMResponse: null,
       streamingLLMResponse: '',
       lastPendingTranscription: null,
+      speechDetected: false,
     };
 
     this.init();
@@ -163,13 +165,20 @@ class App {
 
     this.wsClient.on('transcript_update', (text) => {
       this.state.currentTranscript = text;
+      this.state.speechDetected = true; // Ensure speech detected is true when we get transcript
       this.render();
     });
 
     this.wsClient.on('ai_response', (response) => {
       this.addMessage('teacher', response.text);
       this.state.currentTranscript = '';
+      this.state.speechDetected = false;
+      // Note: ai_response is legacy - audio should come via audio_stream now
+      // But if it does come, stop any current playback first
       if (response.audio) {
+        this.audioPlayer.stop();
+        // Convert WAV base64 to PCM and play through AudioPlayer
+        // For now, use the legacy playAudio but stop current playback first
         this.playAudio(response.audio);
       }
     });
@@ -184,7 +193,10 @@ class App {
     });
 
     this.wsClient.on('speech_detected', (data) => {
-      this.state.currentTranscript = data.text || 'Speaking...';
+      // Show listening indicator immediately when VAD detects speech
+      // Use empty string or placeholder - transcript will update as it arrives
+      this.state.currentTranscript = data.text || '';
+      this.state.speechDetected = true;
       this.render();
     });
 
@@ -192,13 +204,15 @@ class App {
       if (data.text) {
         this.addMessage('learner', data.text);
       }
-      this.state.currentTranscript = 'Processing...';
+      this.state.currentTranscript = '';
+      this.state.speechDetected = false;
       this.render();
     });
 
     this.wsClient.on('transcription', (data) => {
       this.state.pendingTranscription = data.text;
       this.state.currentTranscript = '';
+      this.state.speechDetected = false; // Clear speech detected when transcription is complete
       this.state.streamingLLMResponse = ''; // Reset LLM streaming for new conversation
       // Only render if the transcription changed to avoid restarting typewriter
       if (this.state.lastPendingTranscription !== data.text) {
@@ -246,7 +260,15 @@ class App {
       console.log('[Main] Interrupt received, stopping audio playback');
       try {
         this.audioPlayer.stop();
-      } catch (_) {}
+        // Also stop any Audio element playback
+        if (this.currentAudioElement) {
+          this.currentAudioElement.pause();
+          this.currentAudioElement.src = '';
+          this.currentAudioElement = null;
+        }
+      } catch (error) {
+        console.warn('Error stopping audio on interrupt:', error);
+      }
     });
 
     this.audioHandler.on('audioChunk', (audioData) => {
@@ -305,7 +327,8 @@ class App {
       try {
         await this.audioHandler.startStreaming();
         this.state.isRecording = true;
-        this.state.currentTranscript = 'Listening...';
+        this.state.currentTranscript = '';
+        this.state.speechDetected = false;
       } catch (error) {
         console.error('Failed to start streaming:', error);
         alert(
@@ -317,6 +340,7 @@ class App {
       this.audioHandler.stopStreaming();
       this.state.isRecording = false;
       this.state.currentTranscript = '';
+      this.state.speechDetected = false;
     }
     this.render();
   }
@@ -346,6 +370,7 @@ class App {
     this.state.pendingLLMResponse = null;
     this.state.streamingLLMResponse = '';
     this.state.lastPendingTranscription = null;
+    this.state.speechDetected = false;
 
     // Clear typewriters
     this.chatUI.clearAllTypewriters();
@@ -479,9 +504,37 @@ class App {
   }
 
   playAudio(audioData) {
+    // Stop any current AudioPlayer playback to prevent simultaneous audio
+    this.audioPlayer.stop();
+    
+    // Stop any existing Audio element playback
+    if (this.currentAudioElement) {
+      try {
+        this.currentAudioElement.pause();
+        this.currentAudioElement.src = '';
+        this.currentAudioElement = null;
+      } catch (error) {
+        console.warn('Error stopping previous audio element:', error);
+      }
+    }
+    
     const audio = new Audio();
+    this.currentAudioElement = audio;
     audio.src = `data:audio/wav;base64,${audioData}`;
     audio.play().catch(console.error);
+    
+    // Clean up when audio finishes
+    audio.onended = () => {
+      if (this.currentAudioElement === audio) {
+        this.currentAudioElement = null;
+      }
+    };
+    
+    audio.onerror = () => {
+      if (this.currentAudioElement === audio) {
+        this.currentAudioElement = null;
+      }
+    };
   }
 
   render() {
@@ -491,7 +544,9 @@ class App {
       this.state.currentTranscript,
       this.state.currentLLMResponse,
       this.state.pendingTranscription,
-      this.state.streamingLLMResponse
+      this.state.streamingLLMResponse,
+      this.state.isRecording,
+      this.state.speechDetected
     );
     this.flashcardUI.render(this.state.flashcards);
 
