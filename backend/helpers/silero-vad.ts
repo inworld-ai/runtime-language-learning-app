@@ -221,6 +221,14 @@ export class SileroVAD extends EventEmitter {
           if (speechDuration > this.config.minSpeechDuration * 1000) {
             // Convert to ms
             await this.processCapturedSpeech();
+          } else {
+            // Speech was too short, but still emit speechEnd to notify that VAD stopped detecting
+            this.emit('speechEnd', {
+              timestamp: Date.now() / 1000,
+              speechSegment: null, // No segment to process
+              speechDuration: speechDuration / 1000,
+              samplesCount: this.speechBuffer.length,
+            });
           }
 
           // Reset for next speech capture
