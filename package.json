@@ -43,7 +43,7 @@
     "typescript-eslint": "^8.0.0"
   },
   "dependencies": {
-    "@inworld/runtime": "^0.8.0",
+    "@inworld/runtime": "https://assets.inworld.ai/node-packages/inworld-runtime-0.8.2-rc3.tgz",
     "anki-apkg-export": "^4.0.3",
     "dotenv": "^17.2.1",
     "express": "^4.19.2",
