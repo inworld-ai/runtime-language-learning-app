@@ -21,7 +21,12 @@ import { AudioProcessor } from './helpers/audio-processor.js';
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
 import { AnkiExporter } from './helpers/anki-exporter.js';
 import { IntroductionStateProcessor } from './helpers/introduction-state-processor.js';
-import { createConversationGraph } from './graphs/conversation-graph.js';
+import { getConversationGraph } from './graphs/conversation-graph.js';
+import {
+  getLanguageConfig,
+  getLanguageOptions,
+  DEFAULT_LANGUAGE_CODE,
+} from './config/languages.js';
 
 const app = express();
 const server = createServer(app);
@@ -57,11 +62,6 @@ try {
   console.error('[Telemetry] Initialization failed:', err);
 }
 
-// Create a single shared conversation graph instance
-// State is passed directly through AsyncLocalStorage, no registry needed
-let sharedConversationGraph: ReturnType<typeof createConversationGraph> | null =
-  null;
-
 // Store audio processors per connection
 const audioProcessors = new Map<string, AudioProcessor>();
 const flashcardProcessors = new Map<string, FlashcardProcessor>();
@@ -69,20 +69,18 @@ const introductionStateProcessors = new Map<
   string,
   IntroductionStateProcessor
 >();
-// Store lightweight per-connection attributes provided by the client (e.g., timezone, userId)
+// Store lightweight per-connection attributes provided by the client (e.g., timezone, userId, languageCode)
 const connectionAttributes = new Map<
   string,
-  { timezone?: string; userId?: string }
+  { timezone?: string; userId?: string; languageCode?: string }
 >();
 
-// Initialize shared graph once at startup
-function initializeSharedGraph() {
-  if (!sharedConversationGraph) {
-    const apiKey = process.env.INWORLD_API_KEY || '';
-    sharedConversationGraph = createConversationGraph({ apiKey });
-    console.log('Shared conversation graph initialized');
-  }
-  return sharedConversationGraph;
+/**
+ * Get or create a conversation graph for the specified language
+ */
+function getGraphForLanguage(languageCode: string) {
+  const apiKey = process.env.INWORLD_API_KEY || '';
+  return getConversationGraph({ apiKey }, languageCode);
 }
 
 // WebSocket handling with audio processing
@@ -90,17 +88,22 @@ wss.on('connection', (ws) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   console.log(`WebSocket connection established: ${connectionId}`);
 
-  // Create audio processor for this connection
-  // Use the shared graph instance - state is passed via AsyncLocalStorage
-  const sharedGraph = initializeSharedGraph();
-  const audioProcessor = new AudioProcessor(sharedGraph, ws);
-  const flashcardProcessor = new FlashcardProcessor();
-  const introductionStateProcessor = new IntroductionStateProcessor();
+  // Default language is Spanish
+  const defaultLanguageCode = DEFAULT_LANGUAGE_CODE;
 
-  // Register audio processor
+  // Create processors with default language
+  const graph = getGraphForLanguage(defaultLanguageCode);
+  const audioProcessor = new AudioProcessor(graph, ws, defaultLanguageCode);
+  const flashcardProcessor = new FlashcardProcessor(defaultLanguageCode);
+  const introductionStateProcessor = new IntroductionStateProcessor(
+    defaultLanguageCode
+  );
+
+  // Register processors
   audioProcessors.set(connectionId, audioProcessor);
   flashcardProcessors.set(connectionId, flashcardProcessor);
   introductionStateProcessors.set(connectionId, introductionStateProcessor);
+  connectionAttributes.set(connectionId, { languageCode: defaultLanguageCode });
 
   // Set up flashcard generation callback
   audioProcessor.setFlashcardCallback(async (messages) => {
@@ -215,6 +218,53 @@ wss.on('connection', (ws) => {
         }
 
         console.log(`Conversation restarted for connection: ${connectionId}`);
+      } else if (message.type === 'set_language') {
+        // Handle language change
+        const newLanguageCode = message.languageCode || DEFAULT_LANGUAGE_CODE;
+        const attrs = connectionAttributes.get(connectionId) || {};
+
+        // Only process if language actually changed
+        if (attrs.languageCode !== newLanguageCode) {
+          console.log(
+            `Language change requested for ${connectionId}: ${attrs.languageCode} -> ${newLanguageCode}`
+          );
+
+          // Update stored language
+          attrs.languageCode = newLanguageCode;
+          connectionAttributes.set(connectionId, attrs);
+
+          // Get the new language config
+          const languageConfig = getLanguageConfig(newLanguageCode);
+
+          // Update all processors with new language
+          const audioProc = audioProcessors.get(connectionId);
+          const flashcardProc = flashcardProcessors.get(connectionId);
+          const introStateProc = introductionStateProcessors.get(connectionId);
+
+          if (flashcardProc) {
+            flashcardProc.setLanguage(newLanguageCode);
+          }
+          if (introStateProc) {
+            introStateProc.setLanguage(newLanguageCode);
+          }
+          if (audioProc) {
+            // Audio processor needs a new graph for the new language
+            const newGraph = getGraphForLanguage(newLanguageCode);
+            audioProc.setLanguage(newLanguageCode, newGraph);
+          }
+
+          // Send confirmation to frontend
+          ws.send(
+            JSON.stringify({
+              type: 'language_changed',
+              languageCode: newLanguageCode,
+              languageName: languageConfig.name,
+              teacherName: languageConfig.teacherPersona.name,
+            })
+          );
+
+          console.log(`Language changed to ${languageConfig.name} for ${connectionId}`);
+        }
       } else if (message.type === 'user_context') {
         const timezone =
           message.timezone ||
@@ -222,7 +272,17 @@ wss.on('connection', (ws) => {
           undefined;
         const userId =
           message.userId || (message.data && message.data.userId) || undefined;
-        connectionAttributes.set(connectionId, { timezone, userId });
+        const languageCode =
+          message.languageCode ||
+          (message.data && message.data.languageCode) ||
+          undefined;
+        const currentAttrs = connectionAttributes.get(connectionId) || {};
+        connectionAttributes.set(connectionId, {
+          ...currentAttrs,
+          timezone: timezone || currentAttrs.timezone,
+          userId: userId || currentAttrs.userId,
+          languageCode: languageCode || currentAttrs.languageCode,
+        });
       } else if (message.type === 'flashcard_clicked') {
         try {
           const card = message.card || {};
@@ -233,10 +293,11 @@ wss.on('connection', (ws) => {
           telemetry.metric.recordCounterUInt('flashcard_clicks_total', 1, {
             connectionId,
             cardId: card.id || '',
-            spanish: card.spanish || card.word || '',
+            targetWord: card.targetWord || card.spanish || card.word || '',
             english: card.english || card.translation || '',
             source: 'ui',
             timezone: attrs.timezone || '',
+            languageCode: attrs.languageCode || DEFAULT_LANGUAGE_CODE,
             name: (introState?.name && introState.name.trim()) || 'unknown',
             level:
               (introState?.level && (introState.level as string)) || 'unknown',
@@ -286,20 +347,25 @@ wss.on('connection', (ws) => {
 // API endpoint for ANKI export
 app.post('/api/export-anki', async (req, res) => {
   try {
-    const { flashcards, deckName } = req.body;
+    const { flashcards, deckName, languageCode } = req.body;
 
     if (!flashcards || !Array.isArray(flashcards)) {
       return res.status(400).json({ error: 'Invalid flashcards data' });
     }
 
+    // Get language config for deck naming
+    const langCode = languageCode || DEFAULT_LANGUAGE_CODE;
+    const languageConfig = getLanguageConfig(langCode);
+    const defaultDeckName = `Aprendemo ${languageConfig.name} Cards`;
+
     const exporter = new AnkiExporter();
     const ankiBuffer = await exporter.exportFlashcards(
       flashcards,
-      deckName || 'Aprendemo Spanish Cards'
+      deckName || defaultDeckName
     );
 
     // Set headers for file download
-    const filename = `${deckName || 'aprendemo_cards'}.apkg`;
+    const filename = `${deckName || `aprendemo_${langCode}_cards`}.apkg`;
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', ankiBuffer.length);
@@ -311,6 +377,17 @@ app.post('/api/export-anki', async (req, res) => {
     console.error('Error exporting to ANKI:', error);
     res.status(500).json({ error: 'Failed to export flashcards' });
     return;
+  }
+});
+
+// API endpoint to get supported languages
+app.get('/api/languages', (_req, res) => {
+  try {
+    const languages = getLanguageOptions();
+    res.json({ languages, defaultLanguage: DEFAULT_LANGUAGE_CODE });
+  } catch (error) {
+    console.error('Error getting languages:', error);
+    res.status(500).json({ error: 'Failed to get languages' });
   }
 });
 

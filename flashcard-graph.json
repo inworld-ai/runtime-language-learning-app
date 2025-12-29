@@ -1,7 +1,7 @@
 {
   "schema_version": "1.2.0",
   "main": {
-    "id": "flashcard-generation-graph",
+    "id": "flashcard-generation-graph-es",
     "nodes": [
       {
         "type": "FlashcardPromptBuilderNodeType",
@@ -70,8 +70,12 @@
         "to_node": "flashcard-parser"
       }
     ],
-    "end_nodes": ["flashcard-parser"],
-    "start_nodes": ["flashcard-prompt-builder"]
+    "end_nodes": [
+      "flashcard-parser"
+    ],
+    "start_nodes": [
+      "flashcard-prompt-builder"
+    ]
   },
   "components": [
     {

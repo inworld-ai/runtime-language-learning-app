@@ -3,10 +3,12 @@ export class FlashcardUI {
     this.flashcardsGrid = document.getElementById('flashcardsGrid');
     this.cardCount = document.getElementById('cardCount');
     this.flashcards = [];
+    this.currentLanguage = 'es';
   }
 
-  render(flashcards) {
+  render(flashcards, languageCode = 'es') {
     this.flashcards = flashcards;
+    this.currentLanguage = languageCode;
     this.updateCardCount(flashcards.length);
     this.renderFlashcards(flashcards);
   }
@@ -14,7 +16,7 @@ export class FlashcardUI {
   addFlashcards(newFlashcards) {
     // Add new flashcards to the existing collection
     this.flashcards = [...this.flashcards, ...newFlashcards];
-    this.render(this.flashcards);
+    this.render(this.flashcards, this.currentLanguage);
   }
 
   updateCardCount(count) {
@@ -65,10 +67,13 @@ export class FlashcardUI {
     const card = document.createElement('div');
     card.className = 'flashcard';
 
+    // Support both new 'targetWord' and legacy 'spanish' field
+    const targetWord = flashcard.targetWord || flashcard.spanish || flashcard.word || '';
+
     card.innerHTML = `
             <div class="flashcard-inner">
                 <div class="flashcard-front">
-                    <div class="flashcard-spanish">${this.escapeHtml(flashcard.spanish || flashcard.word || '')}</div>
+                    <div class="flashcard-target-word">${this.escapeHtml(targetWord)}</div>
                 </div>
                 <div class="flashcard-back">
                     <div class="flashcard-english">${this.escapeHtml(flashcard.english || flashcard.translation || '')}</div>
@@ -104,13 +109,15 @@ export class FlashcardUI {
   async exportToAnki() {
     try {
       // Filter out invalid flashcards
-      const validFlashcards = this.flashcards.filter(
-        (flashcard) =>
-          flashcard.spanish &&
+      const validFlashcards = this.flashcards.filter((flashcard) => {
+        const targetWord = flashcard.targetWord || flashcard.spanish;
+        return (
+          targetWord &&
           flashcard.english &&
-          flashcard.spanish.trim() !== '' &&
+          targetWord.trim() !== '' &&
           flashcard.english.trim() !== ''
-      );
+        );
+      });
 
       if (validFlashcards.length === 0) {
         alert('No valid flashcards to export');
@@ -122,6 +129,14 @@ export class FlashcardUI {
       this.cardCount.textContent = 'Exporting...';
       this.cardCount.style.cursor = 'wait';
 
+      // Get language name for deck naming
+      const languageNames = {
+        es: 'Spanish',
+        ja: 'Japanese',
+        fr: 'French',
+      };
+      const languageName = languageNames[this.currentLanguage] || 'Language';
+
       const response = await fetch('/api/export-anki', {
         method: 'POST',
         headers: {
@@ -129,7 +144,8 @@ export class FlashcardUI {
         },
         body: JSON.stringify({
           flashcards: validFlashcards,
-          deckName: 'Aprendemo Spanish Cards',
+          deckName: `Aprendemo ${languageName} Cards`,
+          languageCode: this.currentLanguage,
         }),
       });
 
@@ -142,7 +158,7 @@ export class FlashcardUI {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'aprendemo_cards.apkg';
+      a.download = `aprendemo_${this.currentLanguage}_cards.apkg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

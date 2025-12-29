@@ -6,12 +6,18 @@ import {
   CustomNode,
   ProcessContext,
   RemoteLLMChatNode,
+  Graph,
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { flashcardPromptTemplate } from '../helpers/prompt-templates.js';
 import { v4 } from 'uuid';
 import { Flashcard } from '../helpers/flashcard-processor.js';
+import {
+  LanguageConfig,
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../config/languages.js';
 
 class FlashcardPromptBuilderNode extends CustomNode {
   async process(
@@ -51,7 +57,8 @@ class FlashcardParserNode extends CustomNode {
         const parsed = JSON.parse(jsonMatch[0]);
         return {
           id: v4(),
-          spanish: parsed.spanish ?? '',
+          // Support both new 'targetWord' format and legacy 'spanish' format
+          targetWord: parsed.targetWord ?? parsed.spanish ?? '',
           english: parsed.english ?? '',
           example: parsed.example ?? '',
           mnemonic: parsed.mnemonic ?? '',
@@ -64,7 +71,7 @@ class FlashcardParserNode extends CustomNode {
 
     return {
       id: v4(),
-      spanish: '',
+      targetWord: '',
       english: '',
       example: '',
       mnemonic: '',
@@ -74,7 +81,10 @@ class FlashcardParserNode extends CustomNode {
   }
 }
 
-export function createFlashcardGraph() {
+/**
+ * Creates a flashcard generation graph for a specific language
+ */
+function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph {
   const apiKey = process.env.INWORLD_API_KEY;
   if (!apiKey) {
     throw new Error('INWORLD_API_KEY environment variable is required');
@@ -104,7 +114,7 @@ export function createFlashcardGraph() {
   const parserNode = new FlashcardParserNode({ id: 'flashcard-parser' });
 
   const executor = new GraphBuilder({
-    id: 'flashcard-generation-graph',
+    id: `flashcard-generation-graph-${languageConfig.code}`,
     enableRemoteConfig: true,
   })
     .addNode(promptBuilderNode)
@@ -118,7 +128,38 @@ export function createFlashcardGraph() {
     .setEndNode(parserNode)
     .build();
 
-  fs.writeFileSync('flashcard-graph.json', executor.toJSON());
+  // Only write debug file for default language to avoid cluttering
+  if (languageConfig.code === DEFAULT_LANGUAGE_CODE) {
+    fs.writeFileSync('flashcard-graph.json', executor.toJSON());
+  }
 
   return executor;
+}
+
+// Cache for language-specific flashcard graphs
+const flashcardGraphCache = new Map<string, Graph>();
+
+/**
+ * Get or create a flashcard graph for a specific language
+ */
+export function getFlashcardGraph(
+  languageCode: string = DEFAULT_LANGUAGE_CODE
+): Graph {
+  if (!flashcardGraphCache.has(languageCode)) {
+    const languageConfig = getLanguageConfig(languageCode);
+    console.log(
+      `Creating flashcard graph for language: ${languageConfig.name} (${languageCode})`
+    );
+    const graph = createFlashcardGraphForLanguage(languageConfig);
+    flashcardGraphCache.set(languageCode, graph);
+  }
+
+  return flashcardGraphCache.get(languageCode)!;
+}
+
+/**
+ * Legacy function for backwards compatibility
+ */
+export function createFlashcardGraph(): Graph {
+  return getFlashcardGraph(DEFAULT_LANGUAGE_CODE);
 }

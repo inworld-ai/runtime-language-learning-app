@@ -8,28 +8,37 @@ export class AnkiExporter {
    */
   async exportFlashcards(
     flashcards: Flashcard[],
-    deckName: string = 'Aprendemo Spanish Cards'
+    deckName: string = 'Aprendemo Language Cards'
   ): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const apkg = new (AnkiExport as any).default(deckName);
 
     // Add each flashcard as a card
     flashcards.forEach((flashcard) => {
+      // Support both new 'targetWord' and legacy 'spanish' field
+      const targetWord = flashcard.targetWord || (flashcard as { spanish?: string }).spanish;
+
       // Skip empty or error flashcards
       if (
-        !flashcard.spanish ||
+        !targetWord ||
         !flashcard.english ||
-        flashcard.spanish.trim() === '' ||
+        targetWord.trim() === '' ||
         flashcard.english.trim() === ''
       ) {
         return;
       }
 
-      const front = flashcard.spanish.trim();
+      const front = targetWord.trim();
       const back = this.formatCardBack(flashcard);
 
       // Add tags for organization
-      const tags = ['aprendemo', 'spanish-learning'];
+      const tags = ['aprendemo'];
+
+      // Add language tag if available
+      if (flashcard.languageCode) {
+        tags.push(`language-${flashcard.languageCode}`);
+      }
+
       if (flashcard.timestamp) {
         const date = new Date(flashcard.timestamp).toISOString().split('T')[0];
         tags.push(`created-${date}`);
@@ -76,12 +85,14 @@ export class AnkiExporter {
    * Count valid flashcards (ones that can be exported)
    */
   countValidFlashcards(flashcards: Flashcard[]): number {
-    return flashcards.filter(
-      (flashcard) =>
-        flashcard.spanish &&
+    return flashcards.filter((flashcard) => {
+      const targetWord = flashcard.targetWord || (flashcard as { spanish?: string }).spanish;
+      return (
+        targetWord &&
         flashcard.english &&
-        flashcard.spanish.trim() !== '' &&
+        targetWord.trim() !== '' &&
         flashcard.english.trim() !== ''
-    ).length;
+      );
+    }).length;
   }
 }

@@ -1,7 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Graph } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
-import { createIntroductionStateGraph } from '../graphs/introduction-state-graph.js';
+import { getIntroductionStateGraph } from '../graphs/introduction-state-graph.js';
+import {
+  LanguageConfig,
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../config/languages.js';
 
 export type IntroductionStateLevel =
   | 'beginner'
@@ -29,9 +34,34 @@ export class IntroductionStateProcessor {
     timestamp: '',
   };
   private executor: Graph;
+  private languageCode: string = DEFAULT_LANGUAGE_CODE;
+  private languageConfig: LanguageConfig;
 
-  constructor() {
-    this.executor = createIntroductionStateGraph();
+  constructor(languageCode: string = DEFAULT_LANGUAGE_CODE) {
+    this.languageCode = languageCode;
+    this.languageConfig = getLanguageConfig(languageCode);
+    this.executor = getIntroductionStateGraph(languageCode);
+  }
+
+  /**
+   * Update the language for this processor
+   */
+  setLanguage(languageCode: string): void {
+    if (this.languageCode !== languageCode) {
+      this.languageCode = languageCode;
+      this.languageConfig = getLanguageConfig(languageCode);
+      this.executor = getIntroductionStateGraph(languageCode);
+      console.log(
+        `IntroductionStateProcessor: Language changed to ${this.languageConfig.name}`
+      );
+    }
+  }
+
+  /**
+   * Get current language code
+   */
+  getLanguageCode(): string {
+    return this.languageCode;
   }
 
   isComplete(): boolean {
@@ -68,6 +98,7 @@ export class IntroductionStateProcessor {
       const input = {
         messages,
         existingState: this.state,
+        target_language: this.languageConfig.name,
       };
 
       console.log(

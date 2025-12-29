@@ -4,10 +4,16 @@ import {
   CustomNode,
   ProcessContext,
   RemoteLLMChatNode,
+  Graph,
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { introductionStatePromptTemplate } from '../helpers/prompt-templates.js';
+import {
+  LanguageConfig,
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../config/languages.js';
 
 type IntroductionStateLevel = 'beginner' | 'intermediate' | 'advanced' | '';
 
@@ -39,20 +45,53 @@ class TextToChatRequestNode extends CustomNode {
   }
 }
 
+/**
+ * Normalize level strings from various languages to standard values
+ * Supports: English, Spanish, Japanese, French (and more can be added)
+ */
 function normalizeLevel(level: unknown): IntroductionStateLevel {
   if (typeof level !== 'string') return '';
   const lower = level
     .trim()
     .toLowerCase()
     .replace(/[.!?,;:]+$/g, '');
+
   const mapping: Record<string, IntroductionStateLevel> = {
+    // English
     beginner: 'beginner',
     intermediate: 'intermediate',
     advanced: 'advanced',
+    // Spanish
     principiante: 'beginner',
     intermedio: 'intermediate',
     avanzado: 'advanced',
+    // French
+    débutant: 'beginner',
+    debutant: 'beginner',
+    intermédiaire: 'intermediate',
+    intermediaire: 'intermediate',
+    avancé: 'advanced',
+    avance: 'advanced',
+    // Japanese (romanji)
+    shoshinsha: 'beginner',
+    chūkyū: 'intermediate',
+    chuukyuu: 'intermediate',
+    jōkyū: 'advanced',
+    joukyuu: 'advanced',
+    // Japanese (hiragana/katakana - common responses)
+    初心者: 'beginner',
+    中級: 'intermediate',
+    上級: 'advanced',
+    // Additional variations
+    basic: 'beginner',
+    elementary: 'beginner',
+    beginning: 'beginner',
+    middle: 'intermediate',
+    medium: 'intermediate',
+    expert: 'advanced',
+    fluent: 'advanced',
   };
+
   return mapping[lower] || '';
 }
 
@@ -104,7 +143,12 @@ class IntroductionStateParserNode extends CustomNode {
   }
 }
 
-export function createIntroductionStateGraph() {
+/**
+ * Create an introduction state extraction graph for a specific language
+ */
+function createIntroductionStateGraphForLanguage(
+  languageConfig: LanguageConfig
+): Graph {
   const apiKey = process.env.INWORLD_API_KEY;
   if (!apiKey) {
     throw new Error('INWORLD_API_KEY environment variable is required');
@@ -126,7 +170,9 @@ export function createIntroductionStateGraph() {
     id: 'introduction-state-parser',
   });
 
-  const executor = new GraphBuilder('introduction-state-graph')
+  const executor = new GraphBuilder({
+    id: `introduction-state-graph-${languageConfig.code}`,
+  })
     .addNode(promptBuilderNode)
     .addNode(textToChatRequestNode)
     .addNode(llmNode)
@@ -139,4 +185,32 @@ export function createIntroductionStateGraph() {
     .build();
 
   return executor;
+}
+
+// Cache for language-specific introduction state graphs
+const introductionStateGraphCache = new Map<string, Graph>();
+
+/**
+ * Get or create an introduction state graph for a specific language
+ */
+export function getIntroductionStateGraph(
+  languageCode: string = DEFAULT_LANGUAGE_CODE
+): Graph {
+  if (!introductionStateGraphCache.has(languageCode)) {
+    const languageConfig = getLanguageConfig(languageCode);
+    console.log(
+      `Creating introduction state graph for language: ${languageConfig.name} (${languageCode})`
+    );
+    const graph = createIntroductionStateGraphForLanguage(languageConfig);
+    introductionStateGraphCache.set(languageCode, graph);
+  }
+
+  return introductionStateGraphCache.get(languageCode)!;
+}
+
+/**
+ * Legacy function for backwards compatibility
+ */
+export function createIntroductionStateGraph(): Graph {
+  return getIntroductionStateGraph(DEFAULT_LANGUAGE_CODE);
 }

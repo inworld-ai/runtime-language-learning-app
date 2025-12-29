@@ -2,15 +2,21 @@ import { v4 } from 'uuid';
 import { Graph } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { UserContextInterface } from '@inworld/runtime/graph';
-import { createFlashcardGraph } from '../graphs/flashcard-graph.js';
+import { getFlashcardGraph } from '../graphs/flashcard-graph.js';
+import {
+  LanguageConfig,
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../config/languages.js';
 
 export interface Flashcard {
   id: string;
-  spanish: string;
+  targetWord: string; // The word in the target language (was 'spanish')
   english: string;
   example: string;
   mnemonic: string;
   timestamp: string;
+  languageCode?: string; // Track which language this card belongs to
 }
 
 export interface ConversationMessage {
@@ -20,9 +26,30 @@ export interface ConversationMessage {
 
 export class FlashcardProcessor {
   private existingFlashcards: Flashcard[] = [];
+  private languageCode: string = DEFAULT_LANGUAGE_CODE;
+  private languageConfig: LanguageConfig;
 
-  constructor() {
-    // Initialize with empty flashcard array
+  constructor(languageCode: string = DEFAULT_LANGUAGE_CODE) {
+    this.languageCode = languageCode;
+    this.languageConfig = getLanguageConfig(languageCode);
+  }
+
+  /**
+   * Update the language for this processor
+   */
+  setLanguage(languageCode: string): void {
+    if (this.languageCode !== languageCode) {
+      this.languageCode = languageCode;
+      this.languageConfig = getLanguageConfig(languageCode);
+      console.log(`FlashcardProcessor: Language changed to ${this.languageConfig.name}`);
+    }
+  }
+
+  /**
+   * Get current language code
+   */
+  getLanguageCode(): string {
+    return this.languageCode;
   }
 
   async generateFlashcards(
@@ -30,7 +57,7 @@ export class FlashcardProcessor {
     count: number = 1,
     userContext?: UserContextInterface
   ): Promise<Flashcard[]> {
-    const executor = createFlashcardGraph();
+    const executor = getFlashcardGraph(this.languageCode);
 
     // Generate flashcards in parallel
     const promises: Promise<Flashcard>[] = [];
@@ -46,7 +73,7 @@ export class FlashcardProcessor {
 
       // Filter out any failed generations and duplicates
       const validFlashcards = flashcards.filter(
-        (card) => card.spanish && card.english
+        (card) => card.targetWord && card.english
       );
 
       // Add to existing flashcards to track for future duplicates
@@ -67,7 +94,8 @@ export class FlashcardProcessor {
     try {
       const input = {
         studentName: 'Student',
-        teacherName: 'Señor Rosales',
+        teacherName: this.languageConfig.teacherPersona.name,
+        target_language: this.languageConfig.name,
         messages: messages,
         flashcards: this.existingFlashcards,
       };
@@ -92,10 +120,13 @@ export class FlashcardProcessor {
       }
       const flashcard = finalData as unknown as Flashcard;
 
+      // Add language code to the flashcard
+      flashcard.languageCode = this.languageCode;
+
       // Check if this is a duplicate
       const isDuplicate = this.existingFlashcards.some(
         (existing) =>
-          existing.spanish?.toLowerCase() === flashcard.spanish?.toLowerCase()
+          existing.targetWord?.toLowerCase() === flashcard.targetWord?.toLowerCase()
       );
 
       if (isDuplicate) {
@@ -103,11 +134,12 @@ export class FlashcardProcessor {
         // For simplicity, we'll just return an empty flashcard if duplicate
         return {
           id: v4(),
-          spanish: '',
+          targetWord: '',
           english: '',
           example: '',
           mnemonic: '',
           timestamp: new Date().toISOString(),
+          languageCode: this.languageCode,
         } as Flashcard & { error?: string };
       }
 
@@ -116,11 +148,12 @@ export class FlashcardProcessor {
       console.error('Error generating single flashcard:', error);
       return {
         id: v4(),
-        spanish: '',
+        targetWord: '',
         english: '',
         example: '',
         mnemonic: '',
         timestamp: new Date().toISOString(),
+        languageCode: this.languageCode,
       } as Flashcard & { error?: string };
     }
   }

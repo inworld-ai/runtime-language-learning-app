@@ -7,12 +7,18 @@ import {
   RemoteSTTNode,
   RemoteTTSNode,
   TextChunkingNode,
+  Graph,
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { renderJinja } from '@inworld/runtime/primitives/llm';
 import { AsyncLocalStorage } from 'async_hooks';
 import { conversationTemplate } from '../helpers/prompt-templates.js';
 import type { IntroductionState } from '../helpers/introduction-state-processor.js';
+import {
+  LanguageConfig,
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../config/languages.js';
 
 export interface ConversationGraphConfig {
   apiKey: string;
@@ -25,90 +31,146 @@ export const stateStorage = new AsyncLocalStorage<{
     messages: Array<{ role: string; content: string; timestamp: string }>;
   };
   getIntroductionState: () => IntroductionState;
+  getLanguageConfig: () => LanguageConfig;
 }>();
 
-export function createConversationGraph(_config: ConversationGraphConfig) {
-  // Create the custom node class that gets state from AsyncLocalStorage
-  class EnhancedPromptBuilderNode extends CustomNode {
-    async process(_context: ProcessContext, currentInput: string) {
-      // Get state accessors directly from AsyncLocalStorage (set before graph execution)
-      const stateAccessors = stateStorage.getStore();
+// Store the current execution context as module-level variables
+// This is set by AudioProcessor before starting graph execution
+// and read by the PromptBuilder during execution.
+// This works because Node.js is single-threaded for synchronous execution.
+let currentExecutionLanguageCode: string = DEFAULT_LANGUAGE_CODE;
+let currentGetConversationState: (() => { messages: Array<{ role: string; content: string; timestamp: string }> }) | null = null;
+let currentGetIntroductionState: (() => IntroductionState) | null = null;
 
-      if (!stateAccessors) {
-        // Fallback to empty state if not available
-        const conversationState = { messages: [] };
-        const introductionState = {
-          name: '',
-          level: '',
-          goal: '',
-          timestamp: '',
-        };
-        const templateData = {
-          messages: conversationState.messages || [],
-          current_input: currentInput,
-          introduction_state: introductionState,
-        };
+/**
+ * Set the execution context for the current graph execution.
+ * Must be called before starting graph execution.
+ */
+export function setCurrentExecutionContext(context: {
+  languageCode: string;
+  getConversationState: () => { messages: Array<{ role: string; content: string; timestamp: string }> };
+  getIntroductionState: () => IntroductionState;
+}): void {
+  currentExecutionLanguageCode = context.languageCode;
+  currentGetConversationState = context.getConversationState;
+  currentGetIntroductionState = context.getIntroductionState;
+  console.log(`[ConversationGraph] Set execution context for language: ${context.languageCode}`);
+}
 
-        const renderedPrompt = await renderJinja(
-          conversationTemplate,
-          JSON.stringify(templateData)
-        );
+/**
+ * Set the language code for the current graph execution.
+ * @deprecated Use setCurrentExecutionContext instead
+ */
+export function setCurrentExecutionLanguage(languageCode: string): void {
+  currentExecutionLanguageCode = languageCode;
+  console.log(`[ConversationGraph] Set execution language to: ${languageCode}`);
+}
 
-        return new GraphTypes.LLMChatRequest({
-          messages: [{ role: 'user', content: renderedPrompt }],
-        });
-      }
+/**
+ * EnhancedPromptBuilderNode - defined once at module level to avoid
+ * component registry collisions. State and language config are retrieved from
+ * module-level variables (set by AudioProcessor before graph execution).
+ */
+class EnhancedPromptBuilderNode extends CustomNode {
+  async process(_context: ProcessContext, currentInput: string) {
+    // Get language config using the current execution language code
+    const langConfig = getLanguageConfig(currentExecutionLanguageCode);
+    const nodeId = (this as unknown as { id: string }).id;
 
-      // Get state directly from accessors
-      const conversationState = stateAccessors.getConversationState();
-      const introductionState = stateAccessors.getIntroductionState();
+    console.log(
+      `[PromptBuilder] Node ${nodeId} using execution language: ${langConfig.name} (code: ${currentExecutionLanguageCode})`
+    );
 
-      const templateData = {
-        messages: conversationState.messages || [],
-        current_input: currentInput,
-        introduction_state: introductionState || {
-          name: '',
-          level: '',
-          goal: '',
-        },
-      };
+    // Build template variables from language config
+    const templateVars = {
+      target_language: langConfig.name,
+      target_language_native: langConfig.nativeName,
+      teacher_name: langConfig.teacherPersona.name,
+      teacher_description: langConfig.teacherPersona.description,
+      example_topics: langConfig.exampleTopics.join(', '),
+      language_instructions: langConfig.promptInstructions,
+    };
 
-      console.log(
-        'ConversationGraph - Introduction state being used:',
-        JSON.stringify(introductionState, null, 2)
-      );
-      console.log(
-        'ConversationGraph - Number of messages in history:',
-        conversationState.messages?.length || 0
-      );
+    // Get state from module-level accessors (set by AudioProcessor before execution)
+    // These bypass AsyncLocalStorage which gets broken by Inworld runtime
+    const conversationState = currentGetConversationState
+      ? currentGetConversationState()
+      : { messages: [] };
+    const introductionState = currentGetIntroductionState
+      ? currentGetIntroductionState()
+      : { name: '', level: '', goal: '', timestamp: '' };
 
-      const renderedPrompt = await renderJinja(
-        conversationTemplate,
-        JSON.stringify(templateData)
-      );
+    console.log(
+      '[PromptBuilder] Introduction state:',
+      JSON.stringify(introductionState, null, 2)
+    );
+    console.log('[PromptBuilder] Language:', langConfig.name);
+    console.log(
+      '[PromptBuilder] Messages in history:',
+      conversationState.messages?.length || 0
+    );
 
-      // Return LLMChatRequest for the LLM node
-      return new GraphTypes.LLMChatRequest({
-        messages: [{ role: 'user', content: renderedPrompt }],
-      });
-    }
+    const templateData = {
+      messages: conversationState.messages || [],
+      current_input: currentInput,
+      introduction_state: introductionState,
+      ...templateVars,
+    };
+
+    const renderedPrompt = await renderJinja(
+      conversationTemplate,
+      JSON.stringify(templateData)
+    );
+
+    // Debug: Log a snippet of the rendered prompt to verify content
+    const promptSnippet = renderedPrompt.substring(0, 400);
+    console.log(
+      `[PromptBuilder] Rendered prompt (first 400 chars): ${promptSnippet}...`
+    );
+
+    // Return LLMChatRequest for the LLM node
+    return new GraphTypes.LLMChatRequest({
+      messages: [{ role: 'user', content: renderedPrompt }],
+    });
   }
+}
 
+/**
+ * Creates a conversation graph configured for a specific language
+ */
+function createConversationGraphForLanguage(
+  _config: ConversationGraphConfig,
+  languageConfig: LanguageConfig
+): Graph {
+
+  // Use language code as suffix to make node IDs unique per language
+  // This prevents edge condition name collisions in the global callback registry
+  const langSuffix = `_${languageConfig.code}`;
+  const promptBuilderNodeId = `enhanced_prompt_builder_node${langSuffix}`;
+
+  console.log(
+    `[ConversationGraph] Creating graph with prompt builder node: ${promptBuilderNodeId}`
+  );
+
+  // Configure STT for the specific language
   const sttNode = new RemoteSTTNode({
-    id: 'stt_node',
+    id: `stt_node${langSuffix}`,
     sttConfig: {
-      languageCode: 'es',
+      languageCode: languageConfig.sttLanguageCode,
     },
   });
+
   const sttOutputNode = new ProxyNode({
-    id: 'proxy_node',
+    id: `proxy_node${langSuffix}`,
     reportToClient: true,
   });
+
   const promptBuilderNode = new EnhancedPromptBuilderNode({
-    id: 'enhanced_prompt_builder_node',
+    id: promptBuilderNodeId,
   });
+
   const llmNode = new RemoteLLMChatNode({
-    id: 'llm_node',
+    id: `llm_node${langSuffix}`,
     provider: 'openai',
     modelName: 'gpt-4o-mini',
     stream: true,
@@ -123,18 +185,22 @@ export function createConversationGraph(_config: ConversationGraphConfig) {
       presencePenalty: 0,
     },
   });
-  const chunkerNode = new TextChunkingNode({ id: 'chunker_node' });
+
+  const chunkerNode = new TextChunkingNode({ id: `chunker_node${langSuffix}` });
+
+  // Configure TTS for the specific language
   const ttsNode = new RemoteTTSNode({
-    id: 'tts_node',
-    speakerId: 'Diego',
-    modelId: 'inworld-tts-1',
+    id: `tts_node${langSuffix}`,
+    speakerId: languageConfig.ttsConfig.speakerId,
+    modelId: languageConfig.ttsConfig.modelId,
     sampleRate: 16000,
-    speakingRate: 1,
-    temperature: 0.7,
+    speakingRate: languageConfig.ttsConfig.speakingRate,
+    temperature: languageConfig.ttsConfig.temperature,
+    languageCode: languageConfig.ttsConfig.languageCode,
   });
 
   const executor = new GraphBuilder({
-    id: 'conversation_graph',
+    id: `conversation_graph_${languageConfig.code}`,
     enableRemoteConfig: false,
   })
     .addNode(sttNode)
@@ -158,4 +224,44 @@ export function createConversationGraph(_config: ConversationGraphConfig) {
     .build();
 
   return executor;
+}
+
+// Cache for language-specific graphs
+const graphCache = new Map<string, Graph>();
+
+/**
+ * Get or create a conversation graph for a specific language
+ * Graphs are cached to avoid recreation overhead
+ */
+export function getConversationGraph(
+  config: ConversationGraphConfig,
+  languageCode: string = DEFAULT_LANGUAGE_CODE
+): Graph {
+  const cacheKey = languageCode;
+
+  if (!graphCache.has(cacheKey)) {
+    const languageConfig = getLanguageConfig(languageCode);
+    console.log(
+      `Creating conversation graph for language: ${languageConfig.name} (${languageCode})`
+    );
+    const graph = createConversationGraphForLanguage(config, languageConfig);
+    graphCache.set(cacheKey, graph);
+  }
+
+  return graphCache.get(cacheKey)!;
+}
+
+/**
+ * Legacy function for backwards compatibility
+ * Creates or returns the default (Spanish) graph
+ */
+export function createConversationGraph(config: ConversationGraphConfig): Graph {
+  return getConversationGraph(config, DEFAULT_LANGUAGE_CODE);
+}
+
+/**
+ * Clear the graph cache (useful for testing or reconfiguration)
+ */
+export function clearGraphCache(): void {
+  graphCache.clear();
 }

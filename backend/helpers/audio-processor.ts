@@ -4,8 +4,13 @@ import { UserContextInterface } from '@inworld/runtime/graph';
 import { Graph } from '@inworld/runtime/graph';
 import { WebSocket } from 'ws';
 import { SileroVAD, VADConfig } from './silero-vad.js';
-import { stateStorage } from '../graphs/conversation-graph.js';
+import { stateStorage, setCurrentExecutionContext } from '../graphs/conversation-graph.js';
 import type { IntroductionState } from './introduction-state-processor.js';
+import {
+  LanguageConfig,
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../config/languages.js';
 
 export class AudioProcessor {
   private executor: Graph;
@@ -37,11 +42,55 @@ export class AudioProcessor {
   private targetingKey: string | null = null;
   private clientTimezone: string | null = null;
   private graphStartTime: number = 0;
-  constructor(executor: Graph, websocket?: WebSocket) {
+  private languageCode: string = DEFAULT_LANGUAGE_CODE;
+  private languageConfig: LanguageConfig;
+
+  constructor(
+    executor: Graph,
+    websocket?: WebSocket,
+    languageCode: string = DEFAULT_LANGUAGE_CODE
+  ) {
     this.executor = executor;
     this.websocket = websocket ?? null;
+    this.languageCode = languageCode;
+    this.languageConfig = getLanguageConfig(languageCode);
     this.setupWebSocketMessageHandler();
     setTimeout(() => this.initialize(), 100);
+  }
+
+  /**
+   * Update the language and graph for this processor
+   */
+  setLanguage(languageCode: string, newGraph: Graph): void {
+    if (this.languageCode !== languageCode) {
+      console.log(
+        `AudioProcessor: Changing language from ${this.languageCode} to ${languageCode}`
+      );
+      this.languageCode = languageCode;
+      this.languageConfig = getLanguageConfig(languageCode);
+      this.executor = newGraph;
+
+      // Reset conversation state when language changes
+      this.reset();
+
+      console.log(
+        `AudioProcessor: Language changed to ${this.languageConfig.name}`
+      );
+    }
+  }
+
+  /**
+   * Get current language code
+   */
+  getLanguageCode(): string {
+    return this.languageCode;
+  }
+
+  /**
+   * Get current language config
+   */
+  getLanguageConfig(): LanguageConfig {
+    return this.languageConfig;
   }
 
   // Public methods for state registry access
@@ -254,7 +303,7 @@ export class AudioProcessor {
       // Just mark as ready
       this.isReady = true;
       console.log(
-        'AudioProcessor: Using shared conversation graph, ready for audio processing'
+        `AudioProcessor: Using ${this.languageConfig.name} conversation graph, ready for audio processing`
       );
     } catch (error) {
       console.error(
@@ -330,6 +379,7 @@ export class AudioProcessor {
       // Build user context for experiments
       const attributes: Record<string, string> = {
         timezone: this.clientTimezone || '',
+        language: this.languageCode,
       };
       attributes.name =
         (this.introductionState?.name && this.introductionState.name.trim()) ||
@@ -351,12 +401,21 @@ export class AudioProcessor {
 
       this.graphStartTime = Date.now();
 
-      // Use AsyncLocalStorage to set state accessors for this execution context
-      // This allows the graph nodes to access state directly without needing connectionId
+      // Set the current execution context BEFORE starting the graph
+      // This ensures the PromptBuilder node has access to state and language config
+      // We use module-level variables because Inworld runtime breaks AsyncLocalStorage context
+      setCurrentExecutionContext({
+        languageCode: this.languageCode,
+        getConversationState: () => this.getConversationState(),
+        getIntroductionState: () => this.getIntroductionState(),
+      });
+
+      // Also use AsyncLocalStorage as a fallback (may work in some contexts)
       const executionResult = await stateStorage.run(
         {
           getConversationState: () => this.getConversationState(),
           getIntroductionState: () => this.getIntroductionState(),
+          getLanguageConfig: () => this.getLanguageConfig(),
         },
         async () => {
           try {
@@ -400,7 +459,15 @@ export class AudioProcessor {
           string: (data: string) => {
             transcription = data;
 
+            // Debug: always log raw STT result for troubleshooting
+            console.log(
+              `VAD STT Raw Result [${this.languageCode}]: "${data}" (length: ${data.length}, trimmed: ${data.trim().length})`
+            );
+
             if (transcription.trim() === '') {
+              console.log(
+                `VAD STT: Empty transcription for ${this.languageCode}, skipping LLM`
+              );
               return;
             }
 

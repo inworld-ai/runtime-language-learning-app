@@ -19,6 +19,10 @@ class App {
       this.wsClient.send({ type: 'flashcard_clicked', card });
     };
 
+    // Language state
+    this.currentLanguage = this.storage.getLanguage() || 'es';
+    this.availableLanguages = [];
+
     this.state = {
       chatHistory: [],
       flashcards: [],
@@ -41,9 +45,57 @@ class App {
   async init() {
     this.loadState();
     this.setupEventListeners();
+    await this.fetchLanguages();
     await this.connectWebSocket();
     await this.initializeAudioPlayer();
     this.render();
+  }
+
+  async fetchLanguages() {
+    try {
+      const response = await fetch('/api/languages');
+      if (response.ok) {
+        const data = await response.json();
+        this.availableLanguages = data.languages;
+
+        // If current language is not in available languages, use default
+        const isValidLanguage = this.availableLanguages.some(
+          (lang) => lang.code === this.currentLanguage
+        );
+        if (!isValidLanguage) {
+          this.currentLanguage = data.defaultLanguage || 'es';
+        }
+
+        this.populateLanguageDropdown();
+      }
+    } catch (error) {
+      console.error('Failed to fetch languages:', error);
+      // Fallback to default language options
+      this.availableLanguages = [
+        { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇲🇽' },
+        { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: '🇯🇵' },
+        { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷' },
+      ];
+      this.populateLanguageDropdown();
+    }
+  }
+
+  populateLanguageDropdown() {
+    const languageSelect = document.getElementById('languageSelect');
+    if (!languageSelect) return;
+
+    languageSelect.innerHTML = '';
+    this.availableLanguages.forEach((lang) => {
+      const option = document.createElement('option');
+      option.value = lang.code;
+      option.textContent = `${lang.flag} ${lang.name}`;
+      if (lang.code === this.currentLanguage) {
+        option.selected = true;
+      }
+      languageSelect.appendChild(option);
+    });
+
+    languageSelect.disabled = false;
   }
 
   async initializeAudioPlayer() {
@@ -61,8 +113,8 @@ class App {
       this.state.chatHistory = savedState.chatHistory || [];
     }
 
-    // Load flashcards from storage
-    this.state.flashcards = this.storage.getFlashcards();
+    // Load flashcards from storage (for current language)
+    this.state.flashcards = this.storage.getFlashcards(this.currentLanguage);
 
     // Load existing conversation history
     const existingConversation = this.storage.getConversationHistory();
@@ -88,6 +140,7 @@ class App {
   setupEventListeners() {
     const micButton = document.getElementById('micButton');
     const restartButton = document.getElementById('restartButton');
+    const languageSelect = document.getElementById('languageSelect');
 
     // Check for iOS
     const isIOS =
@@ -143,11 +196,25 @@ class App {
       );
     }
 
+    // Language selector event listener
+    languageSelect.addEventListener('change', (e) => {
+      const newLanguage = e.target.value;
+      if (newLanguage !== this.currentLanguage) {
+        this.changeLanguage(newLanguage);
+      }
+    });
+
     this.wsClient.on('connection', (status) => {
       this.state.connectionStatus = status;
 
       // Send existing conversation history to backend when connected
       if (status === 'connected') {
+        // Send language preference first
+        this.wsClient.send({
+          type: 'set_language',
+          languageCode: this.currentLanguage,
+        });
+
         const existingConversation = this.storage.getConversationHistory();
         if (existingConversation.messages.length > 0) {
           console.log(
@@ -341,6 +408,12 @@ class App {
       this.handleInterrupt();
     });
 
+    // Handle language change confirmation from backend
+    this.wsClient.on('language_changed', (data) => {
+      console.log(`[Main] Language changed to ${data.languageName}`);
+      // Optionally show a notification or update UI
+    });
+
     this.audioHandler.on('audioChunk', (audioData) => {
       this.wsClient.sendAudioChunk(audioData);
     });
@@ -354,6 +427,57 @@ class App {
     });
   }
 
+  async changeLanguage(newLanguage) {
+    console.log(`[Main] Changing language from ${this.currentLanguage} to ${newLanguage}`);
+
+    // Stop any ongoing recording
+    if (this.state.isRecording) {
+      this.audioHandler.stopStreaming();
+      this.state.isRecording = false;
+    }
+
+    // Stop audio playback
+    try {
+      this.audioPlayer.stop();
+    } catch (error) {
+      console.error('Error stopping audio:', error);
+    }
+
+    // Update language
+    this.currentLanguage = newLanguage;
+    this.storage.saveLanguage(newLanguage);
+
+    // Clear conversation for new language
+    this.storage.clearConversation();
+    this.state.chatHistory = [];
+    this.state.currentTranscript = '';
+    this.state.currentLLMResponse = '';
+    this.state.pendingTranscription = null;
+    this.state.pendingLLMResponse = null;
+    this.state.streamingLLMResponse = '';
+    this.state.lastPendingTranscription = null;
+    this.state.speechDetected = false;
+    this.state.llmResponseComplete = false;
+    this.state.currentResponseId = null;
+
+    // Clear typewriters
+    this.chatUI.clearAllTypewriters();
+
+    // Load flashcards for new language
+    this.state.flashcards = this.storage.getFlashcards(newLanguage);
+
+    // Send language change to backend
+    if (this.wsClient && this.state.connectionStatus === 'connected') {
+      this.wsClient.send({
+        type: 'set_language',
+        languageCode: newLanguage,
+      });
+    }
+
+    // Re-render UI
+    this.render();
+  }
+
   async connectWebSocket() {
     try {
       await this.wsClient.connect();
@@ -364,6 +488,7 @@ class App {
           type: 'user_context',
           timezone: tz,
           userId: this.userId,
+          languageCode: this.currentLanguage,
         });
       } catch (e) {
         // ignore
@@ -596,14 +721,16 @@ class App {
   }
 
   addFlashcard(flashcard) {
-    const exists = this.state.flashcards.some(
-      (card) =>
-        card.spanish === flashcard.spanish || card.word === flashcard.word
-    );
+    // Use targetWord for deduplication (backwards compatible with spanish)
+    const targetWord = flashcard.targetWord || flashcard.spanish || flashcard.word;
+    const exists = this.state.flashcards.some((card) => {
+      const cardWord = card.targetWord || card.spanish || card.word;
+      return cardWord === targetWord;
+    });
 
     if (!exists) {
       this.state.flashcards.push(flashcard);
-      this.storage.addFlashcards([flashcard]);
+      this.storage.addFlashcards([flashcard], this.currentLanguage);
       this.saveState();
       this.render();
     }
@@ -611,7 +738,7 @@ class App {
 
   addMultipleFlashcards(flashcards) {
     // Use storage method which handles deduplication and persistence
-    const updatedFlashcards = this.storage.addFlashcards(flashcards);
+    const updatedFlashcards = this.storage.addFlashcards(flashcards, this.currentLanguage);
     this.state.flashcards = updatedFlashcards;
     this.saveState();
     this.render();
@@ -755,13 +882,16 @@ class App {
       this.state.isRecording,
       this.state.speechDetected
     );
-    this.flashcardUI.render(this.state.flashcards);
+    this.flashcardUI.render(this.state.flashcards, this.currentLanguage);
 
     const micButton = document.getElementById('micButton');
     const restartButton = document.getElementById('restartButton');
+    const languageSelect = document.getElementById('languageSelect');
+
     micButton.disabled = this.state.connectionStatus !== 'connected';
     micButton.classList.toggle('recording', this.state.isRecording);
     restartButton.disabled = this.state.connectionStatus !== 'connected';
+    languageSelect.disabled = this.state.connectionStatus !== 'connected';
   }
 
   updateConnectionStatus() {
