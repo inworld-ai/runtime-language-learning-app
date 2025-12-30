@@ -93,14 +93,17 @@ export class ConversationGraphWrapper {
     const audioInputNode = new ProxyNode({ id: `audio-input-proxy${postfix}` });
 
     // AssemblyAI STT with built-in VAD
-    const turnDetectionSettings = getAssemblyAISettingsForEagerness('high');
+    // Use 'low' (conservative) settings for language learning - allows thinking pauses
+    const turnDetectionSettings = getAssemblyAISettingsForEagerness('low');
     const assemblyAISTTNode = new AssemblyAISTTWebSocketNode({
       id: `assembly-ai-stt-ws-node${postfix}`,
       config: {
         apiKey: assemblyAIApiKey,
         connections: connections,
         sampleRate: INPUT_SAMPLE_RATE,
-        formatTurns: true,
+        // Disable format_turns - per AssemblyAI docs, this adds latency and
+        // LLMs don't need formatting. Raw text is sent as soon as it's ready.
+        formatTurns: false,
         endOfTurnConfidenceThreshold:
           turnDetectionSettings.endOfTurnConfidenceThreshold,
         minEndOfTurnSilenceWhenConfident:
