@@ -278,7 +278,7 @@ export function getLanguageConfig(code: string): LanguageConfig {
   const config = SUPPORTED_LANGUAGES[code];
   if (!config) {
     console.warn(
-      `Language '${code}' not found, falling back to Spanish (es)`
+      `Language '${code}' not found, falling back to Spanish (es).`
     );
     return SUPPORTED_LANGUAGES['es'];
   }
