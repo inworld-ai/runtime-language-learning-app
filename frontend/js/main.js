@@ -274,6 +274,15 @@ class App {
       this.render();
     });
 
+    this.wsClient.on('partial_transcript', (data) => {
+      // Update the transcript in real-time as AssemblyAI processes speech
+      if (data.text) {
+        this.state.currentTranscript = data.text;
+        this.state.speechDetected = true;
+        this.render();
+      }
+    });
+
     this.wsClient.on('speech_ended', (data) => {
       // VAD stopped detecting speech - clear the real-time transcript bubble
       console.log(
@@ -828,9 +837,9 @@ class App {
     try {
       if (data.audio && data.audio.length > 0) {
         console.log(
-          `Received audio stream: ${data.audio.length} bytes at ${data.sampleRate}Hz${data.text ? ` with text: "${data.text}"` : ''}`
+          `Received audio stream: ${data.audio.length} bytes at ${data.sampleRate}Hz [format:${data.audioFormat}]${data.text ? ` with text: "${data.text}"` : ''}`
         );
-        await this.audioPlayer.addAudioStream(data.audio, data.sampleRate);
+        await this.audioPlayer.addAudioStream(data.audio, data.sampleRate, false, data.audioFormat);
       }
     } catch (error) {
       console.error('Error handling audio stream:', error);

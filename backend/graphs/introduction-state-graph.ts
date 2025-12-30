@@ -7,7 +7,7 @@ import {
   Graph,
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
-import { renderJinja } from '@inworld/runtime/primitives/llm';
+import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { introductionStatePromptTemplate } from '../helpers/prompt-templates.js';
 import {
   LanguageConfig,
@@ -29,10 +29,8 @@ class IntroductionPromptBuilderNode extends CustomNode {
     _context: ProcessContext,
     input: GraphTypes.Content | Record<string, unknown>
   ) {
-    const renderedPrompt = await renderJinja(
-      introductionStatePromptTemplate,
-      JSON.stringify(input)
-    );
+    const builder = await PromptBuilder.create(introductionStatePromptTemplate);
+    const renderedPrompt = await builder.build(input as Record<string, unknown>);
     return renderedPrompt;
   }
 }
@@ -163,7 +161,7 @@ function createIntroductionStateGraphForLanguage(
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
-    modelName: 'gpt-4.1',
+    modelName: 'gpt-4o-mini',
     stream: false,
   });
   const parserNode = new IntroductionStateParserNode({
@@ -172,6 +170,7 @@ function createIntroductionStateGraphForLanguage(
 
   const executor = new GraphBuilder({
     id: `introduction-state-graph-${languageConfig.code}`,
+    enableRemoteConfig: false,
   })
     .addNode(promptBuilderNode)
     .addNode(textToChatRequestNode)

@@ -1,3 +1,5 @@
+import { translator } from './translator.js';
+
 export class ChatUI {
   constructor() {
     this.messagesContainer = document.getElementById('messages');
@@ -5,6 +7,111 @@ export class ChatUI {
     this.typewriterTimers = new Map(); // Track active typewriter effects
     this.typewriterSpeed = 25; // milliseconds per character
     this.llmTypewriterCallback = null; // Callback for when LLM typewriter completes
+    
+    // Translation tooltip
+    this.translationTooltip = this._createTranslationTooltip();
+    this.activeHoverElement = null;
+    this.hoverTimeout = null;
+    this.hideTimeout = null;
+  }
+
+  _createTranslationTooltip() {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'translation-tooltip';
+    tooltip.innerHTML = `
+      <div class="translation-content">
+        <span class="translation-text"></span>
+      </div>
+      <div class="translation-loading">
+        <span></span><span></span><span></span>
+      </div>
+    `;
+    document.body.appendChild(tooltip);
+    
+    // Keep tooltip visible when hovering over it
+    tooltip.addEventListener('mouseenter', () => {
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
+    });
+    
+    tooltip.addEventListener('mouseleave', () => {
+      this._hideTooltip();
+    });
+    
+    return tooltip;
+  }
+
+  _showTooltip(element, text) {
+    const rect = element.getBoundingClientRect();
+    const tooltip = this.translationTooltip;
+    
+    // Position tooltip above the message
+    tooltip.style.left = `${rect.left + window.scrollX}px`;
+    tooltip.style.top = `${rect.top + window.scrollY - 8}px`;
+    tooltip.style.maxWidth = `${Math.min(rect.width + 40, 400)}px`;
+    
+    // Show loading state
+    tooltip.classList.add('visible', 'loading');
+    tooltip.querySelector('.translation-text').textContent = '';
+    
+    // Fetch translation
+    translator.translate(text, 'en', 'auto')
+      .then(translation => {
+        if (this.activeHoverElement === element) {
+          tooltip.querySelector('.translation-text').textContent = translation;
+          tooltip.classList.remove('loading');
+          
+          // Reposition after content loads (in case size changed)
+          requestAnimationFrame(() => {
+            const tooltipRect = tooltip.getBoundingClientRect();
+            tooltip.style.top = `${rect.top + window.scrollY - tooltipRect.height - 8}px`;
+          });
+        }
+      })
+      .catch(error => {
+        console.error('[ChatUI] Translation failed:', error);
+        if (this.activeHoverElement === element) {
+          tooltip.querySelector('.translation-text').textContent = 'Translation unavailable';
+          tooltip.classList.remove('loading');
+        }
+      });
+  }
+
+  _hideTooltip() {
+    this.translationTooltip.classList.remove('visible', 'loading');
+    this.activeHoverElement = null;
+  }
+
+  _setupTranslationHover(element) {
+    element.addEventListener('mouseenter', () => {
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
+      
+      // Small delay before showing tooltip to avoid flickering
+      this.hoverTimeout = setTimeout(() => {
+        this.activeHoverElement = element;
+        const text = element.textContent.replace('▊', '').trim(); // Remove cursor
+        if (text) {
+          this._showTooltip(element, text);
+        }
+      }, 300);
+    });
+
+    element.addEventListener('mouseleave', () => {
+      if (this.hoverTimeout) {
+        clearTimeout(this.hoverTimeout);
+        this.hoverTimeout = null;
+      }
+      
+      // Delay hiding to allow moving to tooltip
+      this.hideTimeout = setTimeout(() => {
+        this._hideTooltip();
+      }, 150);
+    });
   }
 
   render(
@@ -149,6 +256,12 @@ export class ChatUI {
     const div = document.createElement('div');
     div.className = `message ${message.role}`;
     div.textContent = message.content;
+    
+    // Add translation hover for teacher (LLM) messages
+    if (message.role === 'teacher') {
+      this._setupTranslationHover(div);
+    }
+    
     return div;
   }
 
@@ -165,6 +278,9 @@ export class ChatUI {
     cursor.className = 'streaming-cursor';
     cursor.textContent = '▊';
     div.appendChild(cursor);
+
+    // Add translation hover for streaming teacher messages too
+    this._setupTranslationHover(div);
 
     return div;
   }

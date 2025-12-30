@@ -1,3 +1,14 @@
+/**
+ * Language Learning Server - Inworld Runtime 0.9
+ *
+ * This server uses a long-running circular graph with AssemblyAI for VAD/STT.
+ * Key components:
+ * - ConversationGraphWrapper: The main graph that processes audio → STT → LLM → TTS
+ * - ConnectionManager: Manages WebSocket connections and feeds audio to the graph
+ * - FlashcardProcessor: Generates flashcards from conversations
+ * - IntroductionStateProcessor: Extracts user info (name, level, goal)
+ */
+
 // Load environment variables FIRST
 import dotenv from 'dotenv';
 dotenv.config();
@@ -14,14 +25,16 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { telemetry, stopInworldRuntime } from '@inworld/runtime';
 import { MetricType } from '@inworld/runtime/telemetry';
-import { UserContextInterface } from '@inworld/runtime/graph';
 
-// Import our audio processor
-import { AudioProcessor } from './helpers/audio-processor.js';
+// Import new 0.9 components
+import { ConversationGraphWrapper } from './components/graphs/conversation-graph.js';
+import { ConnectionManager } from './helpers/connection-manager.js';
+import { ConnectionsMap } from './types/index.js';
+
+// Import existing components (still compatible)
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
-import { AnkiExporter } from './helpers/anki-exporter.js';
+// import { AnkiExporter } from './helpers/anki-exporter.js';
 import { IntroductionStateProcessor } from './helpers/introduction-state-processor.js';
-import { getConversationGraph } from './graphs/conversation-graph.js';
 import {
   getLanguageConfig,
   getLanguageOptions,
@@ -37,7 +50,32 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Initialize telemetry once at startup
+// ============================================================
+// Global State
+// ============================================================
+
+// Shared connections map (used by graph nodes)
+const connections: ConnectionsMap = {};
+
+// Graph wrapper (created once, shared across all connections)
+let graphWrapper: ConversationGraphWrapper | null = null;
+
+// Connection managers per WebSocket
+const connectionManagers = new Map<string, ConnectionManager>();
+const flashcardProcessors = new Map<string, FlashcardProcessor>();
+const introductionStateProcessors = new Map<string, IntroductionStateProcessor>();
+const connectionAttributes = new Map<
+  string,
+  { timezone?: string; userId?: string; languageCode?: string }
+>();
+
+// Shutdown flag
+let isShuttingDown = false;
+
+// ============================================================
+// Initialize Telemetry
+// ============================================================
+
 try {
   const telemetryApiKey = process.env.INWORLD_API_KEY;
   if (telemetryApiKey) {
@@ -54,84 +92,88 @@ try {
       unit: 'clicks',
     });
   } else {
-    console.warn(
-      '[Telemetry] INWORLD_API_KEY not set. Metrics will be disabled.'
-    );
+    console.warn('[Telemetry] INWORLD_API_KEY not set. Metrics will be disabled.');
   }
 } catch (err) {
   console.error('[Telemetry] Initialization failed:', err);
 }
 
-// Store audio processors per connection
-const audioProcessors = new Map<string, AudioProcessor>();
-const flashcardProcessors = new Map<string, FlashcardProcessor>();
-const introductionStateProcessors = new Map<
-  string,
-  IntroductionStateProcessor
->();
-// Store lightweight per-connection attributes provided by the client (e.g., timezone, userId, languageCode)
-const connectionAttributes = new Map<
-  string,
-  { timezone?: string; userId?: string; languageCode?: string }
->();
+// ============================================================
+// Initialize Graph
+// ============================================================
 
-/**
- * Get or create a conversation graph for the specified language
- */
-function getGraphForLanguage(languageCode: string) {
-  const apiKey = process.env.INWORLD_API_KEY || '';
-  return getConversationGraph({ apiKey }, languageCode);
+async function initializeGraph(): Promise<void> {
+  const assemblyAIApiKey = process.env.ASSEMBLY_AI_API_KEY;
+  if (!assemblyAIApiKey) {
+    throw new Error('ASSEMBLY_AI_API_KEY environment variable is required');
+  }
+
+  console.log('[Server] Creating conversation graph...');
+  graphWrapper = ConversationGraphWrapper.create({
+    assemblyAIApiKey,
+    connections,
+    defaultLanguageCode: DEFAULT_LANGUAGE_CODE,
+  });
+  console.log('[Server] Conversation graph created successfully');
 }
 
-// WebSocket handling with audio processing
-wss.on('connection', (ws) => {
+// ============================================================
+// WebSocket Connection Handler
+// ============================================================
+
+wss.on('connection', async (ws) => {
+  if (!graphWrapper) {
+    console.error('[Server] Graph not initialized, rejecting connection');
+    ws.close(1011, 'Server not ready');
+    return;
+  }
+
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  console.log(`WebSocket connection established: ${connectionId}`);
+  console.log(`[Server] WebSocket connection established: ${connectionId}`);
 
   // Default language is Spanish
   const defaultLanguageCode = DEFAULT_LANGUAGE_CODE;
 
-  // Create processors with default language
-  const graph = getGraphForLanguage(defaultLanguageCode);
-  const audioProcessor = new AudioProcessor(graph, ws, defaultLanguageCode);
-  const flashcardProcessor = new FlashcardProcessor(defaultLanguageCode);
-  const introductionStateProcessor = new IntroductionStateProcessor(
+  // Create connection manager (replaces AudioProcessor)
+  const connectionManager = new ConnectionManager(
+    connectionId,
+    ws,
+    graphWrapper,
+    connections,
     defaultLanguageCode
   );
 
-  // Register processors
-  audioProcessors.set(connectionId, audioProcessor);
+  // Create flashcard and introduction state processors
+  const flashcardProcessor = new FlashcardProcessor(defaultLanguageCode);
+  const introductionStateProcessor = new IntroductionStateProcessor(defaultLanguageCode);
+
+  // Store processors
+  connectionManagers.set(connectionId, connectionManager);
   flashcardProcessors.set(connectionId, flashcardProcessor);
   introductionStateProcessors.set(connectionId, introductionStateProcessor);
   connectionAttributes.set(connectionId, { languageCode: defaultLanguageCode });
 
   // Set up flashcard generation callback
-  audioProcessor.setFlashcardCallback(async (messages) => {
-    // Skip flashcard generation if we're shutting down
+  connectionManager.setFlashcardCallback(async (messages) => {
     if (isShuttingDown) {
-      console.log('Skipping flashcard generation - server is shutting down');
+      console.log('[Server] Skipping flashcard generation - shutting down');
       return;
     }
 
     try {
-      // Build UserContext for flashcard graph execution
       const introState = introductionStateProcessor.getState();
       const attrs = connectionAttributes.get(connectionId) || {};
       const userAttributes: Record<string, string> = {
         timezone: attrs.timezone || '',
       };
-      userAttributes.name =
-        (introState?.name && introState.name.trim()) || 'unknown';
-      userAttributes.level =
-        (introState?.level && (introState.level as string)) || 'unknown';
-      userAttributes.goal =
-        (introState?.goal && introState.goal.trim()) || 'unknown';
+      userAttributes.name = introState?.name?.trim() || 'unknown';
+      userAttributes.level = (introState?.level as string) || 'unknown';
+      userAttributes.goal = introState?.goal?.trim() || 'unknown';
 
-      // Prefer a stable targeting key from client if available, fallback to connectionId
       const targetingKey = attrs.userId || connectionId;
-      const userContext: UserContextInterface = {
+      const userContext = {
         attributes: userAttributes,
-        targetingKey: targetingKey,
+        targetingKey,
       };
 
       const flashcards = await flashcardProcessor.generateFlashcards(
@@ -143,117 +185,88 @@ wss.on('connection', (ws) => {
         ws.send(
           JSON.stringify({
             type: 'flashcards_generated',
-            flashcards: flashcards,
+            flashcards,
           })
         );
       }
-    } catch (error: unknown) {
-      // Suppress "Environment closed" errors during shutdown - they're expected
-      const err = error as { context?: string };
-      if (isShuttingDown && err?.context === 'Environment closed') {
-        console.log('Flashcard generation cancelled due to shutdown');
-      } else {
-        console.error('Error generating flashcards:', error);
+    } catch (error) {
+      if (!isShuttingDown) {
+        console.error('[Server] Error generating flashcards:', error);
       }
     }
   });
 
-  // Set up introduction-state extraction callback (runs until complete)
-  audioProcessor.setIntroductionStateCallback(async (messages) => {
+  // Set up introduction state extraction callback
+  connectionManager.setIntroductionStateCallback(async (messages) => {
     try {
       const currentState = introductionStateProcessor.getState();
-      console.log(
-        'Server - Current introduction state before update:',
-        currentState
-      );
-      console.log(
-        'Server - Is complete?',
-        introductionStateProcessor.isComplete()
-      );
-
       if (introductionStateProcessor.isComplete()) {
-        console.log(
-          'Server - Introduction state is complete, returning:',
-          currentState
-        );
         return currentState;
       }
 
       const state = await introductionStateProcessor.update(messages);
-      console.log('Server - Updated introduction state:', state);
       return state;
     } catch (error) {
-      console.error('Error generating introduction state:', error);
+      console.error('[Server] Error extracting introduction state:', error);
       return null;
     }
   });
 
+  // Start the graph for this connection
+  try {
+    await connectionManager.start();
+    console.log(`[Server] Graph started for connection ${connectionId}`);
+  } catch (error) {
+    console.error(`[Server] Failed to start graph for ${connectionId}:`, error);
+    ws.close(1011, 'Failed to start audio processing');
+    return;
+  }
+
+  // Handle incoming messages
   ws.on('message', (data) => {
     try {
       const message = JSON.parse(data.toString());
 
       if (message.type === 'audio_chunk' && message.audio_data) {
         // Process audio chunk
-        audioProcessor.addAudioChunk(message.audio_data);
+        connectionManager.addAudioChunk(message.audio_data);
       } else if (message.type === 'reset_flashcards') {
-        // Reset flashcards for new conversation
         const processor = flashcardProcessors.get(connectionId);
         if (processor) {
           processor.reset();
         }
       } else if (message.type === 'restart_conversation') {
-        // Reset conversation state, introduction state, and flashcards
-        const audioProc = audioProcessors.get(connectionId);
-        const flashcardProc = flashcardProcessors.get(connectionId);
-        const introStateProc = introductionStateProcessors.get(connectionId);
-
-        if (audioProc) {
-          audioProc.reset();
-        }
-        if (flashcardProc) {
-          flashcardProc.reset();
-        }
-        if (introStateProc) {
-          introStateProc.reset();
-        }
-
-        console.log(`Conversation restarted for connection: ${connectionId}`);
+        // Reset all state
+        connectionManager.reset();
+        flashcardProcessors.get(connectionId)?.reset();
+        introductionStateProcessors.get(connectionId)?.reset();
+        console.log(`[Server] Conversation restarted for ${connectionId}`);
       } else if (message.type === 'set_language') {
         // Handle language change
         const newLanguageCode = message.languageCode || DEFAULT_LANGUAGE_CODE;
         const attrs = connectionAttributes.get(connectionId) || {};
 
-        // Only process if language actually changed
         if (attrs.languageCode !== newLanguageCode) {
           console.log(
-            `Language change requested for ${connectionId}: ${attrs.languageCode} -> ${newLanguageCode}`
+            `[Server] Language change: ${attrs.languageCode} -> ${newLanguageCode}`
           );
 
-          // Update stored language
           attrs.languageCode = newLanguageCode;
           connectionAttributes.set(connectionId, attrs);
 
-          // Get the new language config
           const languageConfig = getLanguageConfig(newLanguageCode);
 
-          // Update all processors with new language
-          const audioProc = audioProcessors.get(connectionId);
-          const flashcardProc = flashcardProcessors.get(connectionId);
-          const introStateProc = introductionStateProcessors.get(connectionId);
+          // Update all processors
+          flashcardProcessors.get(connectionId)?.setLanguage(newLanguageCode);
+          introductionStateProcessors.get(connectionId)?.setLanguage(newLanguageCode);
+          connectionManager.setLanguage(newLanguageCode);
 
-          if (flashcardProc) {
-            flashcardProc.setLanguage(newLanguageCode);
-          }
-          if (introStateProc) {
-            introStateProc.setLanguage(newLanguageCode);
-          }
-          if (audioProc) {
-            // Audio processor needs a new graph for the new language
-            const newGraph = getGraphForLanguage(newLanguageCode);
-            audioProc.setLanguage(newLanguageCode, newGraph);
-          }
+          // Reset conversation on language change
+          connectionManager.reset();
+          flashcardProcessors.get(connectionId)?.reset();
+          introductionStateProcessors.get(connectionId)?.reset();
 
-          // Send confirmation to frontend
+          // Send confirmation
           ws.send(
             JSON.stringify({
               type: 'language_changed',
@@ -263,19 +276,12 @@ wss.on('connection', (ws) => {
             })
           );
 
-          console.log(`Language changed to ${languageConfig.name} for ${connectionId}`);
+          console.log(`[Server] Language changed to ${languageConfig.name}`);
         }
       } else if (message.type === 'user_context') {
-        const timezone =
-          message.timezone ||
-          (message.data && message.data.timezone) ||
-          undefined;
-        const userId =
-          message.userId || (message.data && message.data.userId) || undefined;
-        const languageCode =
-          message.languageCode ||
-          (message.data && message.data.languageCode) ||
-          undefined;
+        const timezone = message.timezone || message.data?.timezone;
+        const userId = message.userId || message.data?.userId;
+        const languageCode = message.languageCode || message.data?.languageCode;
         const currentAttrs = connectionAttributes.get(connectionId) || {};
         connectionAttributes.set(connectionId, {
           ...currentAttrs,
@@ -298,162 +304,140 @@ wss.on('connection', (ws) => {
             source: 'ui',
             timezone: attrs.timezone || '',
             languageCode: attrs.languageCode || DEFAULT_LANGUAGE_CODE,
-            name: (introState?.name && introState.name.trim()) || 'unknown',
-            level:
-              (introState?.level && (introState.level as string)) || 'unknown',
-            goal: (introState?.goal && introState.goal.trim()) || 'unknown',
+            name: introState?.name?.trim() || 'unknown',
+            level: (introState?.level as string) || 'unknown',
+            goal: introState?.goal?.trim() || 'unknown',
           });
         } catch (err) {
-          console.error('Error recording flashcard click metric:', err);
+          console.error('[Server] Error recording flashcard click:', err);
         }
       } else {
-        console.log('Received non-audio message:', message.type);
+        console.log('[Server] Received message type:', message.type);
       }
     } catch (error) {
-      console.error('Error processing message:', error);
+      console.error('[Server] Error processing message:', error);
     }
   });
 
   ws.on('error', (error) => {
-    console.error(`WebSocket error for ${connectionId}:`, error);
-    // Don't crash - errors are handled by close event
+    console.error(`[Server] WebSocket error for ${connectionId}:`, error);
   });
 
   ws.on('close', async () => {
-    console.log(`WebSocket connection closed: ${connectionId}`);
+    console.log(`[Server] WebSocket closed: ${connectionId}`);
 
-    // Clean up audio processor
-    const processor = audioProcessors.get(connectionId);
-    if (processor) {
+    // Clean up connection manager
+    const manager = connectionManagers.get(connectionId);
+    if (manager) {
       try {
-        await processor.destroy();
+        await manager.destroy();
       } catch (error) {
-        console.error(
-          `Error destroying audio processor for ${connectionId}:`,
-          error
-        );
-        // Continue with cleanup even if destroy fails
+        console.error(`[Server] Error destroying connection manager:`, error);
       }
-      audioProcessors.delete(connectionId);
+      connectionManagers.delete(connectionId);
     }
 
-    // Clean up processors
+    // Clean up other processors
     flashcardProcessors.delete(connectionId);
     introductionStateProcessors.delete(connectionId);
     connectionAttributes.delete(connectionId);
   });
 });
 
-// API endpoint for ANKI export
-app.post('/api/export-anki', async (req, res) => {
-  try {
-    const { flashcards, deckName, languageCode } = req.body;
+// ============================================================
+// API Endpoints
+// ============================================================
 
-    if (!flashcards || !Array.isArray(flashcards)) {
-      return res.status(400).json({ error: 'Invalid flashcards data' });
-    }
+// ANKI export endpoint - temporarily disabled
+// app.post('/api/export-anki', async (req, res) => {
+//   ...
+// });
 
-    // Get language config for deck naming
-    const langCode = languageCode || DEFAULT_LANGUAGE_CODE;
-    const languageConfig = getLanguageConfig(langCode);
-    const defaultDeckName = `Aprendemo ${languageConfig.name} Cards`;
-
-    const exporter = new AnkiExporter();
-    const ankiBuffer = await exporter.exportFlashcards(
-      flashcards,
-      deckName || defaultDeckName
-    );
-
-    // Set headers for file download
-    const filename = `${deckName || `aprendemo_${langCode}_cards`}.apkg`;
-    res.setHeader('Content-Type', 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', ankiBuffer.length);
-
-    // Send the file
-    res.send(ankiBuffer);
-    return;
-  } catch (error) {
-    console.error('Error exporting to ANKI:', error);
-    res.status(500).json({ error: 'Failed to export flashcards' });
-    return;
-  }
-});
-
-// API endpoint to get supported languages
+// Languages endpoint
 app.get('/api/languages', (_req, res) => {
   try {
     const languages = getLanguageOptions();
     res.json({ languages, defaultLanguage: DEFAULT_LANGUAGE_CODE });
   } catch (error) {
-    console.error('Error getting languages:', error);
+    console.error('[Server] Error getting languages:', error);
     res.status(500).json({ error: 'Failed to get languages' });
   }
 });
 
-// Serve static frontend files
-// When running from dist/backend/server.js, go up two levels to project root
-// When running from backend/server.ts (dev mode), go up one level to project root
+// ============================================================
+// Static Files
+// ============================================================
+
 const frontendPath = path.join(__dirname, '../../frontend');
 const devFrontendPath = path.join(__dirname, '../frontend');
 const staticPath = path.resolve(frontendPath);
 const devStaticPath = path.resolve(devFrontendPath);
-// Use the path that exists
 const finalStaticPath = existsSync(devStaticPath) ? devStaticPath : staticPath;
 app.use(express.static(finalStaticPath));
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// ============================================================
+// Server Startup
+// ============================================================
 
-// Graceful shutdown - prevent multiple calls
-let isShuttingDown = false;
-
-async function gracefulShutdown() {
-  if (isShuttingDown) {
-    return;
+async function startServer(): Promise<void> {
+  try {
+    await initializeGraph();
+    server.listen(PORT, () => {
+      console.log(`[Server] Running on port ${PORT}`);
+      console.log(`[Server] Using Inworld Runtime 0.9 with AssemblyAI STT`);
+    });
+  } catch (error) {
+    console.error('[Server] Failed to start:', error);
+    process.exit(1);
   }
+}
+
+startServer();
+
+// ============================================================
+// Graceful Shutdown
+// ============================================================
+
+async function gracefulShutdown(): Promise<void> {
+  if (isShuttingDown) return;
   isShuttingDown = true;
 
-  console.log('Shutting down gracefully...');
+  console.log('[Server] Shutting down gracefully...');
 
   try {
-    // Close all WebSocket connections immediately
-    console.log(`Closing ${wss.clients.size} WebSocket connections...`);
+    // Close all WebSocket connections
+    console.log(`[Server] Closing ${wss.clients.size} WebSocket connections...`);
     wss.clients.forEach((ws) => {
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
         ws.close();
       }
     });
 
-    // Close WebSocket server (non-blocking)
     wss.close();
 
-    // Clean up processors (fire and forget - don't wait)
-    for (const processor of audioProcessors.values()) {
-      processor.destroy().catch(() => {
-        // Ignore errors during shutdown
-      });
+    // Clean up connection managers
+    for (const manager of connectionManagers.values()) {
+      manager.destroy().catch(() => {});
     }
 
-    // Close HTTP server (non-blocking)
+    // Clean up graph wrapper
+    if (graphWrapper) {
+      await graphWrapper.destroy();
+    }
+
     server.close(() => {
-      console.log('HTTP server closed');
+      console.log('[Server] HTTP server closed');
     });
 
-    // Stop Inworld Runtime (fire and forget - don't wait)
     stopInworldRuntime()
-      .then(() => console.log('Inworld Runtime stopped'))
-      .catch(() => {
-        // Ignore errors during shutdown
-      });
+      .then(() => console.log('[Server] Inworld Runtime stopped'))
+      .catch(() => {});
 
-    console.log('Shutdown complete');
+    console.log('[Server] Shutdown complete');
   } catch {
     // Ignore errors during shutdown
   }
 
-  // Exit immediately - don't wait for anything
   process.exitCode = 0;
   process.exit(0);
 }

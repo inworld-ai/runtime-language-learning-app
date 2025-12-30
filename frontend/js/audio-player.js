@@ -55,7 +55,7 @@ export class AudioPlayer {
     }
   }
 
-  async addAudioStream(base64Audio, sampleRate = 16000, isLastChunk = false) {
+  async addAudioStream(base64Audio, sampleRate = 16000, isLastChunk = false, audioFormat = 'int16') {
     if (!base64Audio || base64Audio.length === 0) {
       console.warn('Empty audio data received');
       return;
@@ -110,7 +110,8 @@ export class AudioPlayer {
       // Create audio buffer from the decoded data
       const audioBuffer = await this.createAudioBuffer(
         bytes.buffer,
-        sampleRate
+        sampleRate,
+        audioFormat
       );
 
       // Queue the audio buffer for playback
@@ -131,24 +132,51 @@ export class AudioPlayer {
     }
   }
 
-  async createAudioBuffer(arrayBuffer, sampleRate) {
+  async createAudioBuffer(arrayBuffer, sampleRate, audioFormat = 'int16') {
     try {
-      // We know the backend sends raw PCM Int16 data, so skip decode attempt
-      // and directly process as PCM for faster playback
-      const int16Array = new Int16Array(arrayBuffer);
-      const audioBuffer = this.audioContext.createBuffer(
-        1,
-        int16Array.length,
-        sampleRate
-      );
-      const channelData = audioBuffer.getChannelData(0);
+      let channelData;
+      let numSamples;
 
-      // Convert Int16 to Float32 and normalize
-      for (let i = 0; i < int16Array.length; i++) {
-        channelData[i] = int16Array[i] / 32768.0;
+      console.log(`[AudioPlayer] createAudioBuffer: format=${audioFormat}, byteLength=${arrayBuffer.byteLength}, sampleRate=${sampleRate}`);
+
+      if (audioFormat === 'float32') {
+        // Float32 PCM - bytes are IEEE 754 Float32 representation
+        // 4 bytes per sample, values already in [-1.0, 1.0] range
+        const float32Array = new Float32Array(arrayBuffer);
+        numSamples = float32Array.length;
+        console.log(`[AudioPlayer] Float32 samples: ${numSamples}, first 3 values: [${Array.from(float32Array.slice(0, 3)).map(v => v.toFixed(4)).join(', ')}]`);
+
+        const audioBuffer = this.audioContext.createBuffer(
+          1,
+          numSamples,
+          sampleRate
+        );
+        channelData = audioBuffer.getChannelData(0);
+
+        for (let i = 0; i < numSamples; i++) {
+          channelData[i] = float32Array[i];
+        }
+
+        return audioBuffer;
+      } else {
+        // Int16 PCM format - convert to Float32
+        const int16Array = new Int16Array(arrayBuffer);
+        numSamples = int16Array.length;
+        console.log(`[AudioPlayer] Int16 samples: ${numSamples}`);
+
+        const audioBuffer = this.audioContext.createBuffer(
+          1,
+          numSamples,
+          sampleRate
+        );
+        channelData = audioBuffer.getChannelData(0);
+
+        for (let i = 0; i < numSamples; i++) {
+          channelData[i] = int16Array[i] / 32768.0;
+        }
+
+        return audioBuffer;
       }
-
-      return audioBuffer;
     } catch (error) {
       console.error('Error creating audio buffer:', error);
       throw error;

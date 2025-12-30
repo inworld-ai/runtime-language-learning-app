@@ -154,6 +154,14 @@ export class WebSocketClient {
         this.emit('speech_ended', message.data);
         break;
 
+      case 'partial_transcript':
+        this.emit('partial_transcript', {
+          text: message.text,
+          interactionId: message.interactionId,
+          timestamp: message.timestamp,
+        });
+        break;
+
       case 'llm_response_chunk':
         this.emit('llm_response_chunk', {
           text: message.text,
@@ -171,6 +179,7 @@ export class WebSocketClient {
       case 'audio_stream':
         this.emit('audio_stream', {
           audio: message.audio,
+          audioFormat: message.audioFormat || 'int16',
           sampleRate: message.sampleRate,
           timestamp: message.timestamp,
         });

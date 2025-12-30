@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import fs from 'fs';
 
 import {
   GraphBuilder,
@@ -9,7 +8,7 @@ import {
   Graph,
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
-import { renderJinja } from '@inworld/runtime/primitives/llm';
+import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { flashcardPromptTemplate } from '../helpers/prompt-templates.js';
 import { v4 } from 'uuid';
 import { Flashcard } from '../helpers/flashcard-processor.js';
@@ -24,10 +23,8 @@ class FlashcardPromptBuilderNode extends CustomNode {
     _context: ProcessContext,
     input: GraphTypes.Content | Record<string, unknown>
   ) {
-    const renderedPrompt = await renderJinja(
-      flashcardPromptTemplate,
-      JSON.stringify(input)
-    );
+    const builder = await PromptBuilder.create(flashcardPromptTemplate);
+    const renderedPrompt = await builder.build(input as Record<string, unknown>);
     return renderedPrompt;
   }
 }
@@ -99,7 +96,7 @@ function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph 
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
     provider: 'openai',
-    modelName: 'gpt-5',
+    modelName: 'gpt-4o-mini',
     stream: false,
     textGenerationConfig: {
       maxNewTokens: 2500,
@@ -115,7 +112,7 @@ function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph 
 
   const executor = new GraphBuilder({
     id: `flashcard-generation-graph-${languageConfig.code}`,
-    enableRemoteConfig: true,
+    enableRemoteConfig: false,
   })
     .addNode(promptBuilderNode)
     .addNode(textToChatRequestNode)
@@ -127,11 +124,6 @@ function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph 
     .setStartNode(promptBuilderNode)
     .setEndNode(parserNode)
     .build();
-
-  // Only write debug file for default language to avoid cluttering
-  if (languageConfig.code === DEFAULT_LANGUAGE_CODE) {
-    fs.writeFileSync('flashcard-graph.json', executor.toJSON());
-  }
 
   return executor;
 }
