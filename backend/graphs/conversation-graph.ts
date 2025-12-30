@@ -93,7 +93,7 @@ export class ConversationGraphWrapper {
     const audioInputNode = new ProxyNode({ id: `audio-input-proxy${postfix}` });
 
     // AssemblyAI STT with built-in VAD
-    const turnDetectionSettings = getAssemblyAISettingsForEagerness('medium');
+    const turnDetectionSettings = getAssemblyAISettingsForEagerness('high');
     const assemblyAISTTNode = new AssemblyAISTTWebSocketNode({
       id: `assembly-ai-stt-ws-node${postfix}`,
       config: {

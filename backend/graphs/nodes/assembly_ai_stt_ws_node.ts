@@ -19,7 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Connection } from '../../types/index.js';
 // Settings imported but used via constructor config
 // import { getAssemblyAISettingsForEagerness } from '../../types/settings.js';
-import { float32ToPCM16 } from '../../helpers/audio_utils.js';
+import { audioDataToPCM16 } from '../../helpers/audio_utils.js';
 
 /**
  * Configuration interface for AssemblyAISTTWebSocketNode
@@ -59,11 +59,9 @@ class AssemblyAISession {
   private lastActivityTime: number = Date.now();
   private readonly INACTIVITY_TIMEOUT_MS = 60000; // 60 seconds
 
-  // Track completed turns to prevent duplicate processing
+  // Track completed turns to prevent duplicate processing (content-based, not time-based)
   private lastCompletedTranscript: string = '';
   private newSpeechReceived: boolean = false;
-  private lastTurnTimestamp: number = 0;
-  private readonly TURN_DEBOUNCE_MS = 500; // Minimum time between accepting turns
 
   constructor(
     public readonly sessionId: string,
@@ -231,14 +229,19 @@ class AssemblyAISession {
   /**
    * Check if a turn should be accepted or rejected as duplicate
    * Returns true if the turn is valid and should be processed
+   *
+   * Note: We use content-based deduplication instead of time-based debouncing
+   * to avoid adding latency while still preventing duplicate processing.
    */
   public shouldAcceptTurn(transcript: string): boolean {
-    const now = Date.now();
+    // If new speech was received since last turn, always accept
+    if (this.newSpeechReceived) {
+      return true;
+    }
 
-    // Check debounce - if a turn was just completed, reject
-    if (this.lastTurnTimestamp > 0 && now - this.lastTurnTimestamp < this.TURN_DEBOUNCE_MS) {
-      console.log(`[AssemblyAI] Rejecting turn - within debounce period (${now - this.lastTurnTimestamp}ms)`);
-      return false;
+    // No new speech - check for duplicate content
+    if (!this.lastCompletedTranscript) {
+      return true; // No previous turn to compare against
     }
 
     // Normalize transcripts for comparison (lowercase, remove punctuation, trim)
@@ -248,19 +251,14 @@ class AssemblyAISession {
     const normalizedNew = normalizeText(transcript);
     const normalizedLast = normalizeText(this.lastCompletedTranscript);
 
-    // If no new speech was received since last turn, check for duplicate content
-    if (!this.newSpeechReceived && this.lastCompletedTranscript) {
-      // Check if transcripts are similar (allowing for minor formatting differences)
-      const isSimilar = normalizedNew === normalizedLast ||
-                       normalizedNew.includes(normalizedLast) ||
-                       normalizedLast.includes(normalizedNew);
+    // Check if transcripts are similar (allowing for minor formatting differences)
+    const isSimilar = normalizedNew === normalizedLast ||
+                     normalizedNew.includes(normalizedLast) ||
+                     normalizedLast.includes(normalizedNew);
 
-      if (isSimilar) {
-        console.log(`[AssemblyAI] Rejecting turn - duplicate content without new speech`);
-        console.log(`  Last: "${this.lastCompletedTranscript.substring(0, 50)}..."`);
-        console.log(`  New:  "${transcript.substring(0, 50)}..."`);
-        return false;
-      }
+    if (isSimilar) {
+      console.log(`[AssemblyAI] Rejecting turn - duplicate content without new speech`);
+      return false;
     }
 
     return true;
@@ -270,10 +268,8 @@ class AssemblyAISession {
    * Mark that a turn was completed - store for deduplication
    */
   public markTurnCompleted(transcript: string): void {
-    this.lastTurnTimestamp = Date.now();
     this.lastCompletedTranscript = transcript;
     this.newSpeechReceived = false; // Reset for next turn
-    console.log(`[AssemblyAI] Turn completed, transcript stored for deduplication`);
   }
 
   /**
@@ -299,7 +295,8 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
   private wsEndpointBaseUrl: string = 'wss://streaming.assemblyai.com/v3/ws';
 
   private sessions: Map<string, AssemblyAISession> = new Map();
-  private readonly TURN_COMPLETION_TIMEOUT_MS = 2000;
+  // Reduced from 2000ms for faster response when audio ends before turn detection
+  private readonly TURN_COMPLETION_TIMEOUT_MS = 1200;
   private readonly MAX_TRANSCRIPTION_DURATION_MS = 40000;
 
   constructor(props: { id?: string; config: AssemblyAISTTWebSocketNodeConfig }) {
@@ -312,15 +309,18 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       throw new Error('AssemblyAISTTWebSocketNode requires a connections object.');
     }
 
+    // Optimized defaults for lower latency voice-to-voice interaction:
+    // - Higher confidence threshold (0.5) detects turns faster with more certainty
+    // - Lower silence thresholds (300ms/900ms) reduce wait time after speech ends
     super({
       id: nodeProps.id || 'assembly-ai-stt-ws-node',
       executionConfig: {
         sampleRate: config.sampleRate || 16000,
         formatTurns: config.formatTurns !== false,
-        endOfTurnConfidenceThreshold: config.endOfTurnConfidenceThreshold || 0.4,
+        endOfTurnConfidenceThreshold: config.endOfTurnConfidenceThreshold || 0.5,
         minEndOfTurnSilenceWhenConfident:
-          config.minEndOfTurnSilenceWhenConfident || 400,
-        maxTurnSilence: config.maxTurnSilence || 1280,
+          config.minEndOfTurnSilenceWhenConfident || 300,
+        maxTurnSilence: config.maxTurnSilence || 900,
         language: config.language || 'es',
       },
     });
@@ -330,10 +330,10 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
     this.sampleRate = config.sampleRate || 16000;
     this.formatTurns = config.formatTurns !== false;
     this.endOfTurnConfidenceThreshold =
-      config.endOfTurnConfidenceThreshold || 0.4;
+      config.endOfTurnConfidenceThreshold || 0.5;
     this.minEndOfTurnSilenceWhenConfident =
-      config.minEndOfTurnSilenceWhenConfident || 400;
-    this.maxTurnSilence = config.maxTurnSilence || 1280;
+      config.minEndOfTurnSilenceWhenConfident || 300;
+    this.maxTurnSilence = config.maxTurnSilence || 900;
     this.defaultLanguage = config.language || 'es';
 
     const defaultModel = this.defaultLanguage === 'en'
@@ -614,14 +614,11 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
               continue;
             }
 
-            const float32Data = Array.isArray(audioData)
-              ? new Float32Array(audioData)
-              : audioData;
-
             audioChunkCount++;
-            totalAudioSamples += float32Data.length;
+            totalAudioSamples += audioData.length;
 
-            const pcm16Data = float32ToPCM16(float32Data);
+            // Convert directly to PCM16 without intermediate Float32Array allocation
+            const pcm16Data = audioDataToPCM16(audioData);
             session?.sendAudio(pcm16Data);
           }
         } catch (error) {

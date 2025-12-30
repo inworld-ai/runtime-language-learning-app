@@ -20,7 +20,6 @@ import {
   DEFAULT_LANGUAGE_CODE,
   LanguageConfig,
 } from '../config/languages.js';
-import type { IntroductionState } from './introduction-state-processor.js';
 
 export class ConnectionManager {
   private sessionId: string;
@@ -33,14 +32,9 @@ export class ConnectionManager {
   private languageCode: string;
   private languageConfig: LanguageConfig;
 
-  // Callbacks for flashcard and introduction state processing
+  // Callback for flashcard processing
   private flashcardCallback:
     | ((messages: Array<{ role: string; content: string }>) => Promise<void>)
-    | null = null;
-  private introductionStateCallback:
-    | ((
-        messages: Array<{ role: string; content: string }>
-      ) => Promise<IntroductionState | null>)
     | null = null;
 
   constructor(
@@ -68,7 +62,6 @@ export class ConnectionManager {
         targetLanguage: this.languageConfig.name,
         languageCode: languageCode,
         voiceId: this.languageConfig.ttsConfig.speakerId,
-        introductionState: { name: '', level: '', goal: '', timestamp: '' },
         output_modalities: ['audio', 'text'],
       },
       multimodalStreamManager: this.multimodalStreamManager,
@@ -190,9 +183,6 @@ export class ConnectionManager {
               text: transcription.trim(),
               timestamp: Date.now(),
             });
-
-            // Trigger introduction state extraction
-            this.triggerIntroductionStateExtraction();
           }
         },
 
@@ -209,7 +199,6 @@ export class ConnectionManager {
               text: transcription.trim(),
               timestamp: Date.now(),
             });
-            this.triggerIntroductionStateExtraction();
           }
         },
 
@@ -217,12 +206,13 @@ export class ConnectionManager {
         ContentStream: async (streamData: unknown) => {
           const stream = streamData as GraphTypes.ContentStream;
           console.log('[ConnectionManager] Processing LLM ContentStream...');
-          let currentResponse = '';
+          // Use array + join instead of string concatenation for O(n) vs O(n²)
+          const responseChunks: string[] = [];
 
           for await (const chunk of stream) {
             if (this.isDestroyed) break;
             if (chunk.text) {
-              currentResponse += chunk.text;
+              responseChunks.push(chunk.text);
               this.sendToClient({
                 type: 'llm_response_chunk',
                 text: chunk.text,
@@ -231,6 +221,7 @@ export class ConnectionManager {
             }
           }
 
+          const currentResponse = responseChunks.join('');
           if (currentResponse.trim()) {
             llmResponse = currentResponse;
             console.log(
@@ -331,9 +322,10 @@ export class ConnectionManager {
       debugLogAudioStats(this.sessionId, float32Data);
       debugAddAudioChunk(this.sessionId, float32Data);
 
-      // Push to multimodal stream
+      // Push to multimodal stream - pass Float32Array directly,
+      // MultimodalStreamManager will handle conversion when needed
       this.multimodalStreamManager.pushAudio({
-        data: Array.from(float32Data),
+        data: float32Data,
         sampleRate: INPUT_SAMPLE_RATE,
       });
     } catch (error) {
@@ -432,42 +424,6 @@ export class ConnectionManager {
     });
   }
 
-  /**
-   * Trigger introduction state extraction
-   */
-  private triggerIntroductionStateExtraction(): void {
-    if (!this.introductionStateCallback) return;
-
-    const connection = this.connections[this.sessionId];
-    if (!connection) return;
-
-    // Skip if introduction is already complete
-    const intro = connection.state.introductionState;
-    if (intro.name && intro.level && intro.goal) {
-      return;
-    }
-
-    const recentMessages = connection.state.messages.slice(-6).map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    this.introductionStateCallback(recentMessages)
-      .then((state) => {
-        if (state) {
-          connection.state.introductionState = state;
-          this.sendToClient({
-            type: 'introduction_state_updated',
-            introduction_state: state,
-            timestamp: Date.now(),
-          });
-        }
-      })
-      .catch((error) => {
-        console.error('[ConnectionManager] Introduction state error:', error);
-      });
-  }
-
   // ============================================================
   // Public API (compatible with AudioProcessor)
   // ============================================================
@@ -480,14 +436,6 @@ export class ConnectionManager {
     this.flashcardCallback = callback;
   }
 
-  setIntroductionStateCallback(
-    callback: (
-      messages: Array<{ role: string; content: string }>
-    ) => Promise<IntroductionState | null>
-  ): void {
-    this.introductionStateCallback = callback;
-  }
-
   getConversationState(): { messages: Array<{ role: string; content: string; timestamp: string }> } {
     const connection = this.connections[this.sessionId];
     return {
@@ -498,18 +446,6 @@ export class ConnectionManager {
           timestamp: m.timestamp || new Date().toISOString(),
         })) || [],
     };
-  }
-
-  getIntroductionState(): IntroductionState {
-    const connection = this.connections[this.sessionId];
-    return (
-      connection?.state.introductionState || {
-        name: '',
-        level: '',
-        goal: '',
-        timestamp: '',
-      }
-    );
   }
 
   getLanguageCode(): string {
@@ -552,12 +488,6 @@ export class ConnectionManager {
     const connection = this.connections[this.sessionId];
     if (connection) {
       connection.state.messages = [];
-      connection.state.introductionState = {
-        name: '',
-        level: '',
-        goal: '',
-        timestamp: '',
-      };
       connection.state.interactionId = '';
     }
     console.log('[ConnectionManager] Conversation reset');

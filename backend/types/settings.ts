@@ -27,13 +27,13 @@ export function getAssemblyAISettingsForEagerness(
         description:
           'Aggressive - VERY quick responses, ideal for rapid Q&A (Agent Assist, IVR)',
       };
-    case 'medium': // Balanced (default) - good for language learning
+    case 'medium': // Balanced (default) - optimized for voice-to-voice latency
       return {
-        endOfTurnConfidenceThreshold: 0.4,
-        minEndOfTurnSilenceWhenConfident: 400,
-        maxTurnSilence: 1280,
+        endOfTurnConfidenceThreshold: 0.5,
+        minEndOfTurnSilenceWhenConfident: 300,
+        maxTurnSilence: 900,
         description:
-          'Balanced - Natural conversation flow (Customer Support, Tech Support)',
+          'Balanced - Optimized for responsive voice-to-voice conversation',
       };
     case 'low': // Conservative - VERY patient
       return {

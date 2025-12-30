@@ -71,14 +71,24 @@ export function debugSaveAudio(sessionId: string, sampleRate: number = 16000): s
 
 /**
  * Log audio stats for debugging
+ * Note: Uses loop instead of spread operator to avoid stack overflow on large arrays
  */
 export function debugLogAudioStats(sessionId: string, float32Data: Float32Array): void {
   if (!DEBUG_AUDIO) return;
 
-  const min = Math.min(...float32Data);
-  const max = Math.max(...float32Data);
-  const avg = float32Data.reduce((a, b) => a + b, 0) / float32Data.length;
-  const nonZero = float32Data.filter(v => Math.abs(v) > 0.001).length;
+  // Calculate stats using loops to avoid blocking with large arrays
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  let nonZero = 0;
+  for (let i = 0; i < float32Data.length; i++) {
+    const v = float32Data[i];
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+    if (Math.abs(v) > 0.001) nonZero++;
+  }
+  const avg = sum / float32Data.length;
 
   console.log(`[AudioDebug] Session ${sessionId.slice(-8)}: samples=${float32Data.length}, min=${min.toFixed(4)}, max=${max.toFixed(4)}, avg=${avg.toFixed(4)}, nonZero=${nonZero}/${float32Data.length}`);
 }
@@ -137,6 +147,21 @@ export function float32ToPCM16(float32Data: Float32Array): Int16Array {
   for (let i = 0; i < float32Data.length; i++) {
     // Clamp to [-1, 1] range and convert to Int16 range [-32768, 32767]
     const s = Math.max(-1, Math.min(1, float32Data[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return pcm16;
+}
+
+/**
+ * Convert number[] or Float32Array audio data to Int16Array (PCM16)
+ * This is an optimized version that handles both types to avoid
+ * intermediate allocations in the audio pipeline.
+ */
+export function audioDataToPCM16(audioData: number[] | Float32Array): Int16Array {
+  const pcm16 = new Int16Array(audioData.length);
+  for (let i = 0; i < audioData.length; i++) {
+    // Clamp to [-1, 1] range and convert to Int16 range [-32768, 32767]
+    const s = Math.max(-1, Math.min(1, audioData[i]));
     pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
   return pcm16;

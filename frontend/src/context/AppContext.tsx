@@ -170,6 +170,8 @@ export function AppProvider({ children }: AppProviderProps) {
 
   const pendingLLMResponseRef = useRef<string | null>(null);
   const lastPendingTranscriptionRef = useRef<string | null>(null);
+  // Track the last processed pair to prevent duplicate additions
+  const lastProcessedPairRef = useRef<{ user: string; teacher: string } | null>(null);
 
   // Refs for callbacks to avoid effect dependency issues
   const handleInterruptRef = useRef<() => void>(() => {});
@@ -231,6 +233,16 @@ export function AppProvider({ children }: AppProviderProps) {
     const pendingLLMResponse = pendingLLMResponseRef.current;
 
     if (pendingTranscription && pendingLLMResponse) {
+      // Check if we've already processed this exact pair (using ref for synchronous check)
+      const lastPair = lastProcessedPairRef.current;
+      if (lastPair && lastPair.user === pendingTranscription && lastPair.teacher === pendingLLMResponse) {
+        // Already processed this pair, just clean up
+        dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: null });
+        pendingLLMResponseRef.current = null;
+        dispatch({ type: 'RESET_STREAMING_STATE' });
+        return;
+      }
+
       const lastUserMessage = currentState.chatHistory
         .filter((m) => m.role === 'learner')
         .pop();
@@ -243,6 +255,7 @@ export function AppProvider({ children }: AppProviderProps) {
         lastTeacherMessage?.content === pendingLLMResponse;
 
       if (isDuplicate) {
+        lastProcessedPairRef.current = { user: pendingTranscription, teacher: pendingLLMResponse };
         dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: null });
         pendingLLMResponseRef.current = null;
         dispatch({ type: 'RESET_STREAMING_STATE' });
@@ -254,6 +267,9 @@ export function AppProvider({ children }: AppProviderProps) {
 
       const storage = storageRef.current;
       const wsClient = wsClientRef.current;
+
+      // Mark this pair as processed BEFORE adding (synchronous protection)
+      lastProcessedPairRef.current = { user: pendingTranscription, teacher: pendingLLMResponse };
 
       if (teacherAlreadyAdded && !userAlreadyAdded) {
         storage.addMessage('user', pendingTranscription);
@@ -553,6 +569,7 @@ export function AppProvider({ children }: AppProviderProps) {
     dispatch({ type: 'RESET_CONVERSATION' });
     pendingLLMResponseRef.current = null;
     lastPendingTranscriptionRef.current = null;
+    lastProcessedPairRef.current = null;
 
     storage.saveState({ chatHistory: [] });
 
@@ -583,6 +600,7 @@ export function AppProvider({ children }: AppProviderProps) {
       dispatch({ type: 'RESET_CONVERSATION' });
       pendingLLMResponseRef.current = null;
       lastPendingTranscriptionRef.current = null;
+      lastProcessedPairRef.current = null;
 
       const flashcards = storage.getFlashcards(newLanguage);
       dispatch({ type: 'SET_FLASHCARDS', payload: flashcards });

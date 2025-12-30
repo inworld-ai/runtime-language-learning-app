@@ -5,7 +5,6 @@
 import { WebSocket } from 'ws';
 import type { MultimodalStreamManager } from '../helpers/multimodal_stream_manager.js';
 import type { GraphOutputStream } from '@inworld/runtime/graph';
-import type { IntroductionState } from '../helpers/introduction-state-processor.js';
 
 /**
  * Chat message in conversation history
@@ -29,7 +28,6 @@ export interface State {
   userName: string;
   targetLanguage: string;
   languageCode: string;
-  introductionState: IntroductionState;
   // Output modalities (for graph routing)
   output_modalities: ('text' | 'audio')[];
 }

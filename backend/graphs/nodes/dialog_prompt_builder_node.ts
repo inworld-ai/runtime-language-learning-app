@@ -4,7 +4,7 @@
  * This node is specifically designed for the language learning app and:
  * - Receives the current conversation state
  * - Applies the language-specific prompt template
- * - Uses Jinja to render the prompt with conversation history and introduction state
+ * - Uses Jinja to render the prompt with conversation history
  * - Returns a formatted LLMChatRequest for the LLM node
  */
 
@@ -54,15 +54,6 @@ export class DialogPromptBuilderNode extends CustomNode {
     const lastMessage = messages[messages.length - 1];
     const currentInput = lastMessage?.role === 'user' ? lastMessage.content : '';
 
-    // Get introduction state
-    const introductionState = state.introductionState || {
-      name: '',
-      level: '',
-      goal: '',
-      timestamp: '',
-    };
-
-    console.log('[DialogPromptBuilder] Introduction state:', JSON.stringify(introductionState));
     console.log('[DialogPromptBuilder] Language:', langConfig.name);
     console.log('[DialogPromptBuilder] Messages in history:', historyMessages.length);
 
@@ -72,7 +63,6 @@ export class DialogPromptBuilderNode extends CustomNode {
         content: m.content,
       })),
       current_input: currentInput,
-      introduction_state: introductionState,
       ...templateVars,
     };
 

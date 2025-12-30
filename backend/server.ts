@@ -6,7 +6,6 @@
  * - ConversationGraphWrapper: The main graph that processes audio → STT → LLM → TTS
  * - ConnectionManager: Manages WebSocket connections and feeds audio to the graph
  * - FlashcardProcessor: Generates flashcards from conversations
- * - IntroductionStateProcessor: Extracts user info (name, level, goal)
  */
 
 // Load environment variables FIRST
@@ -34,7 +33,6 @@ import { ConnectionsMap } from './types/index.js';
 // Import existing components (still compatible)
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
 // import { AnkiExporter } from './helpers/anki-exporter.js';
-import { IntroductionStateProcessor } from './helpers/introduction-state-processor.js';
 import {
   getLanguageConfig,
   getLanguageOptions,
@@ -63,7 +61,6 @@ let graphWrapper: ConversationGraphWrapper | null = null;
 // Connection managers per WebSocket
 const connectionManagers = new Map<string, ConnectionManager>();
 const flashcardProcessors = new Map<string, FlashcardProcessor>();
-const introductionStateProcessors = new Map<string, IntroductionStateProcessor>();
 const connectionAttributes = new Map<
   string,
   { timezone?: string; userId?: string; languageCode?: string }
@@ -143,14 +140,12 @@ wss.on('connection', async (ws) => {
     defaultLanguageCode
   );
 
-  // Create flashcard and introduction state processors
+  // Create flashcard processor
   const flashcardProcessor = new FlashcardProcessor(defaultLanguageCode);
-  const introductionStateProcessor = new IntroductionStateProcessor(defaultLanguageCode);
 
   // Store processors
   connectionManagers.set(connectionId, connectionManager);
   flashcardProcessors.set(connectionId, flashcardProcessor);
-  introductionStateProcessors.set(connectionId, introductionStateProcessor);
   connectionAttributes.set(connectionId, { languageCode: defaultLanguageCode });
 
   // Set up flashcard generation callback
@@ -161,14 +156,10 @@ wss.on('connection', async (ws) => {
     }
 
     try {
-      const introState = introductionStateProcessor.getState();
       const attrs = connectionAttributes.get(connectionId) || {};
       const userAttributes: Record<string, string> = {
         timezone: attrs.timezone || '',
       };
-      userAttributes.name = introState?.name?.trim() || 'unknown';
-      userAttributes.level = (introState?.level as string) || 'unknown';
-      userAttributes.goal = introState?.goal?.trim() || 'unknown';
 
       const targetingKey = attrs.userId || connectionId;
       const userContext = {
@@ -193,22 +184,6 @@ wss.on('connection', async (ws) => {
       if (!isShuttingDown) {
         console.error('[Server] Error generating flashcards:', error);
       }
-    }
-  });
-
-  // Set up introduction state extraction callback
-  connectionManager.setIntroductionStateCallback(async (messages) => {
-    try {
-      const currentState = introductionStateProcessor.getState();
-      if (introductionStateProcessor.isComplete()) {
-        return currentState;
-      }
-
-      const state = await introductionStateProcessor.update(messages);
-      return state;
-    } catch (error) {
-      console.error('[Server] Error extracting introduction state:', error);
-      return null;
     }
   });
 
@@ -239,7 +214,6 @@ wss.on('connection', async (ws) => {
         // Reset all state
         connectionManager.reset();
         flashcardProcessors.get(connectionId)?.reset();
-        introductionStateProcessors.get(connectionId)?.reset();
         console.log(`[Server] Conversation restarted for ${connectionId}`);
       } else if (message.type === 'set_language') {
         // Handle language change
@@ -258,13 +232,11 @@ wss.on('connection', async (ws) => {
 
           // Update all processors
           flashcardProcessors.get(connectionId)?.setLanguage(newLanguageCode);
-          introductionStateProcessors.get(connectionId)?.setLanguage(newLanguageCode);
           connectionManager.setLanguage(newLanguageCode);
 
           // Reset conversation on language change
           connectionManager.reset();
           flashcardProcessors.get(connectionId)?.reset();
-          introductionStateProcessors.get(connectionId)?.reset();
 
           // Send confirmation
           ws.send(
@@ -292,9 +264,6 @@ wss.on('connection', async (ws) => {
       } else if (message.type === 'flashcard_clicked') {
         try {
           const card = message.card || {};
-          const introState = introductionStateProcessors
-            .get(connectionId)
-            ?.getState();
           const attrs = connectionAttributes.get(connectionId) || {};
           telemetry.metric.recordCounterUInt('flashcard_clicks_total', 1, {
             connectionId,
@@ -304,9 +273,6 @@ wss.on('connection', async (ws) => {
             source: 'ui',
             timezone: attrs.timezone || '',
             languageCode: attrs.languageCode || DEFAULT_LANGUAGE_CODE,
-            name: introState?.name?.trim() || 'unknown',
-            level: (introState?.level as string) || 'unknown',
-            goal: introState?.goal?.trim() || 'unknown',
           });
         } catch (err) {
           console.error('[Server] Error recording flashcard click:', err);
@@ -339,7 +305,6 @@ wss.on('connection', async (ws) => {
 
     // Clean up other processors
     flashcardProcessors.delete(connectionId);
-    introductionStateProcessors.delete(connectionId);
     connectionAttributes.delete(connectionId);
   });
 });
