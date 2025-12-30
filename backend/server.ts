@@ -27,7 +27,7 @@ import { telemetry, stopInworldRuntime } from '@inworld/runtime';
 import { MetricType } from '@inworld/runtime/telemetry';
 
 // Import new 0.9 components
-import { ConversationGraphWrapper } from './components/graphs/conversation-graph.js';
+import { ConversationGraphWrapper } from './graphs/conversation-graph.js';
 import { ConnectionManager } from './helpers/connection-manager.js';
 import { ConnectionsMap } from './types/index.js';
 

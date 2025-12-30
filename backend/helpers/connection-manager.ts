@@ -11,9 +11,9 @@
 import { WebSocket } from 'ws';
 import { GraphTypes } from '@inworld/runtime/graph';
 
-import { ConversationGraphWrapper } from '../components/graphs/conversation-graph.js';
-import { MultimodalStreamManager } from '../components/audio/multimodal_stream_manager.js';
-import { decodeBase64ToFloat32 } from '../components/audio/audio_utils.js';
+import { ConversationGraphWrapper } from '../graphs/conversation-graph.js';
+import { MultimodalStreamManager } from './multimodal_stream_manager.js';
+import { decodeBase64ToFloat32, debugAddAudioChunk, debugLogAudioStats, debugSaveAudio } from './audio_utils.js';
 import { ConnectionsMap, INPUT_SAMPLE_RATE, TTS_SAMPLE_RATE } from '../types/index.js';
 import {
   getLanguageConfig,
@@ -327,6 +327,10 @@ export class ConnectionManager {
       // Decode base64 to Float32Array
       const float32Data = decodeBase64ToFloat32(base64Audio);
 
+      // Debug: log audio stats and collect for WAV export
+      debugLogAudioStats(this.sessionId, float32Data);
+      debugAddAudioChunk(this.sessionId, float32Data);
+
       // Push to multimodal stream
       this.multimodalStreamManager.pushAudio({
         data: Array.from(float32Data),
@@ -565,6 +569,9 @@ export class ConnectionManager {
   async destroy(): Promise<void> {
     console.log(`[ConnectionManager] Destroying session ${this.sessionId}`);
     this.isDestroyed = true;
+
+    // Save debug audio if enabled (DEBUG_AUDIO=true)
+    debugSaveAudio(this.sessionId, INPUT_SAMPLE_RATE);
 
     // End the multimodal stream
     this.multimodalStreamManager.end();

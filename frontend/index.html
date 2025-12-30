@@ -1,100 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aprendemo</title>
-    <link rel="stylesheet" href="styles/main.css">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Serif:opsz,wght@8..144,100..900&display=swap" rel="stylesheet">
-</head>
-<body>
-    <header class="header">
-        <div class="container">
-            <h1 class="logo">Aprendemo</h1>
-            <div class="header-controls">
-                <div class="language-selector">
-                    <select id="languageSelect" class="language-dropdown" disabled>
-                        <option value="es">🇲🇽 Spanish</option>
-                    </select>
-                </div>
-                <div class="status-indicator">
-                    <span class="status-dot" id="statusDot"></span>
-                    <span class="status-text" id="statusText">Connecting...</span>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <main class="main">
-        <div class="container">
-            <div class="app-grid">
-                <!-- Chat Column -->
-                <section class="chat-section">
-                    <div class="section-header">
-                        <h2>Conversation</h2>
-                        <div class="button-group">
-                            <button class="restart-button" id="restartButton" disabled>
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21.5 2v6h-6M21.5 8A9.5 9.5 0 0 0 12 2.5 9.5 9.5 0 0 0 2.5 12 9.5 9.5 0 0 0 12 21.5 9.5 9.5 0 0 0 21.5 12"/>
-                                </svg>
-                            </button>
-                            <button class="mic-button" id="micButton" disabled>
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z"/>
-                                    <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
-                                    <line x1="12" y1="19" x2="12" y2="23"/>
-                                    <line x1="8" y1="23" x2="16" y2="23"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="chat-container">
-                        <div class="messages" id="messages"></div>
-                        <div class="current-transcript" id="currentTranscript"></div>
-                    </div>
-                </section>
-
-                <!-- Flashcards Column -->
-                <section class="flashcards-section">
-                    <div class="section-header">
-                        <h2>Flashcards</h2>
-                        <span class="card-count" id="cardCount">0 cards</span>
-                    </div>
-                    
-                    <div class="flashcards-container">
-                        <div class="flashcards-grid" id="flashcardsGrid">
-                            <div class="empty-state">
-                                <p></p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-        </div>
-    </main>
-
-    <!-- Hidden audio element for iOS playback -->
-    <audio id="iosAudioElement" style="display: none;" playsinline webkit-playsinline></audio>
-
-    <!-- iOS Audio Workarounds - Load conditionally -->
-    <script>
-        // Detect iOS and load workarounds if needed
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        
-        if (isIOS) {
-            const script = document.createElement('script');
-            script.src = 'js/ios-audio-workarounds.js';
-            script.onload = () => {
-                console.log('[Main] iOS audio workarounds loaded');
-            };
-            document.head.appendChild(script);
-        }
-    </script>
-    
-    <script type="module" src="js/main.js"></script>
-</body>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Serif:ital,opsz,wght@0,8..144,100..900;1,8..144,100..900&display=swap" rel="stylesheet">
+    <title>Aprendemo</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
