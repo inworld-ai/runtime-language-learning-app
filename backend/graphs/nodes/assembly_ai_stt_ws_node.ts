@@ -372,7 +372,6 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       ? 'universal-streaming-english'
       : 'universal-streaming-multilingual';
 
-    const languageCode = language === 'en' ? 'en' : 'multi';
 
     const params = new URLSearchParams({
       sample_rate: this.sampleRate.toString(),
@@ -382,7 +381,7 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       min_end_of_turn_silence_when_confident: minSilenceWhenConfident.toString(),
       max_turn_silence: maxSilence.toString(),
       speech_model: speechModel,
-      language: languageCode
+      language_detection: 'true'.toString()
     });
 
     const url = `${this.wsEndpointBaseUrl}?${params.toString()}`;
