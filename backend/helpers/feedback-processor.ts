@@ -10,6 +10,7 @@ import {
   getLanguageConfig,
   DEFAULT_LANGUAGE_CODE,
 } from '../config/languages.js';
+import { feedbackLogger as logger } from '../utils/logger.js';
 
 export interface ConversationMessage {
   role: string;
@@ -29,9 +30,7 @@ export class FeedbackProcessor {
     if (this.languageCode !== languageCode) {
       this.languageCode = languageCode;
       this.languageConfig = getLanguageConfig(languageCode);
-      console.log(
-        `FeedbackProcessor: Language changed to ${this.languageConfig.name}`
-      );
+      logger.info({ language: this.languageConfig.name }, 'language_changed');
     }
   }
 
@@ -61,9 +60,9 @@ export class FeedbackProcessor {
         };
         executionResult = await executor.start(input, executionContext);
       } catch (err) {
-        console.warn(
-          'Feedback executor.start with ExecutionContext failed, falling back without context:',
-          err
+        logger.warn(
+          { err },
+          'executor_start_with_context_failed_falling_back'
         );
         executionResult = await executor.start(input);
       }
@@ -76,7 +75,7 @@ export class FeedbackProcessor {
       const feedback = finalData as unknown as string;
       return feedback || '';
     } catch (error) {
-      console.error('Error generating feedback:', error);
+      logger.error({ err: error }, 'feedback_generation_error');
       return '';
     }
   }

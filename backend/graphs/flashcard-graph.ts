@@ -12,6 +12,8 @@ import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { flashcardPromptTemplate } from '../helpers/prompt-templates.js';
 import { v4 } from 'uuid';
 import { Flashcard } from '../helpers/flashcard-processor.js';
+import { llmConfig } from '../config/llm.js';
+import { flashcardLogger as logger } from '../utils/logger.js';
 
 class FlashcardPromptBuilderNode extends CustomNode {
   async process(
@@ -60,7 +62,7 @@ class FlashcardParserNode extends CustomNode {
         };
       }
     } catch (error) {
-      console.error('Failed to parse flashcard JSON:', error);
+      logger.error({ err: error }, 'failed_to_parse_flashcard_json');
     }
 
     return {
@@ -92,18 +94,10 @@ function createFlashcardGraph(): Graph {
   });
   const llmNode = new RemoteLLMChatNode({
     id: 'llm_node',
-    provider: 'openai',
-    modelName: 'gpt-4o-mini',
-    stream: false,
-    textGenerationConfig: {
-      maxNewTokens: 2500,
-      maxPromptLength: 100,
-      repetitionPenalty: 1,
-      topP: 1,
-      temperature: 1,
-      frequencyPenalty: 0,
-      presencePenalty: 0,
-    },
+    provider: llmConfig.flashcard.provider,
+    modelName: llmConfig.flashcard.model,
+    stream: llmConfig.flashcard.stream,
+    textGenerationConfig: llmConfig.flashcard.textGenerationConfig,
   });
   const parserNode = new FlashcardParserNode({ id: 'flashcard-parser' });
 
@@ -133,7 +127,7 @@ let flashcardGraph: Graph | null = null;
  */
 export function getFlashcardGraph(): Graph {
   if (!flashcardGraph) {
-    console.log('Creating flashcard graph');
+    logger.info('creating_flashcard_graph');
     flashcardGraph = createFlashcardGraph();
   }
   return flashcardGraph;

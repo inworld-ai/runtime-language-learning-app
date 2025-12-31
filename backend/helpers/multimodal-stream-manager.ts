@@ -7,6 +7,9 @@
  */
 
 import { GraphTypes } from '@inworld/runtime/graph';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('MultimodalStreamManager');
 
 export interface AudioChunkInterface {
   data: number[] | Float32Array;
@@ -72,7 +75,7 @@ export class MultimodalStreamManager {
    * Mark the stream as ended
    */
   end(): void {
-    console.log('[MultimodalStreamManager] Ending stream');
+    logger.debug('stream_ending');
     this.ended = true;
 
     // Resolve all waiting consumers with done signal
@@ -92,7 +95,7 @@ export class MultimodalStreamManager {
     while (true) {
       // If stream ended and queue is empty, we're done
       if (this.ended && this.queue.length === 0) {
-        console.log('[MultimodalStreamManager] Stream iteration complete');
+        logger.debug('stream_iteration_complete');
         return;
       }
 
@@ -105,7 +108,7 @@ export class MultimodalStreamManager {
 
       // If stream ended but we just exhausted the queue, we're done
       if (this.ended) {
-        console.log('[MultimodalStreamManager] Stream iteration complete');
+        logger.debug('stream_iteration_complete');
         return;
       }
 

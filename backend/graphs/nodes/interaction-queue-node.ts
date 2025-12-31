@@ -15,6 +15,7 @@ import {
   State,
   TextInput,
 } from '../../types/index.js';
+import { graphLogger as logger } from '../../utils/logger.js';
 
 export class InteractionQueueNode extends CustomNode {
   private connections: ConnectionsMap;
@@ -37,9 +38,7 @@ export class InteractionQueueNode extends CustomNode {
     state: State
   ): TextInput {
     const sessionId = interactionInfo.sessionId;
-    console.log(
-      `[InteractionQueue] Processing interaction ${interactionInfo.interactionId}`
-    );
+    logger.debug({ interactionId: interactionInfo.interactionId }, 'processing_interaction');
 
     // Get current voiceId from connection state
     const connection = this.connections[sessionId];
@@ -56,9 +55,7 @@ export class InteractionQueueNode extends CustomNode {
         QUEUED_PREFIX + interactionInfo.interactionId,
         interactionInfo.text
       );
-      console.log(
-        `[InteractionQueue] New interaction queued: ${interactionInfo.interactionId}`
-      );
+      logger.debug({ interactionId: interactionInfo.interactionId }, 'interaction_queued');
     }
 
     // Get all keys and categorize them
@@ -89,13 +86,11 @@ export class InteractionQueueNode extends CustomNode {
       return getIteration(a) - getIteration(b);
     });
 
-    console.log(
-      `[InteractionQueue] State: queued=${queuedIds.length}, completed=${completedCount}, running=${runningCount}`
-    );
+    logger.debug({ queued: queuedIds.length, completed: completedCount, running: runningCount }, 'queue_state');
 
     // Decide if we should start processing the next interaction
     if (queuedIds.length === 0) {
-      console.log('[InteractionQueue] No interactions to process');
+      logger.debug('no_interactions_to_process');
       return {
         text: '',
         sessionId: sessionId,
@@ -105,7 +100,7 @@ export class InteractionQueueNode extends CustomNode {
     }
 
     if (queuedIds.length === completedCount) {
-      console.log('[InteractionQueue] All interactions completed');
+      logger.debug('all_interactions_completed');
       return {
         text: '',
         sessionId: sessionId,
@@ -122,7 +117,7 @@ export class InteractionQueueNode extends CustomNode {
 
       // Try to mark as running
       if (dataStore.has(runningKey) || !dataStore.add(runningKey, '')) {
-        console.log(`[InteractionQueue] Interaction ${nextId} already started`);
+        logger.debug({ interactionId: nextId }, 'interaction_already_started');
         return {
           text: '',
           sessionId: sessionId,
@@ -133,9 +128,7 @@ export class InteractionQueueNode extends CustomNode {
 
       const queuedText = dataStore.get(QUEUED_PREFIX + nextId) as string;
       if (!queuedText) {
-        console.error(
-          `[InteractionQueue] Failed to retrieve text for ${nextId}`
-        );
+        logger.error({ interactionId: nextId }, 'failed_to_retrieve_text');
         return {
           text: '',
           sessionId: sessionId,
@@ -144,9 +137,7 @@ export class InteractionQueueNode extends CustomNode {
         };
       }
 
-      console.log(
-        `[InteractionQueue] Starting LLM processing: "${queuedText.substring(0, 50)}..."`
-      );
+      logger.debug({ textSnippet: queuedText.substring(0, 50) }, 'starting_llm_processing');
 
       return {
         text: queuedText,
@@ -156,9 +147,7 @@ export class InteractionQueueNode extends CustomNode {
       };
     } else {
       // An interaction is currently running, wait
-      console.log(
-        `[InteractionQueue] Waiting for interaction ${queuedIds[completedCount]}`
-      );
+      logger.debug({ waitingFor: queuedIds[completedCount] }, 'waiting_for_interaction');
       return {
         text: '',
         sessionId: sessionId,

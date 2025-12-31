@@ -7,6 +7,7 @@
 import { DataStreamWithMetadata } from '@inworld/runtime';
 import { CustomNode, ProcessContext } from '@inworld/runtime/graph';
 import { InteractionInfo } from '../../types/index.js';
+import { graphLogger as logger } from '../../utils/logger.js';
 
 export class TranscriptExtractorNode extends CustomNode {
   constructor(props?: { id?: string; reportToClient?: boolean }) {
@@ -33,8 +34,9 @@ export class TranscriptExtractorNode extends CustomNode {
     const iteration = (metadata.iteration as number) || 1;
     const interactionId = String(metadata.interactionId || iteration);
 
-    console.log(
-      `[TranscriptExtractor] Processing [iteration:${iteration}]: "${transcript?.substring(0, 50)}..." [complete:${interactionComplete}]`
+    logger.debug(
+      { iteration, transcriptSnippet: transcript?.substring(0, 50), interactionComplete },
+      'transcript_extracted'
     );
 
     return {

@@ -41,6 +41,24 @@ ASSEMBLY_AI_API_KEY=your_api_key_here
 
 Get your Inworld Base64 API key from the [Inworld Portal](https://platform.inworld.ai/).
 
+## Environment Variables
+
+### Required
+
+| Variable | Description |
+|----------|-------------|
+| `INWORLD_API_KEY` | Your Inworld AI API key (Base64 encoded) from the [Inworld Portal](https://platform.inworld.ai/) |
+| `ASSEMBLY_AI_API_KEY` | Your Assembly AI API key for speech-to-text |
+
+### Optional
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Server port number |
+| `LOG_LEVEL` | `info` | Logging level. Options: `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| `NODE_ENV` | `development` | Environment mode. Set to `production` for JSON logs (no pretty-printing) |
+| `ASSEMBLY_AI_EAGERNESS` | `medium` | Turn detection sensitivity for speech-to-text. Options: `low` (conservative, allows thinking pauses), `medium` (balanced), `high` (aggressive, quick responses) |
+
 ### Step 4: Run the Application
 
 For development:
@@ -62,7 +80,9 @@ npm start
 language-learning-node/
 ├── backend/
 │   ├── config/               # Configuration
-│   │   └── languages.ts
+│   │   ├── languages.ts      # Language definitions and teacher personas
+│   │   ├── llm.ts            # LLM model configuration
+│   │   └── server.ts         # Server and audio settings
 │   ├── graphs/               # Graph definitions
 │   │   ├── nodes/            # Graph node implementations
 │   │   ├── conversation-graph.ts
@@ -76,6 +96,8 @@ language-learning-node/
 │   │   ├── multimodal-stream-manager.ts
 │   │   └── prompt-templates.ts
 │   ├── types/                # TypeScript type definitions
+│   ├── utils/                # Utility modules
+│   │   └── logger.ts         # Structured logging (pino)
 │   └── server.ts             # Backend server
 ├── frontend/                 # React frontend application
 │   ├── public/               # Static assets

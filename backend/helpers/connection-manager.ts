@@ -14,16 +14,14 @@ import { GraphTypes } from '@inworld/runtime/graph';
 import { ConversationGraphWrapper } from '../graphs/conversation-graph.js';
 import { MultimodalStreamManager } from './multimodal-stream-manager.js';
 import { decodeBase64ToFloat32 } from './audio-utils.js';
-import {
-  ConnectionsMap,
-  INPUT_SAMPLE_RATE,
-  TTS_SAMPLE_RATE,
-} from '../types/index.js';
+import { ConnectionsMap } from '../types/index.js';
 import {
   getLanguageConfig,
   DEFAULT_LANGUAGE_CODE,
   LanguageConfig,
 } from '../config/languages.js';
+import { serverConfig } from '../config/server.js';
+import { createSessionLogger } from '../utils/logger.js';
 
 export class ConnectionManager {
   private sessionId: string;
@@ -35,6 +33,7 @@ export class ConnectionManager {
   private isDestroyed = false;
   private languageCode: string;
   private languageConfig: LanguageConfig;
+  private logger: ReturnType<typeof createSessionLogger>;
 
   // Callback for flashcard processing
   private flashcardCallback:
@@ -67,6 +66,7 @@ export class ConnectionManager {
     this.languageCode = languageCode;
     this.languageConfig = getLanguageConfig(languageCode);
     this.multimodalStreamManager = new MultimodalStreamManager();
+    this.logger = createSessionLogger('ConnectionManager', sessionId);
 
     // Initialize connection state
     this.connections[sessionId] = {
@@ -87,18 +87,14 @@ export class ConnectionManager {
         this.handlePartialTranscript(text, interactionId),
     };
 
-    console.log(
-      `[ConnectionManager] Created for session ${sessionId} with language ${this.languageConfig.name}`
-    );
+    this.logger.info({ language: this.languageConfig.name }, 'connection_manager_created');
   }
 
   /**
    * Start the long-running graph execution
    */
   async start(): Promise<void> {
-    console.log(
-      `[ConnectionManager] Starting graph for session ${this.sessionId}`
-    );
+    this.logger.info('starting_graph');
 
     // Create the multimodal stream generator
     const multimodalStream = this.createMultimodalStreamGenerator();
@@ -109,7 +105,7 @@ export class ConnectionManager {
     // Don't await - the graph runs continuously
     this.graphExecution.catch((error) => {
       if (!this.isDestroyed) {
-        console.error(`[ConnectionManager] Graph execution error:`, error);
+        this.logger.error({ err: error }, 'graph_execution_error');
       }
     });
   }
@@ -139,9 +135,7 @@ export class ConnectionManager {
       type: 'MultimodalContent',
     });
 
-    console.log(
-      `[ConnectionManager] Starting graph execution for ${this.sessionId}`
-    );
+    this.logger.info('graph_execution_started');
 
     const { outputStream } = await this.graphWrapper.graph.start(taggedStream, {
       executionId: this.sessionId,
@@ -169,15 +163,13 @@ export class ConnectionManager {
       }
     } catch (error) {
       if (!this.isDestroyed) {
-        console.error(`[ConnectionManager] Error processing output:`, error);
+        this.logger.error({ err: error }, 'output_processing_error');
       }
     } finally {
       connection.currentAudioExecutionStream = undefined;
     }
 
-    console.log(
-      `[ConnectionManager] Graph execution completed for ${this.sessionId}`
-    );
+    this.logger.info('graph_execution_completed');
   }
 
   /**
@@ -203,9 +195,7 @@ export class ConnectionManager {
         string: (data: unknown) => {
           transcription = String(data);
           if (transcription.trim()) {
-            console.log(
-              `[ConnectionManager] Transcription: "${transcription}"`
-            );
+            this.logger.debug({ transcription }, 'transcription_received');
             this.sendToClient({
               type: 'transcription',
               text: transcription.trim(),
@@ -225,9 +215,7 @@ export class ConnectionManager {
           // Only send final transcriptions (interactionComplete=true) to avoid duplicates
           if (data.text && data.interactionComplete) {
             transcription = data.text;
-            console.log(
-              `[ConnectionManager] Transcription (final): "${transcription}"`
-            );
+            this.logger.debug({ transcription }, 'transcription_final');
 
             // Mark start of response processing for utterance stitching
             this.markProcessingStart(transcription);
@@ -243,7 +231,7 @@ export class ConnectionManager {
         // Handle LLM response stream
         ContentStream: async (streamData: unknown) => {
           const stream = streamData as GraphTypes.ContentStream;
-          console.log('[ConnectionManager] Processing LLM ContentStream...');
+          this.logger.debug('processing_llm_content_stream');
           // Use array + join instead of string concatenation for O(n) vs O(n²)
           const responseChunks: string[] = [];
           let wasInterrupted = false;
@@ -253,9 +241,7 @@ export class ConnectionManager {
 
             // Check for interruption (user started speaking again for continuation)
             if (connection.isProcessingInterrupted) {
-              console.log(
-                '[ConnectionManager] LLM stream interrupted for utterance continuation'
-              );
+              this.logger.debug('llm_stream_interrupted_for_continuation');
               wasInterrupted = true;
               break;
             }
@@ -275,8 +261,9 @@ export class ConnectionManager {
             const currentResponse = responseChunks.join('');
             if (currentResponse.trim()) {
               llmResponse = currentResponse;
-              console.log(
-                `[ConnectionManager] LLM Response complete: "${llmResponse.substring(0, 50)}..."`
+              this.logger.debug(
+                { responseSnippet: llmResponse.substring(0, 50) },
+                'llm_response_complete'
               );
               this.sendToClient({
                 type: 'llm_response_complete',
@@ -285,16 +272,14 @@ export class ConnectionManager {
               });
             }
           } else {
-            console.log(
-              '[ConnectionManager] LLM stream interrupted - skipping response complete'
-            );
+            this.logger.debug('llm_stream_interrupted_skipping_completion');
           }
         },
 
         // Handle TTS output stream
         TTSOutputStream: async (ttsData: unknown) => {
           const ttsStream = ttsData as GraphTypes.TTSOutputStream;
-          console.log('[ConnectionManager] Processing TTS stream...');
+          this.logger.debug('processing_tts_stream');
           let isFirstChunk = true;
           let wasInterrupted = false;
 
@@ -303,9 +288,7 @@ export class ConnectionManager {
 
             // Check for interruption (user started speaking again for continuation)
             if (connection.isProcessingInterrupted) {
-              console.log(
-                '[ConnectionManager] TTS interrupted for utterance continuation'
-              );
+              this.logger.debug('tts_interrupted_for_continuation');
               wasInterrupted = true;
               break;
             }
@@ -313,20 +296,24 @@ export class ConnectionManager {
             if (chunk.audio?.data) {
               // Log sample rate on first chunk
               if (isFirstChunk) {
-                console.log(
-                  `[ConnectionManager] TTS audio: sampleRate=${chunk.audio.sampleRate || TTS_SAMPLE_RATE}, bytes=${Array.isArray(chunk.audio.data) ? chunk.audio.data.length : 'N/A'}`
+                this.logger.debug(
+                  {
+                    sampleRate: chunk.audio.sampleRate || serverConfig.audio.ttsSampleRate,
+                    bytes: Array.isArray(chunk.audio.data) ? chunk.audio.data.length : 'N/A',
+                  },
+                  'tts_audio_chunk'
                 );
               }
 
               // Convert audio to base64 for WebSocket transmission
-              // Use TTS_SAMPLE_RATE as fallback (not INPUT_SAMPLE_RATE which is for microphone input)
+              // Use ttsSampleRate as fallback (not inputSampleRate which is for microphone input)
               const audioResult = this.convertAudioToBase64(chunk.audio);
               if (audioResult) {
                 this.sendToClient({
                   type: 'audio_stream',
                   audio: audioResult.base64,
                   audioFormat: audioResult.format,
-                  sampleRate: chunk.audio.sampleRate || TTS_SAMPLE_RATE,
+                  sampleRate: chunk.audio.sampleRate || serverConfig.audio.ttsSampleRate,
                   text: chunk.text || '',
                   isFirstChunk: isFirstChunk,
                   timestamp: Date.now(),
@@ -342,7 +329,7 @@ export class ConnectionManager {
           // Only send completion signals if not interrupted
           if (!wasInterrupted) {
             // Send completion signal
-            console.log('[ConnectionManager] TTS stream complete');
+            this.logger.debug('tts_stream_complete');
             this.sendToClient({
               type: 'audio_stream_complete',
               timestamp: Date.now(),
@@ -359,16 +346,14 @@ export class ConnectionManager {
             this.triggerFlashcardGeneration();
             this.triggerFeedbackGeneration();
           } else {
-            console.log(
-              '[ConnectionManager] TTS stream interrupted - skipping completion signals'
-            );
+            this.logger.debug('tts_interrupted_skipping_completion');
           }
         },
 
         // Handle errors
         error: async (error: unknown) => {
           const err = error as { message?: string };
-          console.error('[ConnectionManager] Graph error:', err);
+          this.logger.error({ err }, 'graph_error');
           if (!err.message?.includes('recognition produced no text')) {
             this.sendToClient({
               type: 'error',
@@ -380,14 +365,11 @@ export class ConnectionManager {
 
         // Default handler for unknown types
         default: (_data: unknown) => {
-          // console.log('[ConnectionManager] Unknown output type:', data);
+          // Ignore unknown output types
         },
       });
     } catch (error) {
-      console.error(
-        '[ConnectionManager] Error processing graph output:',
-        error
-      );
+      this.logger.error({ err: error }, 'graph_output_processing_error');
     }
   }
 
@@ -405,10 +387,10 @@ export class ConnectionManager {
       // MultimodalStreamManager will handle conversion when needed
       this.multimodalStreamManager.pushAudio({
         data: float32Data,
-        sampleRate: INPUT_SAMPLE_RATE,
+        sampleRate: serverConfig.audio.inputSampleRate,
       });
     } catch (error) {
-      console.error('[ConnectionManager] Error adding audio chunk:', error);
+      this.logger.error({ err: error }, 'audio_chunk_error');
     }
   }
 
@@ -416,13 +398,11 @@ export class ConnectionManager {
    * Handle speech detected event from AssemblyAI
    */
   private handleSpeechDetected(interactionId: string): void {
-    console.log(`[ConnectionManager] Speech detected: ${interactionId}`);
+    this.logger.debug({ interactionId }, 'speech_detected');
 
     // Check if we're currently processing a response - if so, this is a continuation
     if (this.isProcessingResponse && this.currentTranscript) {
-      console.log(
-        `[ConnectionManager] New speech during processing - interrupting for continuation`
-      );
+      this.logger.debug('new_speech_during_processing_interrupting');
       this.interruptForContinuation(this.currentTranscript);
 
       // Send interrupt signal with continuation reason so frontend discards partial response
@@ -470,8 +450,9 @@ export class ConnectionManager {
     if (connection) {
       connection.isProcessingInterrupted = true;
       connection.pendingTranscript = partialTranscript;
-      console.log(
-        `[ConnectionManager] Interrupting for continuation. Stored: "${partialTranscript.substring(0, 50)}..."`
+      this.logger.debug(
+        { transcriptSnippet: partialTranscript.substring(0, 50) },
+        'interrupting_for_continuation'
       );
 
       // Remove the last user message and any assistant response that was added
@@ -486,8 +467,9 @@ export class ConnectionManager {
       ) {
         const removed = messages.pop();
         removedCount++;
-        console.log(
-          `[ConnectionManager] Removed interrupted assistant message: "${removed?.content.substring(0, 50)}..."`
+        this.logger.debug(
+          { contentSnippet: removed?.content.substring(0, 50) },
+          'removed_interrupted_assistant_message'
         );
       }
 
@@ -498,8 +480,9 @@ export class ConnectionManager {
       ) {
         const removed = messages.pop();
         removedCount++;
-        console.log(
-          `[ConnectionManager] Removed partial user message: "${removed?.content.substring(0, 50)}..."`
+        this.logger.debug(
+          { contentSnippet: removed?.content.substring(0, 50) },
+          'removed_partial_user_message'
         );
       }
 
@@ -571,7 +554,7 @@ export class ConnectionManager {
       try {
         this.ws.send(JSON.stringify(message));
       } catch (error) {
-        console.error('[ConnectionManager] Error sending to client:', error);
+        this.logger.error({ err: error }, 'send_to_client_error');
       }
     }
   }
@@ -591,7 +574,7 @@ export class ConnectionManager {
     }));
 
     this.flashcardCallback(recentMessages).catch((error) => {
-      console.error('[ConnectionManager] Flashcard generation error:', error);
+      this.logger.error({ err: error }, 'flashcard_generation_trigger_error');
     });
   }
 
@@ -619,7 +602,7 @@ export class ConnectionManager {
 
     this.feedbackCallback(recentMessages, lastUserMessage.content).catch(
       (error) => {
-        console.error('[ConnectionManager] Feedback generation error:', error);
+        this.logger.error({ err: error }, 'feedback_generation_trigger_error');
       }
     );
   }
@@ -673,8 +656,9 @@ export class ConnectionManager {
   setLanguage(newLanguageCode: string): void {
     if (this.languageCode === newLanguageCode) return;
 
-    console.log(
-      `[ConnectionManager] Changing language from ${this.languageCode} to ${newLanguageCode}`
+    this.logger.info(
+      { from: this.languageCode, to: newLanguageCode },
+      'changing_language'
     );
 
     this.languageCode = newLanguageCode;
@@ -687,9 +671,7 @@ export class ConnectionManager {
       connection.state.voiceId = this.languageConfig.ttsConfig.speakerId;
     }
 
-    console.log(
-      `[ConnectionManager] Language changed to ${this.languageConfig.name}`
-    );
+    this.logger.info({ language: this.languageConfig.name }, 'language_changed');
   }
 
   /**
@@ -701,7 +683,7 @@ export class ConnectionManager {
       connection.state.messages = [];
       connection.state.interactionId = '';
     }
-    console.log('[ConnectionManager] Conversation reset');
+    this.logger.info('conversation_reset');
   }
 
   /**
@@ -713,8 +695,9 @@ export class ConnectionManager {
     const trimmedText = text.trim();
     if (!trimmedText) return;
 
-    console.log(
-      `[ConnectionManager] Sending text message: "${trimmedText.substring(0, 50)}..."`
+    this.logger.debug(
+      { textSnippet: trimmedText.substring(0, 50) },
+      'sending_text_message'
     );
     this.multimodalStreamManager.pushText(trimmedText);
   }
@@ -723,7 +706,7 @@ export class ConnectionManager {
    * Clean up resources
    */
   async destroy(): Promise<void> {
-    console.log(`[ConnectionManager] Destroying session ${this.sessionId}`);
+    this.logger.info('destroying_session');
     this.isDestroyed = true;
 
     // End the multimodal stream
@@ -735,6 +718,6 @@ export class ConnectionManager {
     // Remove from connections map
     delete this.connections[this.sessionId];
 
-    console.log(`[ConnectionManager] Session ${this.sessionId} destroyed`);
+    this.logger.info('session_destroyed');
   }
 }

@@ -8,6 +8,7 @@ import {
   getLanguageConfig,
   DEFAULT_LANGUAGE_CODE,
 } from '../config/languages.js';
+import { flashcardLogger as logger } from '../utils/logger.js';
 
 export interface Flashcard {
   id: string;
@@ -41,9 +42,7 @@ export class FlashcardProcessor {
     if (this.languageCode !== languageCode) {
       this.languageCode = languageCode;
       this.languageConfig = getLanguageConfig(languageCode);
-      console.log(
-        `FlashcardProcessor: Language changed to ${this.languageConfig.name}`
-      );
+      logger.info({ language: this.languageConfig.name }, 'language_changed');
     }
   }
 
@@ -83,7 +82,7 @@ export class FlashcardProcessor {
 
       return validFlashcards;
     } catch (error) {
-      console.error('Error generating flashcards:', error);
+      logger.error({ err: error }, 'flashcard_batch_generation_error');
       return [];
     }
   }
@@ -110,9 +109,9 @@ export class FlashcardProcessor {
         };
         executionResult = await executor.start(input, executionContext);
       } catch (err) {
-        console.warn(
-          'Flashcard executor.start with ExecutionContext failed, falling back without context:',
-          err
+        logger.warn(
+          { err },
+          'executor_start_with_context_failed_falling_back'
         );
         executionResult = await executor.start(input);
       }
@@ -148,7 +147,7 @@ export class FlashcardProcessor {
 
       return flashcard;
     } catch (error) {
-      console.error('Error generating single flashcard:', error);
+      logger.error({ err: error }, 'single_flashcard_generation_error');
       return {
         id: v4(),
         targetWord: '',

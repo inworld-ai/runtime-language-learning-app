@@ -10,6 +10,7 @@
 import { CustomNode, ProcessContext } from '@inworld/runtime/graph';
 import { v4 as uuidv4 } from 'uuid';
 import { ConnectionsMap, State, TextInput } from '../../types/index.js';
+import { graphLogger as logger } from '../../utils/logger.js';
 
 export class TextInputNode extends CustomNode {
   private connections: ConnectionsMap;
@@ -27,9 +28,7 @@ export class TextInputNode extends CustomNode {
   }
 
   process(_context: ProcessContext, input: TextInput): State {
-    console.log(
-      `[TextInputNode] Processing: "${input.text?.substring(0, 50)}..."`
-    );
+    logger.debug({ textSnippet: input.text?.substring(0, 50) }, 'text_input_processing');
 
     const { text, interactionId, sessionId } = input;
 

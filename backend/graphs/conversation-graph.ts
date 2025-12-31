@@ -30,17 +30,17 @@ import { StateUpdateNode } from './nodes/state-update-node.js';
 import { TextInputNode } from './nodes/text-input-node.js';
 import { TranscriptExtractorNode } from './nodes/transcript-extractor-node.js';
 import { TTSRequestBuilderNode } from './nodes/tts-request-builder-node.js';
-import {
-  ConnectionsMap,
-  TextInput,
-  INPUT_SAMPLE_RATE,
-  TTS_SAMPLE_RATE,
-} from '../types/index.js';
+import { ConnectionsMap, TextInput } from '../types/index.js';
 import {
   getLanguageConfig,
   DEFAULT_LANGUAGE_CODE,
 } from '../config/languages.js';
-import { getAssemblyAISettingsForEagerness } from '../types/settings.js';
+import { llmConfig } from '../config/llm.js';
+import {
+  serverConfig,
+  getAssemblyAISettings,
+} from '../config/server.js';
+import { graphLogger as logger } from '../utils/logger.js';
 
 export interface ConversationGraphConfig {
   assemblyAIApiKey: string;
@@ -81,8 +81,9 @@ export class ConversationGraphWrapper {
     const langConfig = getLanguageConfig(defaultLanguageCode);
     const postfix = `-lang-learning`;
 
-    console.log(
-      `[ConversationGraph] Creating graph for ${langConfig.name} (${defaultLanguageCode})`
+    logger.info(
+      { language: langConfig.name, languageCode: defaultLanguageCode },
+      'creating_conversation_graph'
     );
 
     // ============================================================
@@ -93,14 +94,14 @@ export class ConversationGraphWrapper {
     const audioInputNode = new ProxyNode({ id: `audio-input-proxy${postfix}` });
 
     // AssemblyAI STT with built-in VAD (always uses multilingual model)
-    const turnDetectionSettings = getAssemblyAISettingsForEagerness('medium');
+    const turnDetectionSettings = getAssemblyAISettings();
     const assemblyAISTTNode = new AssemblyAISTTWebSocketNode({
       id: `assembly-ai-stt-ws-node${postfix}`,
       config: {
         apiKey: assemblyAIApiKey,
         connections: connections,
-        sampleRate: INPUT_SAMPLE_RATE,
-        formatTurns: false,
+        sampleRate: serverConfig.audio.inputSampleRate,
+        formatTurns: serverConfig.assemblyAI.formatTurns,
         endOfTurnConfidenceThreshold:
           turnDetectionSettings.endOfTurnConfidenceThreshold,
         minEndOfTurnSilenceWhenConfident:
@@ -134,18 +135,10 @@ export class ConversationGraphWrapper {
     // LLM Node - uses Inworld Runtime's remote LLM
     const llmNode = new RemoteLLMChatNode({
       id: `llm-node${postfix}`,
-      provider: 'openai',
-      modelName: 'gpt-4.1-nano',
-      stream: true,
-      textGenerationConfig: {
-        maxNewTokens: 250,
-        maxPromptLength: 2000,
-        temperature: 1,
-        topP: 1,
-        repetitionPenalty: 1,
-        frequencyPenalty: 0,
-        presencePenalty: 0,
-      },
+      provider: llmConfig.conversation.provider,
+      modelName: llmConfig.conversation.model,
+      stream: llmConfig.conversation.stream,
+      textGenerationConfig: llmConfig.conversation.textGenerationConfig,
       reportToClient: true,
     });
 
@@ -174,7 +167,7 @@ export class ConversationGraphWrapper {
       id: `tts-node${postfix}`,
       speakerId: langConfig.ttsConfig.speakerId,
       modelId: langConfig.ttsConfig.modelId,
-      sampleRate: TTS_SAMPLE_RATE,
+      sampleRate: serverConfig.audio.ttsSampleRate,
       temperature: langConfig.ttsConfig.temperature,
       speakingRate: langConfig.ttsConfig.speakingRate,
       languageCode: langConfig.ttsConfig.languageCode,
@@ -280,7 +273,7 @@ export class ConversationGraphWrapper {
 
     const graph = graphBuilder.build();
 
-    console.log('[ConversationGraph] Graph built successfully');
+    logger.info('conversation_graph_built');
 
     return new ConversationGraphWrapper({
       graph,

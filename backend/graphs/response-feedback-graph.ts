@@ -9,6 +9,8 @@ import {
 } from '@inworld/runtime/graph';
 import { GraphTypes } from '@inworld/runtime/common';
 import { PromptBuilder } from '@inworld/runtime/primitives/llm';
+import { llmConfig } from '../config/llm.js';
+import { feedbackLogger as logger } from '../utils/logger.js';
 
 export interface ResponseFeedbackInput {
   messages: Array<{ role: string; content: string }>;
@@ -87,18 +89,10 @@ function createResponseFeedbackGraph(): Graph {
   });
   const llmNode = new RemoteLLMChatNode({
     id: 'llm-node',
-    provider: 'openai',
-    modelName: 'gpt-4.1-nano',
-    stream: false,
-    textGenerationConfig: {
-      maxNewTokens: 100,
-      maxPromptLength: 2000,
-      repetitionPenalty: 1,
-      topP: 1,
-      temperature: 0.7,
-      frequencyPenalty: 0,
-      presencePenalty: 0,
-    },
+    provider: llmConfig.feedback.provider,
+    modelName: llmConfig.feedback.model,
+    stream: llmConfig.feedback.stream,
+    textGenerationConfig: llmConfig.feedback.textGenerationConfig,
   });
   const extractorNode = new FeedbackExtractorNode({ id: 'feedback-extractor' });
 
@@ -128,7 +122,7 @@ let responseFeedbackGraph: Graph | null = null;
  */
 export function getResponseFeedbackGraph(): Graph {
   if (!responseFeedbackGraph) {
-    console.log('Creating response feedback graph');
+    logger.info('creating_response_feedback_graph');
     responseFeedbackGraph = createResponseFeedbackGraph();
   }
   return responseFeedbackGraph;

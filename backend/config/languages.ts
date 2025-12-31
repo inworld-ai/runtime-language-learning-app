@@ -7,6 +7,10 @@
  * 2. The rest of the app will automatically support the new language
  */
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Languages');
+
 export interface TeacherPersona {
   name: string;
   age: number;
@@ -277,7 +281,7 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
 export function getLanguageConfig(code: string): LanguageConfig {
   const config = SUPPORTED_LANGUAGES[code];
   if (!config) {
-    console.warn(`Language '${code}' not found, falling back to Spanish (es).`);
+    logger.warn({ requestedCode: code, fallback: 'es' }, 'language_not_found_using_fallback');
     return SUPPORTED_LANGUAGES['es'];
   }
   return config;

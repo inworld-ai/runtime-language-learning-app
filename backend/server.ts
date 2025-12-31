@@ -39,6 +39,8 @@ import {
   getLanguageOptions,
   DEFAULT_LANGUAGE_CODE,
 } from './config/languages.js';
+import { serverConfig } from './config/server.js';
+import { serverLogger as logger } from './utils/logger.js';
 
 const app = express();
 const server = createServer(app);
@@ -46,8 +48,6 @@ const wss = new WebSocketServer({ server });
 
 // Add JSON parsing middleware
 app.use(express.json());
-
-const PORT = process.env.PORT || 3000;
 
 // ============================================================
 // Global State
@@ -80,8 +80,8 @@ try {
   if (telemetryApiKey) {
     telemetry.init({
       apiKey: telemetryApiKey,
-      appName: 'inworld-language-tutor',
-      appVersion: '1.0.0',
+      appName: serverConfig.telemetry.appName,
+      appVersion: serverConfig.telemetry.appVersion,
     });
 
     telemetry.configureMetric({
@@ -91,12 +91,10 @@ try {
       unit: 'clicks',
     });
   } else {
-    console.warn(
-      '[Telemetry] INWORLD_API_KEY not set. Metrics will be disabled.'
-    );
+    logger.warn('telemetry_disabled_no_api_key');
   }
-} catch (err) {
-  console.error('[Telemetry] Initialization failed:', err);
+} catch (error) {
+  logger.error({ err: error }, 'telemetry_init_failed');
 }
 
 // ============================================================
@@ -109,13 +107,13 @@ async function initializeGraph(): Promise<void> {
     throw new Error('ASSEMBLY_AI_API_KEY environment variable is required');
   }
 
-  console.log('[Server] Creating conversation graph...');
+  logger.info('creating_conversation_graph');
   graphWrapper = ConversationGraphWrapper.create({
     assemblyAIApiKey,
     connections,
     defaultLanguageCode: DEFAULT_LANGUAGE_CODE,
   });
-  console.log('[Server] Conversation graph created successfully');
+  logger.info('conversation_graph_created');
 }
 
 // ============================================================
@@ -124,13 +122,13 @@ async function initializeGraph(): Promise<void> {
 
 wss.on('connection', async (ws) => {
   if (!graphWrapper) {
-    console.error('[Server] Graph not initialized, rejecting connection');
+    logger.error('graph_not_initialized_rejecting_connection');
     ws.close(1011, 'Server not ready');
     return;
   }
 
-  const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  console.log(`[Server] WebSocket connection established: ${connectionId}`);
+  const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  logger.info({ connectionId }, 'websocket_connected');
 
   // Default language is Spanish
   const defaultLanguageCode = DEFAULT_LANGUAGE_CODE;
@@ -159,7 +157,7 @@ wss.on('connection', async (ws) => {
   // Set up flashcard generation callback
   connectionManager.setFlashcardCallback(async (messages) => {
     if (isShuttingDown) {
-      console.log('[Server] Skipping flashcard generation - shutting down');
+      logger.debug({ connectionId }, 'skipping_flashcard_generation_shutting_down');
       return;
     }
 
@@ -190,7 +188,7 @@ wss.on('connection', async (ws) => {
       }
     } catch (error) {
       if (!isShuttingDown) {
-        console.error('[Server] Error generating flashcards:', error);
+        logger.error({ err: error, connectionId }, 'flashcard_generation_error');
       }
     }
   });
@@ -198,7 +196,7 @@ wss.on('connection', async (ws) => {
   // Set up feedback generation callback
   connectionManager.setFeedbackCallback(async (messages, currentTranscript) => {
     if (isShuttingDown) {
-      console.log('[Server] Skipping feedback generation - shutting down');
+      logger.debug({ connectionId }, 'skipping_feedback_generation_shutting_down');
       return;
     }
 
@@ -231,7 +229,7 @@ wss.on('connection', async (ws) => {
       }
     } catch (error) {
       if (!isShuttingDown) {
-        console.error('[Server] Error generating feedback:', error);
+        logger.error({ err: error, connectionId }, 'feedback_generation_error');
       }
     }
   });
@@ -239,9 +237,9 @@ wss.on('connection', async (ws) => {
   // Start the graph for this connection
   try {
     await connectionManager.start();
-    console.log(`[Server] Graph started for connection ${connectionId}`);
+    logger.info({ connectionId }, 'graph_started');
   } catch (error) {
-    console.error(`[Server] Failed to start graph for ${connectionId}:`, error);
+    logger.error({ err: error, connectionId }, 'graph_start_failed');
     ws.close(1011, 'Failed to start audio processing');
     return;
   }
@@ -263,15 +261,16 @@ wss.on('connection', async (ws) => {
         // Reset all state
         connectionManager.reset();
         flashcardProcessors.get(connectionId)?.reset();
-        console.log(`[Server] Conversation restarted for ${connectionId}`);
+        logger.info({ connectionId }, 'conversation_restarted');
       } else if (message.type === 'set_language') {
         // Handle language change
         const newLanguageCode = message.languageCode || DEFAULT_LANGUAGE_CODE;
         const attrs = connectionAttributes.get(connectionId) || {};
 
         if (attrs.languageCode !== newLanguageCode) {
-          console.log(
-            `[Server] Language change: ${attrs.languageCode} -> ${newLanguageCode}`
+          logger.info(
+            { connectionId, from: attrs.languageCode, to: newLanguageCode },
+            'language_change'
           );
 
           attrs.languageCode = newLanguageCode;
@@ -299,7 +298,7 @@ wss.on('connection', async (ws) => {
             })
           );
 
-          console.log(`[Server] Language changed to ${languageConfig.name}`);
+          logger.info({ connectionId, language: languageConfig.name }, 'language_changed');
         }
       } else if (message.type === 'user_context') {
         const timezone = message.timezone || message.data?.timezone;
@@ -325,26 +324,26 @@ wss.on('connection', async (ws) => {
             timezone: attrs.timezone || '',
             languageCode: attrs.languageCode || DEFAULT_LANGUAGE_CODE,
           });
-        } catch (err) {
-          console.error('[Server] Error recording flashcard click:', err);
+        } catch (error) {
+          logger.error({ err: error, connectionId }, 'flashcard_click_record_error');
         }
       } else if (message.type === 'text_message' && message.text) {
         // Handle text input (bypasses audio/STT)
         connectionManager.sendTextMessage(message.text);
       } else {
-        console.log('[Server] Received message type:', message.type);
+        logger.debug({ connectionId, messageType: message.type }, 'received_message');
       }
     } catch (error) {
-      console.error('[Server] Error processing message:', error);
+      logger.error({ err: error, connectionId }, 'message_processing_error');
     }
   });
 
   ws.on('error', (error) => {
-    console.error(`[Server] WebSocket error for ${connectionId}:`, error);
+    logger.error({ err: error, connectionId }, 'websocket_error');
   });
 
   ws.on('close', async () => {
-    console.log(`[Server] WebSocket closed: ${connectionId}`);
+    logger.info({ connectionId }, 'websocket_closed');
 
     // Clean up connection manager
     const manager = connectionManagers.get(connectionId);
@@ -352,7 +351,7 @@ wss.on('connection', async (ws) => {
       try {
         await manager.destroy();
       } catch (error) {
-        console.error(`[Server] Error destroying connection manager:`, error);
+        logger.error({ err: error, connectionId }, 'connection_manager_destroy_error');
       }
       connectionManagers.delete(connectionId);
     }
@@ -399,7 +398,7 @@ app.post('/api/export-anki', async (req, res) => {
     );
     res.send(apkgBuffer);
   } catch (error) {
-    console.error('[Server] Error exporting Anki deck:', error);
+    logger.error({ err: error }, 'anki_export_error');
     res.status(500).json({ error: 'Failed to export Anki deck' });
   }
 });
@@ -410,7 +409,7 @@ app.get('/api/languages', (_req, res) => {
     const languages = getLanguageOptions();
     res.json({ languages, defaultLanguage: DEFAULT_LANGUAGE_CODE });
   } catch (error) {
-    console.error('[Server] Error getting languages:', error);
+    logger.error({ err: error }, 'get_languages_error');
     res.status(500).json({ error: 'Failed to get languages' });
   }
 });
@@ -433,12 +432,12 @@ app.use(express.static(finalStaticPath));
 async function startServer(): Promise<void> {
   try {
     await initializeGraph();
-    server.listen(PORT, () => {
-      console.log(`[Server] Running on port ${PORT}`);
-      console.log(`[Server] Using Inworld Runtime 0.9 with AssemblyAI STT`);
+    server.listen(serverConfig.port, () => {
+      logger.info({ port: serverConfig.port }, 'server_started');
+      logger.info('using_inworld_runtime_0.9_with_assemblyai_stt');
     });
   } catch (error) {
-    console.error('[Server] Failed to start:', error);
+    logger.fatal({ err: error }, 'server_start_failed');
     process.exit(1);
   }
 }
@@ -453,13 +452,11 @@ async function gracefulShutdown(): Promise<void> {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  console.log('[Server] Shutting down gracefully...');
+  logger.info('shutdown_initiated');
 
   try {
     // Close all WebSocket connections
-    console.log(
-      `[Server] Closing ${wss.clients.size} WebSocket connections...`
-    );
+    logger.info({ connectionCount: wss.clients.size }, 'closing_websocket_connections');
     wss.clients.forEach((ws) => {
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
         ws.close();
@@ -479,14 +476,14 @@ async function gracefulShutdown(): Promise<void> {
     }
 
     server.close(() => {
-      console.log('[Server] HTTP server closed');
+      logger.info('http_server_closed');
     });
 
     stopInworldRuntime()
-      .then(() => console.log('[Server] Inworld Runtime stopped'))
+      .then(() => logger.info('inworld_runtime_stopped'))
       .catch(() => {});
 
-    console.log('[Server] Shutdown complete');
+    logger.info('shutdown_complete');
   } catch {
     // Ignore errors during shutdown
   }

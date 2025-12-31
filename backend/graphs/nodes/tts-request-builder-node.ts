@@ -8,6 +8,7 @@
 import { CustomNode, GraphTypes, ProcessContext } from '@inworld/runtime/graph';
 import { ConnectionsMap } from '../../types/index.js';
 import { getLanguageConfig } from '../../config/languages.js';
+import { graphLogger as logger } from '../../utils/logger.js';
 
 export class TTSRequestBuilderNode extends CustomNode {
   private connections: ConnectionsMap;
@@ -51,7 +52,7 @@ export class TTSRequestBuilderNode extends CustomNode {
     }
     voiceId = voiceId || this.defaultVoiceId;
 
-    console.log(`[TTSRequestBuilder] Building TTS request [voice:${voiceId}]`);
+    logger.debug({ voiceId }, 'building_tts_request');
 
     return GraphTypes.TTSRequest.withStream(textStream, {
       id: voiceId,

@@ -13,6 +13,7 @@ import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { ConnectionsMap, State } from '../../types/index.js';
 import { getLanguageConfig } from '../../config/languages.js';
 import { conversationTemplate } from '../../helpers/prompt-templates.js';
+import { graphLogger as logger } from '../../utils/logger.js';
 
 export class DialogPromptBuilderNode extends CustomNode {
   constructor(props: {
@@ -31,8 +32,9 @@ export class DialogPromptBuilderNode extends CustomNode {
     _context: ProcessContext,
     state: State
   ): Promise<GraphTypes.LLMChatRequest> {
-    console.log(
-      `[DialogPromptBuilder] Building prompt for ${state.languageCode || 'es'}, ${state.messages?.length || 0} messages`
+    logger.debug(
+      { languageCode: state.languageCode || 'es', messageCount: state.messages?.length || 0 },
+      'building_prompt'
     );
 
     // Get language config from state
@@ -55,10 +57,9 @@ export class DialogPromptBuilderNode extends CustomNode {
     const currentInput =
       lastMessage?.role === 'user' ? lastMessage.content : '';
 
-    console.log('[DialogPromptBuilder] Language:', langConfig.name);
-    console.log(
-      '[DialogPromptBuilder] Messages in history:',
-      historyMessages.length
+    logger.debug(
+      { language: langConfig.name, historyLength: historyMessages.length },
+      'prompt_context'
     );
 
     const templateData = {
@@ -75,9 +76,9 @@ export class DialogPromptBuilderNode extends CustomNode {
     const renderedPrompt = await builder.build(templateData);
 
     // Debug: Log a snippet of the rendered prompt
-    const promptSnippet = renderedPrompt.substring(0, 400);
-    console.log(
-      `[DialogPromptBuilder] Rendered prompt (first 400 chars): ${promptSnippet}...`
+    logger.debug(
+      { promptSnippet: renderedPrompt.substring(0, 400) },
+      'prompt_rendered'
     );
 
     // Return LLMChatRequest for the LLM node

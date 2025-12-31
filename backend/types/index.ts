@@ -74,9 +74,3 @@ export interface InteractionInfo {
   interactionComplete: boolean;
 }
 
-/**
- * Config constants
- */
-export const INPUT_SAMPLE_RATE = 16000;
-// Inworld TTS typically outputs at 22050Hz
-export const TTS_SAMPLE_RATE = 22050;

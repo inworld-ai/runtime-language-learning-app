@@ -11,6 +11,7 @@
 import { CustomNode, ProcessContext } from '@inworld/runtime/graph';
 import { v4 as uuidv4 } from 'uuid';
 import { ConnectionsMap, State } from '../../types/index.js';
+import { graphLogger as logger } from '../../utils/logger.js';
 
 export class StateUpdateNode extends CustomNode {
   private connections: ConnectionsMap;
@@ -29,9 +30,7 @@ export class StateUpdateNode extends CustomNode {
 
   process(context: ProcessContext, llmOutput: string): State {
     const sessionId = context.getDatastore().get('sessionId') as string;
-    console.log(
-      `[StateUpdateNode] Processing [length:${llmOutput?.length || 0}]`
-    );
+    logger.debug({ outputLength: llmOutput?.length || 0 }, 'state_update_processing');
 
     const connection = this.connections[sessionId];
     if (connection?.unloaded) {
@@ -43,9 +42,7 @@ export class StateUpdateNode extends CustomNode {
 
     // Only add assistant message if there's actual content
     if (llmOutput && llmOutput.trim().length > 0) {
-      console.log(
-        `[StateUpdateNode] Adding assistant message: "${llmOutput.substring(0, 50)}..."`
-      );
+      logger.debug({ messageSnippet: llmOutput.substring(0, 50) }, 'adding_assistant_message');
       connection.state.messages.push({
         role: 'assistant',
         content: llmOutput,
@@ -53,15 +50,13 @@ export class StateUpdateNode extends CustomNode {
         timestamp: new Date().toISOString(),
       });
     } else {
-      console.log('[StateUpdateNode] Skipping empty message');
+      logger.debug('skipping_empty_message');
     }
 
     // Mark interaction as completed
     const dataStore = context.getDatastore();
     dataStore.add('c' + connection.state.interactionId, '');
-    console.log(
-      `[StateUpdateNode] Marked interaction ${connection.state.interactionId} as completed`
-    );
+    logger.debug({ interactionId: connection.state.interactionId }, 'interaction_completed');
 
     return connection.state;
   }
