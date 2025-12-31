@@ -494,6 +494,19 @@ export class ConnectionManager {
   }
 
   /**
+   * Send a text message (bypasses audio/STT, goes directly to LLM)
+   */
+  sendTextMessage(text: string): void {
+    if (this.isDestroyed) return;
+
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+
+    console.log(`[ConnectionManager] Sending text message: "${trimmedText.substring(0, 50)}..."`);
+    this.multimodalStreamManager.pushText(trimmedText);
+  }
+
+  /**
    * Clean up resources
    */
   async destroy(): Promise<void> {

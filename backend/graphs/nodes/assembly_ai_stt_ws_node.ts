@@ -24,8 +24,6 @@ export interface AssemblyAISTTWebSocketNodeConfig {
   minEndOfTurnSilenceWhenConfident?: number;
   /** Maximum turn silence (in milliseconds) */
   maxTurnSilence?: number;
-  /** Language code (e.g., 'en', 'es') */
-  language?: string;
 }
 
 /**
@@ -209,7 +207,6 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
   private endOfTurnConfidenceThreshold: number;
   private minEndOfTurnSilenceWhenConfident: number;
   private maxTurnSilence: number;
-  private language: string;
   private wsEndpointBaseUrl: string = 'wss://streaming.assemblyai.com/v3/ws';
 
   private sessions: Map<string, AssemblyAISession> = new Map();
@@ -226,17 +223,7 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       throw new Error('AssemblyAISTTWebSocketNode requires a connections object.');
     }
 
-    super({
-      id: nodeProps.id || 'assembly-ai-stt-ws-node',
-      executionConfig: {
-        sampleRate: config.sampleRate || 16000,
-        formatTurns: config.formatTurns ?? false,
-        endOfTurnConfidenceThreshold: config.endOfTurnConfidenceThreshold ?? 0.7,
-        minEndOfTurnSilenceWhenConfident: config.minEndOfTurnSilenceWhenConfident ?? 800,
-        maxTurnSilence: config.maxTurnSilence ?? 3600,
-        language: config.language || 'es',
-      },
-    });
+    super({ id: nodeProps.id || 'assembly-ai-stt-ws-node' });
 
     this.apiKey = config.apiKey;
     this.connections = config.connections;
@@ -245,32 +232,16 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
     this.endOfTurnConfidenceThreshold = config.endOfTurnConfidenceThreshold ?? 0.7;
     this.minEndOfTurnSilenceWhenConfident = config.minEndOfTurnSilenceWhenConfident ?? 800;
     this.maxTurnSilence = config.maxTurnSilence ?? 3600;
-    this.language = config.language || 'es';
 
     console.log(
-      `[AssemblyAI] Configured [threshold:${this.endOfTurnConfidenceThreshold}] [minSilence:${this.minEndOfTurnSilenceWhenConfident}ms] [maxSilence:${this.maxTurnSilence}ms] [lang:${this.language}]`
+      `[AssemblyAI] Configured [threshold:${this.endOfTurnConfidenceThreshold}] [minSilence:${this.minEndOfTurnSilenceWhenConfident}ms] [maxSilence:${this.maxTurnSilence}ms]`
     );
   }
 
   /**
    * Build WebSocket URL with query parameters
    */
-  private buildWebSocketUrl(sessionId?: string): string {
-    let language = this.language;
-
-    if (sessionId) {
-      const connection = this.connections[sessionId];
-      if (connection?.state?.languageCode) {
-        language = connection.state.languageCode.split('-')[0];
-      }
-    }
-
-    // Determine speech model based on language
-    const isEnglish = language === 'en';
-    const speechModel = isEnglish
-      ? 'universal-streaming-english'
-      : 'universal-streaming-multilingual';
-
+  private buildWebSocketUrl(): string {
     const params = new URLSearchParams({
       sample_rate: this.sampleRate.toString(),
       encoding: 'pcm_s16le',
@@ -278,13 +249,13 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       end_of_turn_confidence_threshold: this.endOfTurnConfidenceThreshold.toString(),
       min_end_of_turn_silence_when_confident: this.minEndOfTurnSilenceWhenConfident.toString(),
       max_turn_silence: this.maxTurnSilence.toString(),
-      speech_model: speechModel,
+      speech_model: 'universal-streaming-multilingual',
       language_detection: 'true',
     });
 
     const url = `${this.wsEndpointBaseUrl}?${params.toString()}`;
     console.log(
-      `[AssemblyAI] Connecting [model:${speechModel}] [lang:${language}] [threshold:${this.endOfTurnConfidenceThreshold}] [maxSilence:${this.maxTurnSilence}ms]`
+      `[AssemblyAI] Connecting [model:universal-streaming-multilingual] [threshold:${this.endOfTurnConfidenceThreshold}] [maxSilence:${this.maxTurnSilence}ms]`
     );
 
     return url;
@@ -359,7 +330,7 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       session = new AssemblyAISession(
         sessionId,
         this.apiKey,
-        this.buildWebSocketUrl(sessionId),
+        this.buildWebSocketUrl(),
         (id) => this.sessions.delete(id)
       );
       this.sessions.set(sessionId, session);

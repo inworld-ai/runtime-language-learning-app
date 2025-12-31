@@ -32,7 +32,7 @@ import { ConnectionsMap } from './types/index.js';
 
 // Import existing components (still compatible)
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
-// import { AnkiExporter } from './helpers/anki-exporter.js';
+import { AnkiExporter } from './helpers/anki-exporter.js';
 import {
   getLanguageConfig,
   getLanguageOptions,
@@ -277,6 +277,9 @@ wss.on('connection', async (ws) => {
         } catch (err) {
           console.error('[Server] Error recording flashcard click:', err);
         }
+      } else if (message.type === 'text_message' && message.text) {
+        // Handle text input (bypasses audio/STT)
+        connectionManager.sendTextMessage(message.text);
       } else {
         console.log('[Server] Received message type:', message.type);
       }
@@ -313,10 +316,41 @@ wss.on('connection', async (ws) => {
 // API Endpoints
 // ============================================================
 
-// ANKI export endpoint - temporarily disabled
-// app.post('/api/export-anki', async (req, res) => {
-//   ...
-// });
+// ANKI export endpoint
+app.post('/api/export-anki', async (req, res) => {
+  try {
+    const { flashcards, deckName, languageCode } = req.body;
+
+    if (!flashcards || !Array.isArray(flashcards) || flashcards.length === 0) {
+      res.status(400).json({ error: 'No flashcards provided' });
+      return;
+    }
+
+    const exporter = new AnkiExporter();
+    const validCount = exporter.countValidFlashcards(flashcards);
+
+    if (validCount === 0) {
+      res.status(400).json({ error: 'No valid flashcards to export' });
+      return;
+    }
+
+    const defaultDeckName = `Aprendemo ${languageCode || 'Language'} Cards`;
+    const apkgBuffer = await exporter.exportFlashcards(
+      flashcards,
+      deckName || defaultDeckName
+    );
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${(deckName || defaultDeckName).replace(/[^a-zA-Z0-9]/g, '_')}.apkg"`
+    );
+    res.send(apkgBuffer);
+  } catch (error) {
+    console.error('[Server] Error exporting Anki deck:', error);
+    res.status(500).json({ error: 'Failed to export Anki deck' });
+  }
+});
 
 // Languages endpoint
 app.get('/api/languages', (_req, res) => {

@@ -92,8 +92,8 @@ export class ConversationGraphWrapper {
     // Start node (audio input proxy)
     const audioInputNode = new ProxyNode({ id: `audio-input-proxy${postfix}` });
 
-    // AssemblyAI STT with built-in VAD
-    const turnDetectionSettings = getAssemblyAISettingsForEagerness('high');
+    // AssemblyAI STT with built-in VAD (always uses multilingual model)
+    const turnDetectionSettings = getAssemblyAISettingsForEagerness('medium');
     const assemblyAISTTNode = new AssemblyAISTTWebSocketNode({
       id: `assembly-ai-stt-ws-node${postfix}`,
       config: {
@@ -106,7 +106,6 @@ export class ConversationGraphWrapper {
         minEndOfTurnSilenceWhenConfident:
           turnDetectionSettings.minEndOfTurnSilenceWhenConfident,
         maxTurnSilence: turnDetectionSettings.maxTurnSilence,
-        language: defaultLanguageCode.split('-')[0], // 'es' from 'es-MX'
       },
     });
 
@@ -288,18 +287,4 @@ export class ConversationGraphWrapper {
       assemblyAINode: assemblyAISTTNode,
     });
   }
-}
-
-/**
- * Legacy export for backwards compatibility during migration
- */
-export function getConversationGraph(
-  _config: { apiKey: string },
-  _languageCode: string = DEFAULT_LANGUAGE_CODE
-): Graph {
-  console.warn(
-    '[ConversationGraph] getConversationGraph is deprecated. Use ConversationGraphWrapper.create() instead.'
-  );
-  // This won't work properly without connections, but maintains API compatibility
-  return null as unknown as Graph;
 }

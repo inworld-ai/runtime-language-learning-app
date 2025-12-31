@@ -1,10 +1,11 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useApp } from '../context/AppContext';
 import { Message } from './Message';
 import { StreamingMessage } from './StreamingMessage';
 
 export function ChatSection() {
-  const { state, toggleRecording, restartConversation } = useApp();
+  const { state, toggleRecording, restartConversation, sendTextMessage } = useApp();
+  const [textInput, setTextInput] = useState('');
   const {
     chatHistory,
     currentTranscript,
@@ -53,14 +54,29 @@ export function ChatSection() {
     scrollToBottomInstant();
   }, [currentTranscript, pendingTranscription, streamingLLMResponse, scrollToBottomInstant]);
 
-  // Callback for child components to trigger scroll during typewriter animation
-  const handleContentUpdate = useCallback(() => {
-    scrollToBottomInstant();
-  }, [scrollToBottomInstant]);
+  const handleTextSubmit = useCallback(
+    (e: FormEvent) => {
+      e.preventDefault();
+      if (textInput.trim()) {
+        sendTextMessage(textInput);
+        setTextInput('');
+      }
+    },
+    [textInput, sendTextMessage]
+  );
 
-  const handleLLMTypewriterComplete = useCallback(() => {
-    // Completion is handled in AppContext
-  }, []);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (textInput.trim()) {
+          sendTextMessage(textInput);
+          setTextInput('');
+        }
+      }
+    },
+    [textInput, sendTextMessage]
+  );
 
   const isConnected = connectionStatus === 'connected';
 
@@ -141,16 +157,43 @@ export function ChatSection() {
 
           {/* Streaming LLM response */}
           {streamingLLMResponse && (
-            <StreamingMessage
-              text={streamingLLMResponse}
-              onComplete={handleLLMTypewriterComplete}
-              onContentUpdate={handleContentUpdate}
-            />
+            <StreamingMessage text={streamingLLMResponse} />
           )}
         </div>
         <div className="current-transcript" id="currentTranscript">
           {currentTranscript}
         </div>
+        <form className="text-input-form" onSubmit={handleTextSubmit}>
+          <input
+            type="text"
+            className="text-input"
+            placeholder="Type a message..."
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!isConnected}
+          />
+          <button
+            type="submit"
+            className="send-button"
+            disabled={!isConnected || !textInput.trim()}
+            title="Send message"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </form>
       </div>
     </section>
   );

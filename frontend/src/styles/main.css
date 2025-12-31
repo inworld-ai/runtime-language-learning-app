@@ -322,34 +322,79 @@ body {
     }
 }
 
-.streaming-cursor {
-    animation: blink 1s infinite;
-    color: #6b7280;
-    margin-left: 2px;
-}
-
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
-
 .current-transcript {
     display: none;
-    /* padding: 12px 16px;
-    background: #f9fafb;
-    border: 1px dashed #d1d5db;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #6b7280;
-    font-style: italic;
-    min-height: 44px;
-    display: flex;
-    align-items: center; */
 }
 
-/* .current-transcript:empty::before {
-    content: "Live transcription will appear here...";
-} */
+/* Text Input Form */
+.text-input-form {
+    display: flex;
+    gap: 8px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e5e5;
+    margin-top: 16px;
+}
+
+.text-input {
+    flex: 1;
+    font-family: 'Roboto Serif', Georgia, Cambria, 'Times New Roman', serif;
+    font-size: 15px;
+    padding: 12px 16px;
+    border: 1px solid #e5e5e5;
+    border-radius: 24px;
+    background: #f9fafb;
+    color: #1a1a1a;
+    transition: all 0.2s ease;
+}
+
+.text-input:hover:not(:disabled) {
+    border-color: #d1d5db;
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: #1a1a1a;
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(26, 26, 26, 0.1);
+}
+
+.text-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.text-input::placeholder {
+    color: #9ca3af;
+}
+
+.send-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    border: none;
+    background: #1a1a1a;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.send-button:hover:not(:disabled) {
+    background: #374151;
+    transform: scale(1.05);
+}
+
+.send-button:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.send-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 
 /* Flashcards Section */
 .flashcards-section {

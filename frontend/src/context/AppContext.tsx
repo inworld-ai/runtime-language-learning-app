@@ -139,6 +139,7 @@ interface AppContextType {
   restartConversation: () => void;
   changeLanguage: (newLanguage: string) => void;
   handleInterrupt: () => void;
+  sendTextMessage: (text: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -217,8 +218,6 @@ export function AppProvider({ children }: AppProviderProps) {
           type: 'SET_AVAILABLE_LANGUAGES',
           payload: [
             { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇲🇽' },
-            { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: '🇯🇵' },
-            { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷' },
           ],
         });
       }
@@ -232,6 +231,41 @@ export function AppProvider({ children }: AppProviderProps) {
     const pendingTranscription = currentState.pendingTranscription;
     const pendingLLMResponse = pendingLLMResponseRef.current;
 
+    const storage = storageRef.current;
+    const wsClient = wsClientRef.current;
+
+    const lastUserMessage = currentState.chatHistory
+      .filter((m) => m.role === 'learner')
+      .pop();
+    const lastTeacherMessage = currentState.chatHistory
+      .filter((m) => m.role === 'teacher')
+      .pop();
+
+    // Case 1: We have a pending LLM response but user message was already added (text input case)
+    if (pendingLLMResponse && !pendingTranscription) {
+      // Check if teacher response is already in history
+      if (lastTeacherMessage?.content === pendingLLMResponse) {
+        pendingLLMResponseRef.current = null;
+        dispatch({ type: 'RESET_STREAMING_STATE' });
+        return;
+      }
+
+      // Add only the teacher response
+      storage.addMessage('assistant', pendingLLMResponse);
+      dispatch({
+        type: 'ADD_MESSAGE',
+        payload: { role: 'teacher', content: pendingLLMResponse },
+      });
+
+      const conversationHistory = storage.getConversationHistory();
+      wsClient.send({ type: 'conversation_update', data: conversationHistory });
+
+      pendingLLMResponseRef.current = null;
+      dispatch({ type: 'RESET_STREAMING_STATE' });
+      return;
+    }
+
+    // Case 2: We have both pending transcription and LLM response (audio input case)
     if (pendingTranscription && pendingLLMResponse) {
       // Check if we've already processed this exact pair (using ref for synchronous check)
       const lastPair = lastProcessedPairRef.current;
@@ -242,13 +276,6 @@ export function AppProvider({ children }: AppProviderProps) {
         dispatch({ type: 'RESET_STREAMING_STATE' });
         return;
       }
-
-      const lastUserMessage = currentState.chatHistory
-        .filter((m) => m.role === 'learner')
-        .pop();
-      const lastTeacherMessage = currentState.chatHistory
-        .filter((m) => m.role === 'teacher')
-        .pop();
 
       const isDuplicate =
         lastUserMessage?.content === pendingTranscription &&
@@ -264,9 +291,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       const teacherAlreadyAdded = lastTeacherMessage?.content === pendingLLMResponse;
       const userAlreadyAdded = lastUserMessage?.content === pendingTranscription;
-
-      const storage = storageRef.current;
-      const wsClient = wsClientRef.current;
 
       // Mark this pair as processed BEFORE adding (synchronous protection)
       lastProcessedPairRef.current = { user: pendingTranscription, teacher: pendingLLMResponse };
@@ -287,17 +311,23 @@ export function AppProvider({ children }: AppProviderProps) {
         return;
       }
 
-      storage.addMessage('user', pendingTranscription);
-      storage.addMessage('assistant', pendingLLMResponse);
+      // Add user message only if not already added
+      if (!userAlreadyAdded) {
+        storage.addMessage('user', pendingTranscription);
+        dispatch({
+          type: 'ADD_MESSAGE',
+          payload: { role: 'learner', content: pendingTranscription },
+        });
+      }
 
-      dispatch({
-        type: 'ADD_MESSAGE',
-        payload: { role: 'learner', content: pendingTranscription },
-      });
-      dispatch({
-        type: 'ADD_MESSAGE',
-        payload: { role: 'teacher', content: pendingLLMResponse },
-      });
+      // Add teacher message only if not already added
+      if (!teacherAlreadyAdded) {
+        storage.addMessage('assistant', pendingLLMResponse);
+        dispatch({
+          type: 'ADD_MESSAGE',
+          payload: { role: 'teacher', content: pendingLLMResponse },
+        });
+      }
 
       const conversationHistory = storage.getConversationHistory();
       wsClient.send({ type: 'conversation_update', data: conversationHistory });
@@ -405,9 +435,17 @@ export function AppProvider({ children }: AppProviderProps) {
       const text = (data as { text: string }).text;
       audioPlayer.stop();
 
-      dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: text });
       dispatch({ type: 'SET_CURRENT_TRANSCRIPT', payload: '' });
       dispatch({ type: 'SET_SPEECH_DETECTED', payload: false });
+
+      // Check if this transcription was already added (e.g., by sendTextMessage)
+      const alreadyAdded = lastPendingTranscriptionRef.current === text;
+      
+      if (!alreadyAdded) {
+        // Only set pending transcription for audio-based transcriptions
+        dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: text });
+        lastPendingTranscriptionRef.current = text;
+      }
 
       if (
         pendingLLMResponseRef.current &&
@@ -427,11 +465,9 @@ export function AppProvider({ children }: AppProviderProps) {
 
       dispatch({ type: 'RESET_STREAMING_STATE' });
 
-      if (lastPendingTranscriptionRef.current !== text) {
-        lastPendingTranscriptionRef.current = text;
+      if (!alreadyAdded) {
+        checkAndUpdateConversationRef.current();
       }
-
-      checkAndUpdateConversationRef.current();
     });
 
     wsClient.on('llm_response_chunk', (data) => {
@@ -448,6 +484,10 @@ export function AppProvider({ children }: AppProviderProps) {
       const finalText =
         (data as { text?: string }).text || stateRef.current.streamingLLMResponse;
       dispatch({ type: 'SET_STREAMING_LLM_RESPONSE', payload: finalText });
+
+      // Store the LLM response and trigger conversation update
+      pendingLLMResponseRef.current = finalText;
+      checkAndUpdateConversationRef.current();
     });
 
     wsClient.on('audio_stream', (data) => {
@@ -612,6 +652,32 @@ export function AppProvider({ children }: AppProviderProps) {
     [state.isRecording, state.connectionStatus]
   );
 
+  // Send text message (bypasses audio/STT)
+  const sendTextMessage = useCallback(
+    (text: string) => {
+      const wsClient = wsClientRef.current;
+      const storage = storageRef.current;
+      const trimmedText = text.trim();
+
+      if (!trimmedText || state.connectionStatus !== 'connected') return;
+
+      // Add user message to chat history immediately (unlike audio where we wait for transcription)
+      storage.addMessage('user', trimmedText);
+      dispatch({
+        type: 'ADD_MESSAGE',
+        payload: { role: 'learner', content: trimmedText },
+      });
+
+      // Track this as the last pending transcription so we don't duplicate it
+      // when the backend sends back the transcription event
+      lastPendingTranscriptionRef.current = trimmedText;
+
+      // Send to backend
+      wsClient.send({ type: 'text_message', text: trimmedText });
+    },
+    [state.connectionStatus]
+  );
+
   const value: AppContextType = {
     state,
     dispatch,
@@ -623,6 +689,7 @@ export function AppProvider({ children }: AppProviderProps) {
     restartConversation,
     changeLanguage,
     handleInterrupt,
+    sendTextMessage,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

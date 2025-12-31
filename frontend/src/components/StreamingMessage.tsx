@@ -1,20 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useTypewriter } from '../hooks/useTypewriter';
 import { TranslationTooltip } from './TranslationTooltip';
 
 interface StreamingMessageProps {
   text: string;
-  onComplete?: () => void;
-  onContentUpdate?: () => void;
 }
 
-export function StreamingMessage({ text, onComplete, onContentUpdate }: StreamingMessageProps) {
-  const { displayedText, isTyping } = useTypewriter(text, {
-    speed: 25,
-    onComplete,
-    onContentUpdate,
-  });
-
+export function StreamingMessage({ text }: StreamingMessageProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const messageRef = useRef<HTMLDivElement>(null);
@@ -68,9 +59,6 @@ export function StreamingMessage({ text, onComplete, onContentUpdate }: Streamin
     };
   }, []);
 
-  // Get text for translation (remove cursor)
-  const textForTranslation = displayedText.replace('▊', '').trim();
-
   return (
     <>
       <div
@@ -79,11 +67,10 @@ export function StreamingMessage({ text, onComplete, onContentUpdate }: Streamin
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {displayedText}
-        {isTyping && <span className="streaming-cursor">▊</span>}
+        {text}
       </div>
       <TranslationTooltip
-        text={textForTranslation}
+        text={text}
         visible={showTooltip}
         position={tooltipPosition}
         onMouseEnter={handleTooltipMouseEnter}
