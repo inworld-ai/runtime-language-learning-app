@@ -3,7 +3,7 @@
  */
 
 import { WebSocket } from 'ws';
-import type { MultimodalStreamManager } from '../helpers/multimodal_stream_manager.js';
+import type { MultimodalStreamManager } from '../helpers/multimodal-stream-manager.js';
 import type { GraphOutputStream } from '@inworld/runtime/graph';
 
 /**

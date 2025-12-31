@@ -66,3 +66,4 @@ export class StateUpdateNode extends CustomNode {
     return connection.state;
   }
 }
+

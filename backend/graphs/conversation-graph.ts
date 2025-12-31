@@ -23,13 +23,13 @@ import {
   TextAggregatorNode,
 } from '@inworld/runtime/graph';
 
-import { AssemblyAISTTWebSocketNode } from './nodes/assembly_ai_stt_ws_node.js';
-import { DialogPromptBuilderNode } from './nodes/dialog_prompt_builder_node.js';
-import { InteractionQueueNode } from './nodes/interaction_queue_node.js';
-import { StateUpdateNode } from './nodes/state_update_node.js';
-import { TextInputNode } from './nodes/text_input_node.js';
-import { TranscriptExtractorNode } from './nodes/transcript_extractor_node.js';
-import { TTSRequestBuilderNode } from './nodes/tts_request_builder_node.js';
+import { AssemblyAISTTWebSocketNode } from './nodes/assembly-ai-stt-ws-node.js';
+import { DialogPromptBuilderNode } from './nodes/dialog-prompt-builder-node.js';
+import { InteractionQueueNode } from './nodes/interaction-queue-node.js';
+import { StateUpdateNode } from './nodes/state-update-node.js';
+import { TextInputNode } from './nodes/text-input-node.js';
+import { TranscriptExtractorNode } from './nodes/transcript-extractor-node.js';
+import { TTSRequestBuilderNode } from './nodes/tts-request-builder-node.js';
 import {
   ConnectionsMap,
   TextInput,

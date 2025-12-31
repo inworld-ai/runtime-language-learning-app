@@ -12,8 +12,8 @@ import { WebSocket } from 'ws';
 import { GraphTypes } from '@inworld/runtime/graph';
 
 import { ConversationGraphWrapper } from '../graphs/conversation-graph.js';
-import { MultimodalStreamManager } from './multimodal_stream_manager.js';
-import { decodeBase64ToFloat32 } from './audio_utils.js';
+import { MultimodalStreamManager } from './multimodal-stream-manager.js';
+import { decodeBase64ToFloat32 } from './audio-utils.js';
 import { ConnectionsMap, INPUT_SAMPLE_RATE, TTS_SAMPLE_RATE } from '../types/index.js';
 import {
   getLanguageConfig,

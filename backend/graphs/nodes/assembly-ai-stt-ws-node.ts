@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Connection } from '../../types/index.js';
-import { audioDataToPCM16 } from '../../helpers/audio_utils.js';
+import { audioDataToPCM16 } from '../../helpers/audio-utils.js';
 
 /**
  * Configuration interface for AssemblyAISTTWebSocketNode
@@ -595,3 +595,4 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
     this.sessions.clear();
   }
 }
+
