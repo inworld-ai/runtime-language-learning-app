@@ -94,9 +94,14 @@ language-learning-node/
 │   │   ├── audio-buffer.ts
 │   │   ├── audio-utils.ts
 │   │   ├── connection-manager.ts
+│   │   ├── feedback-processor.ts
 │   │   ├── flashcard-processor.ts
 │   │   ├── multimodal-stream-manager.ts
 │   │   └── prompt-templates.ts
+│   ├── prompts/              # Nunjucks prompt templates
+│   │   ├── conversation.njk
+│   │   ├── flashcard.njk
+│   │   └── response-feedback.njk
 │   ├── types/                # TypeScript type definitions
 │   ├── utils/                # Utility modules
 │   │   └── logger.ts         # Structured logging (pino)
