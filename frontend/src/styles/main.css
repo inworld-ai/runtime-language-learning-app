@@ -726,3 +726,107 @@ body {
 .message.teacher:hover {
     background: #e9eaec;
 }
+
+/* Feedback Tooltip for learner messages */
+.feedback-tooltip {
+    position: absolute;
+    z-index: 1000;
+    background: #2d4a3e;
+    color: #ffffff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    pointer-events: none;
+}
+
+.feedback-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.feedback-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 20px;
+    width: 12px;
+    height: 12px;
+    background: #2d4a3e;
+    transform: rotate(45deg);
+    border-radius: 0 0 2px 0;
+}
+
+.feedback-content {
+    display: block;
+}
+
+.feedback-text {
+    display: block;
+    word-wrap: break-word;
+}
+
+.feedback-loading {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.feedback-tooltip.loading .feedback-loading {
+    display: flex;
+}
+
+.feedback-tooltip.loading .feedback-content {
+    display: none;
+}
+
+.feedback-loading span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.7);
+    animation: feedback-dot 1.2s ease-in-out infinite;
+}
+
+.feedback-loading span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.feedback-loading span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.feedback-loading span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes feedback-dot {
+    0%, 60%, 100% {
+        opacity: 0.4;
+        transform: scale(0.8);
+    }
+    30% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Make learner messages show a subtle cursor hint for feedback */
+.message.learner {
+    cursor: help;
+    transition: background-color 0.15s ease;
+}
+
+.message.learner:hover {
+    background: #c8e6d5;
+}

@@ -32,6 +32,7 @@ import { ConnectionsMap } from './types/index.js';
 
 // Import existing components (still compatible)
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
+import { FeedbackProcessor } from './helpers/feedback-processor.js';
 import { AnkiExporter } from './helpers/anki-exporter.js';
 import {
   getLanguageConfig,
@@ -61,6 +62,7 @@ let graphWrapper: ConversationGraphWrapper | null = null;
 // Connection managers per WebSocket
 const connectionManagers = new Map<string, ConnectionManager>();
 const flashcardProcessors = new Map<string, FlashcardProcessor>();
+const feedbackProcessors = new Map<string, FeedbackProcessor>();
 const connectionAttributes = new Map<
   string,
   { timezone?: string; userId?: string; languageCode?: string }
@@ -145,9 +147,13 @@ wss.on('connection', async (ws) => {
   // Create flashcard processor
   const flashcardProcessor = new FlashcardProcessor(defaultLanguageCode);
 
+  // Create feedback processor
+  const feedbackProcessor = new FeedbackProcessor(defaultLanguageCode);
+
   // Store processors
   connectionManagers.set(connectionId, connectionManager);
   flashcardProcessors.set(connectionId, flashcardProcessor);
+  feedbackProcessors.set(connectionId, feedbackProcessor);
   connectionAttributes.set(connectionId, { languageCode: defaultLanguageCode });
 
   // Set up flashcard generation callback
@@ -185,6 +191,47 @@ wss.on('connection', async (ws) => {
     } catch (error) {
       if (!isShuttingDown) {
         console.error('[Server] Error generating flashcards:', error);
+      }
+    }
+  });
+
+  // Set up feedback generation callback
+  connectionManager.setFeedbackCallback(async (messages, currentTranscript) => {
+    if (isShuttingDown) {
+      console.log('[Server] Skipping feedback generation - shutting down');
+      return;
+    }
+
+    try {
+      const attrs = connectionAttributes.get(connectionId) || {};
+      const userAttributes: Record<string, string> = {
+        timezone: attrs.timezone || '',
+      };
+
+      const targetingKey = attrs.userId || connectionId;
+      const userContext = {
+        attributes: userAttributes,
+        targetingKey,
+      };
+
+      const feedback = await feedbackProcessor.generateFeedback(
+        messages,
+        currentTranscript,
+        userContext
+      );
+
+      if (feedback) {
+        ws.send(
+          JSON.stringify({
+            type: 'feedback_generated',
+            messageContent: currentTranscript,
+            feedback,
+          })
+        );
+      }
+    } catch (error) {
+      if (!isShuttingDown) {
+        console.error('[Server] Error generating feedback:', error);
       }
     }
   });
@@ -234,11 +281,13 @@ wss.on('connection', async (ws) => {
 
           // Update all processors
           flashcardProcessors.get(connectionId)?.setLanguage(newLanguageCode);
+          feedbackProcessors.get(connectionId)?.setLanguage(newLanguageCode);
           connectionManager.setLanguage(newLanguageCode);
 
           // Reset conversation on language change
           connectionManager.reset();
           flashcardProcessors.get(connectionId)?.reset();
+          feedbackProcessors.get(connectionId)?.reset();
 
           // Send confirmation
           ws.send(
@@ -310,6 +359,7 @@ wss.on('connection', async (ws) => {
 
     // Clean up other processors
     flashcardProcessors.delete(connectionId);
+    feedbackProcessors.delete(connectionId);
     connectionAttributes.delete(connectionId);
   });
 });

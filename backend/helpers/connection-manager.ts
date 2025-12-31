@@ -41,6 +41,14 @@ export class ConnectionManager {
     | ((messages: Array<{ role: string; content: string }>) => Promise<void>)
     | null = null;
 
+  // Callback for feedback generation
+  private feedbackCallback:
+    | ((
+        messages: Array<{ role: string; content: string }>,
+        currentTranscript: string
+      ) => Promise<void>)
+    | null = null;
+
   // Processing state tracking for utterance stitching
   private isProcessingResponse: boolean = false;
   private currentTranscript: string = '';
@@ -347,8 +355,9 @@ export class ConnectionManager {
               timestamp: Date.now(),
             });
 
-            // Trigger flashcard generation after TTS completes
+            // Trigger flashcard and feedback generation after TTS completes
             this.triggerFlashcardGeneration();
+            this.triggerFeedbackGeneration();
           } else {
             console.log(
               '[ConnectionManager] TTS stream interrupted - skipping completion signals'
@@ -586,6 +595,35 @@ export class ConnectionManager {
     });
   }
 
+  /**
+   * Trigger feedback generation for the user's last utterance
+   */
+  private triggerFeedbackGeneration(): void {
+    if (!this.feedbackCallback) return;
+
+    const connection = this.connections[this.sessionId];
+    if (!connection) return;
+
+    // Find the last user message
+    const messages = connection.state.messages;
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((m) => m.role === 'user');
+
+    if (!lastUserMessage) return;
+
+    const recentMessages = messages.slice(-6).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    this.feedbackCallback(recentMessages, lastUserMessage.content).catch(
+      (error) => {
+        console.error('[ConnectionManager] Feedback generation error:', error);
+      }
+    );
+  }
+
   // ============================================================
   // Public API (compatible with AudioProcessor)
   // ============================================================
@@ -596,6 +634,15 @@ export class ConnectionManager {
     ) => Promise<void>
   ): void {
     this.flashcardCallback = callback;
+  }
+
+  setFeedbackCallback(
+    callback: (
+      messages: Array<{ role: string; content: string }>,
+      currentTranscript: string
+    ) => Promise<void>
+  ): void {
+    this.feedbackCallback = callback;
   }
 
   getConversationState(): {

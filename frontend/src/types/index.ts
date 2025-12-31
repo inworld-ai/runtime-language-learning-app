@@ -104,6 +104,11 @@ export interface LanguageChangedPayload {
   languageName: string;
 }
 
+export interface FeedbackGeneratedPayload {
+  messageContent: string;
+  feedback: string;
+}
+
 // App state
 export interface AppState {
   // Connection
@@ -127,6 +132,9 @@ export interface AppState {
 
   // Flashcards
   flashcards: Flashcard[];
+
+  // Feedback (keyed by user message content)
+  feedbackMap: Record<string, string>;
 
   // User
   userId: string;

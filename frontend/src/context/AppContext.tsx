@@ -14,6 +14,7 @@ import type {
   Language,
   ConnectionStatus,
   AudioStreamData,
+  FeedbackGeneratedPayload,
 } from '../types';
 import { Storage } from '../services/Storage';
 import { WebSocketClient } from '../services/WebSocketClient';
@@ -37,6 +38,10 @@ type AppAction =
   | { type: 'SET_SPEECH_DETECTED'; payload: boolean }
   | { type: 'SET_FLASHCARDS'; payload: Flashcard[] }
   | { type: 'ADD_FLASHCARDS'; payload: Flashcard[] }
+  | {
+      type: 'SET_FEEDBACK';
+      payload: { messageContent: string; feedback: string };
+    }
   | { type: 'RESET_STREAMING_STATE' }
   | { type: 'RESET_CONVERSATION' };
 
@@ -54,6 +59,7 @@ const createInitialState = (storage: Storage): AppState => ({
   isRecording: false,
   speechDetected: false,
   flashcards: [],
+  feedbackMap: {},
   userId: storage.getOrCreateUserId(),
 });
 
@@ -103,6 +109,14 @@ function appReducer(state: AppState, action: AppAction): AppState {
       );
       return { ...state, flashcards: [...state.flashcards, ...newCards] };
     }
+    case 'SET_FEEDBACK':
+      return {
+        ...state,
+        feedbackMap: {
+          ...state.feedbackMap,
+          [action.payload.messageContent]: action.payload.feedback,
+        },
+      };
     case 'RESET_STREAMING_STATE':
       return {
         ...state,
@@ -585,6 +599,11 @@ export function AppProvider({ children }: AppProviderProps) {
         stateRef.current.currentLanguage
       );
       dispatch({ type: 'SET_FLASHCARDS', payload: updatedFlashcards });
+    });
+
+    wsClient.on('feedback_generated', (data) => {
+      const { messageContent, feedback } = data as FeedbackGeneratedPayload;
+      dispatch({ type: 'SET_FEEDBACK', payload: { messageContent, feedback } });
     });
 
     wsClient.on('language_changed', (data) => {

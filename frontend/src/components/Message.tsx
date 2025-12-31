@@ -1,12 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { ChatMessage } from '../types';
 import { TranslationTooltip } from './TranslationTooltip';
+import { FeedbackTooltip } from './FeedbackTooltip';
+import { useApp } from '../context/AppContext';
 
 interface MessageProps {
   message: ChatMessage;
 }
 
 export function Message({ message }: MessageProps) {
+  const { state } = useApp();
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const messageRef = useRef<HTMLDivElement>(null);
@@ -14,8 +17,6 @@ export function Message({ message }: MessageProps) {
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMouseEnter = useCallback(() => {
-    if (message.role !== 'teacher') return;
-
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = null;
@@ -31,7 +32,7 @@ export function Message({ message }: MessageProps) {
         setShowTooltip(true);
       }
     }, 300);
-  }, [message.role]);
+  }, []);
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimeoutRef.current) {
@@ -62,6 +63,12 @@ export function Message({ message }: MessageProps) {
     };
   }, []);
 
+  // Get feedback for learner messages from the feedbackMap
+  const feedback =
+    message.role === 'learner'
+      ? (state.feedbackMap[message.content] ?? null)
+      : null;
+
   return (
     <>
       <div
@@ -75,6 +82,15 @@ export function Message({ message }: MessageProps) {
       {message.role === 'teacher' && (
         <TranslationTooltip
           text={message.content}
+          visible={showTooltip}
+          position={tooltipPosition}
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
+        />
+      )}
+      {message.role === 'learner' && (
+        <FeedbackTooltip
+          feedback={feedback}
           visible={showTooltip}
           position={tooltipPosition}
           onMouseEnter={handleTooltipMouseEnter}
