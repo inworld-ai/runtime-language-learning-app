@@ -1,0 +1,279 @@
+{
+  "schema_version": "1.2.2",
+  "main": {
+    "id": "lang-learning-conversation-graph",
+    "nodes": [
+      {
+        "id": "audio-input-proxy-lang-learning",
+        "type": "ProxyNode",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "type": "AssemblyAISTTWebSocketNodeType",
+        "id": "assembly-ai-stt-ws-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "type": "TranscriptExtractorNodeType",
+        "id": "transcript-extractor-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": true
+          }
+        }
+      },
+      {
+        "type": "InteractionQueueNodeType",
+        "id": "interaction-queue-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "type": "TextInputNodeType",
+        "id": "text-input-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": true
+          }
+        }
+      },
+      {
+        "type": "DialogPromptBuilderNodeType",
+        "id": "dialog-prompt-builder-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "id": "llm-node-lang-learning",
+        "type": "LLMChatNode",
+        "execution_config": {
+          "type": "LLMChatNodeExecutionConfig",
+          "properties": {
+            "llm_component_id": "llm-node-lang-learning_llm_component",
+            "text_generation_config": {
+              "max_new_tokens": 250,
+              "max_prompt_length": 2000,
+              "temperature": 1,
+              "top_p": 1,
+              "repetition_penalty": 1,
+              "frequency_penalty": 0,
+              "presence_penalty": 0
+            },
+            "stream": true,
+            "report_to_client": true,
+            "response_format": "text"
+          }
+        }
+      },
+      {
+        "id": "text-chunking-node-lang-learning",
+        "type": "TextChunkingNode",
+        "execution_config": {
+          "type": "TextChunkingNodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "id": "text-aggregator-node-lang-learning",
+        "type": "TextAggregatorNode",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "type": "TTSRequestBuilderNodeType",
+        "id": "tts-request-builder-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "id": "tts-node-lang-learning",
+        "type": "TTSNode",
+        "execution_config": {
+          "type": "TTSNodeExecutionConfig",
+          "properties": {
+            "tts_component_id": "tts-node-lang-learning_tts_component",
+            "voice": {
+              "id": "Diego",
+              "language_code": "es-MX"
+            },
+            "synthesis_config": {
+              "type": "inworld",
+              "config": {
+                "model_id": "inworld-tts-1",
+                "inference": {
+                  "speaking_rate": 1.1,
+                  "temperature": 1.1
+                },
+                "postprocessing": {
+                  "sample_rate": 22050
+                }
+              }
+            },
+            "report_to_client": true
+          }
+        }
+      },
+      {
+        "type": "StateUpdateNodeType",
+        "id": "state-update-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": true
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from_node": "audio-input-proxy-lang-learning",
+        "to_node": "assembly-ai-stt-ws-node-lang-learning"
+      },
+      {
+        "from_node": "assembly-ai-stt-ws-node-lang-learning",
+        "to_node": "assembly-ai-stt-ws-node-lang-learning",
+        "condition_id": "custom-condition-from-assembly-ai-stt-ws-node-lang-learning-to-assembly-ai-stt-ws-node-lang-learning",
+        "optional": true,
+        "loop": true
+      },
+      {
+        "from_node": "assembly-ai-stt-ws-node-lang-learning",
+        "to_node": "transcript-extractor-node-lang-learning",
+        "condition_id": "custom-condition-from-assembly-ai-stt-ws-node-lang-learning-to-transcript-extractor-node-lang-learning"
+      },
+      {
+        "from_node": "transcript-extractor-node-lang-learning",
+        "to_node": "interaction-queue-node-lang-learning"
+      },
+      {
+        "from_node": "interaction-queue-node-lang-learning",
+        "to_node": "text-input-node-lang-learning",
+        "condition_id": "custom-condition-from-interaction-queue-node-lang-learning-to-text-input-node-lang-learning"
+      },
+      {
+        "from_node": "text-input-node-lang-learning",
+        "to_node": "dialog-prompt-builder-node-lang-learning"
+      },
+      {
+        "from_node": "text-input-node-lang-learning",
+        "to_node": "tts-request-builder-node-lang-learning"
+      },
+      {
+        "from_node": "dialog-prompt-builder-node-lang-learning",
+        "to_node": "llm-node-lang-learning"
+      },
+      {
+        "from_node": "llm-node-lang-learning",
+        "to_node": "text-chunking-node-lang-learning"
+      },
+      {
+        "from_node": "llm-node-lang-learning",
+        "to_node": "text-aggregator-node-lang-learning"
+      },
+      {
+        "from_node": "text-chunking-node-lang-learning",
+        "to_node": "tts-request-builder-node-lang-learning"
+      },
+      {
+        "from_node": "tts-request-builder-node-lang-learning",
+        "to_node": "tts-node-lang-learning"
+      },
+      {
+        "from_node": "text-aggregator-node-lang-learning",
+        "to_node": "state-update-node-lang-learning"
+      },
+      {
+        "from_node": "state-update-node-lang-learning",
+        "to_node": "interaction-queue-node-lang-learning",
+        "optional": true,
+        "loop": true
+      }
+    ],
+    "end_nodes": [
+      "tts-node-lang-learning"
+    ],
+    "start_nodes": [
+      "audio-input-proxy-lang-learning"
+    ]
+  },
+  "components": [
+    {
+      "id": "llm-node-lang-learning_llm_component",
+      "type": "LLMInterface",
+      "creation_config": {
+        "type": "RemoteLLMConfig",
+        "properties": {
+          "provider": "openai",
+          "model_name": "gpt-4.1-nano",
+          "default_config": {},
+          "api_key": "{{INWORLD_API_KEY}}"
+        }
+      }
+    },
+    {
+      "id": "tts-node-lang-learning_tts_component",
+      "type": "TTSInterface",
+      "creation_config": {
+        "type": "RemoteTTSConfig",
+        "properties": {
+          "synthesis_config": {
+            "type": "inworld",
+            "config": {
+              "model_id": "inworld-tts-1",
+              "inference": {
+                "speaking_rate": 1.1,
+                "temperature": 1.1
+              },
+              "postprocessing": {
+                "sample_rate": 22050
+              }
+            }
+          },
+          "api_key": "{{INWORLD_API_KEY}}"
+        }
+      }
+    },
+    {
+      "id": "custom-condition-from-assembly-ai-stt-ws-node-lang-learning-to-assembly-ai-stt-ws-node-lang-learning",
+      "type": "custom-condition-from-assembly-ai-stt-ws-node-lang-learning-to-assembly-ai-stt-ws-node-lang-learning"
+    },
+    {
+      "id": "custom-condition-from-assembly-ai-stt-ws-node-lang-learning-to-transcript-extractor-node-lang-learning",
+      "type": "custom-condition-from-assembly-ai-stt-ws-node-lang-learning-to-transcript-extractor-node-lang-learning"
+    },
+    {
+      "id": "custom-condition-from-interaction-queue-node-lang-learning-to-text-input-node-lang-learning",
+      "type": "custom-condition-from-interaction-queue-node-lang-learning-to-text-input-node-lang-learning"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ dotenv.config();
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
+import { mkdir, writeFile } from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +34,8 @@ import { ConnectionsMap } from './types/index.js';
 // Import existing components (still compatible)
 import { FlashcardProcessor } from './helpers/flashcard-processor.js';
 import { FeedbackProcessor } from './helpers/feedback-processor.js';
+import { getFlashcardGraph } from './graphs/flashcard-graph.js';
+import { getResponseFeedbackGraph } from './graphs/response-feedback-graph.js';
 import { AnkiExporter } from './helpers/anki-exporter.js';
 import {
   getLanguageConfig,
@@ -83,6 +86,8 @@ try {
       appName: serverConfig.telemetry.appName,
       appVersion: serverConfig.telemetry.appVersion,
     });
+    logger.debug('telemetry_initialized');
+    logger.debug(`appName: ${serverConfig.telemetry.appName}`);
 
     telemetry.configureMetric({
       metricType: MetricType.CounterUInt,
@@ -114,6 +119,26 @@ async function initializeGraph(): Promise<void> {
     defaultLanguageCode: DEFAULT_LANGUAGE_CODE,
   });
   logger.info('conversation_graph_created');
+}
+
+async function exportGraphConfigs(): Promise<void> {
+  const configDir = path.join(__dirname, 'graphs/configs');
+
+  if (!existsSync(configDir)) {
+    await mkdir(configDir, { recursive: true });
+  }
+
+  const graphs = [
+    { id: 'flashcard-generation-graph', graph: getFlashcardGraph() },
+    { id: 'response-feedback-graph', graph: getResponseFeedbackGraph() },
+    ...(graphWrapper ? [{ id: 'lang-learning-conversation-graph', graph: graphWrapper.graph }] : []),
+  ];
+
+  for (const { id, graph } of graphs) {
+    const filePath = path.join(configDir, `${id}.json`);
+    await writeFile(filePath, graph.toJSON(), 'utf-8');
+    logger.info({ graphId: id, path: filePath }, 'graph_config_exported');
+  }
 }
 
 // ============================================================
@@ -432,6 +457,7 @@ app.use(express.static(finalStaticPath));
 async function startServer(): Promise<void> {
   try {
     await initializeGraph();
+    await exportGraphConfigs();
     server.listen(serverConfig.port, () => {
       logger.info({ port: serverConfig.port }, 'server_started');
       logger.info('using_inworld_runtime_0.9_with_assemblyai_stt');

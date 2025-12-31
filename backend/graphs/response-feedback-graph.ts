@@ -11,31 +11,13 @@ import { GraphTypes } from '@inworld/runtime/common';
 import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { llmConfig } from '../config/llm.js';
 import { feedbackLogger as logger } from '../utils/logger.js';
+import { responseFeedbackPromptTemplate } from '../helpers/prompt-templates.js';
 
 export interface ResponseFeedbackInput {
   messages: Array<{ role: string; content: string }>;
   currentTranscript: string;
   targetLanguage: string;
 }
-
-const responseFeedbackPromptTemplate = `
-You are a {{targetLanguage}} language tutor assistant. Your task is to analyze the student's most recent utterance and provide brief, helpful feedback.
-
-## Conversation so far:
-{% for message in messages %}
-{{ message.role }}: {{ message.content }}
-{% endfor %}
-
-## Student's last utterance:
-{{ currentTranscript }}
-
-## Instructions:
-- If the student made any grammar, vocabulary, or pronunciation errors in their {{targetLanguage}}, offer a gentle correction
-- If the student's response was good, offer a brief word of encouragement or a small tip to improve
-- Keep your feedback to exactly ONE sentence in English
-- Be encouraging and constructive
-
-Your feedback (one sentence in English):`.trim();
 
 class FeedbackPromptBuilderNode extends CustomNode {
   async process(_context: ProcessContext, input: ResponseFeedbackInput) {

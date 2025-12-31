@@ -45,9 +45,15 @@ export class FeedbackProcessor {
   ): Promise<string> {
     const executor = getResponseFeedbackGraph();
 
+    // Remove the last assistant message so conversation ends with user's utterance
+    let conversationMessages = messages;
+    if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+      conversationMessages = messages.slice(0, -1);
+    }
+
     try {
       const input: ResponseFeedbackInput = {
-        messages: messages,
+        messages: conversationMessages,
         currentTranscript: currentTranscript,
         targetLanguage: this.languageConfig.name,
       };

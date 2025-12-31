@@ -84,9 +84,11 @@ language-learning-node/
 │   │   ├── llm.ts            # LLM model configuration
 │   │   └── server.ts         # Server and audio settings
 │   ├── graphs/               # Graph definitions
+│   │   ├── configs/          # Auto-exported graph JSON configs
 │   │   ├── nodes/            # Graph node implementations
 │   │   ├── conversation-graph.ts
-│   │   └── flashcard-graph.ts
+│   │   ├── flashcard-graph.ts
+│   │   └── response-feedback-graph.ts
 │   ├── helpers/              # Helper utilities
 │   │   ├── anki-exporter.ts
 │   │   ├── audio-buffer.ts
@@ -112,6 +114,16 @@ language-learning-node/
 ├── package.json              # Dependencies
 └── LICENSE                   # MIT License
 ```
+
+## Graph Registration
+
+On server startup, graph JSON configurations are automatically exported to `backend/graphs/configs/`. To register graphs with the Inworld Portal for use with [Experiments](https://docs.inworld.ai/docs/node/guides/experiments):
+
+1. Start the server (`npm run dev`)
+2. Find the exported JSON files in `backend/graphs/configs/`
+3. In the [Inworld Portal](https://platform.inworld.ai/), go to **Register Graph**
+4. Enter the graph ID (e.g., `flashcard-generation-graph`)
+5. Click **Create Variant** and upload the corresponding JSON file
 
 ## Troubleshooting
 

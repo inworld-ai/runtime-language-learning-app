@@ -46,9 +46,6 @@ export interface LanguageConfig {
 
   // Example conversation topics specific to this language's culture
   exampleTopics: string[];
-
-  // Language-specific instructions for the LLM (written in English, about teaching this language)
-  promptInstructions: string;
 }
 
 /**
@@ -88,11 +85,6 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
       'American idioms and slang',
       'travel across the United States',
     ],
-    promptInstructions: `
-- Gently correct the user if they make mistakes in English
-- Explain common idioms and phrasal verbs when they come up naturally
-- Help with pronunciation of tricky English sounds
-- Vary complexity based on the user's level`,
   },
 
   es: {
@@ -122,10 +114,6 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
       'the concept of brunch across cultures',
       'Balkan travel',
     ],
-    promptInstructions: `
-- Gently correct the user if they make mistakes in Spanish
-- Use natural Mexican Spanish expressions when appropriate
-- Vary complexity based on the user's level`,
   },
 
   fr: {
@@ -156,12 +144,6 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
       'travel in Provence and the French Riviera',
       'French music from Édith Piaf to modern artists',
     ],
-    promptInstructions: `
-- Gently correct the user if they make mistakes in French
-- Pay attention to gender agreement and verb conjugation corrections
-- Explain the nuances between formal (vous) and informal (tu) when relevant
-- Share cultural context about French expressions and idioms
-- Mention pronunciation tips for tricky French sounds`,
   },
 
   de: {
@@ -192,12 +174,6 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
       'traveling through Bavaria and the Alps',
       'German literature from Goethe to modern authors',
     ],
-    promptInstructions: `
-- Gently correct the user if they make mistakes in German
-- Help with noun genders (der, die, das) and case endings
-- Explain compound word formation when relevant
-- Share cultural context about German expressions
-- Help with word order in main and subordinate clauses`,
   },
 
   it: {
@@ -228,12 +204,6 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
       'fashion and design in Milan',
       'Italian music from opera to modern pop',
     ],
-    promptInstructions: `
-- Gently correct the user if they make mistakes in Italian
-- Help with verb conjugations and tenses
-- Explain the use of formal (Lei) vs informal (tu) when relevant
-- Share cultural context about Italian expressions and gestures
-- Mention regional variations when appropriate`,
   },
 
   pt: {
@@ -264,12 +234,6 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
       'football (soccer) culture',
       'the Amazon and Brazilian nature',
     ],
-    promptInstructions: `
-- Gently correct the user if they make mistakes in Portuguese
-- Use natural Brazilian Portuguese expressions when appropriate
-- Explain differences between Brazilian and European Portuguese when relevant
-- Help with verb conjugations and the subjunctive mood
-- Share cultural context about Brazilian expressions and slang`,
   },
 };
 

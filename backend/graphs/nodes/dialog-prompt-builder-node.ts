@@ -47,7 +47,6 @@ export class DialogPromptBuilderNode extends CustomNode {
       teacher_name: langConfig.teacherPersona.name,
       teacher_description: langConfig.teacherPersona.description,
       example_topics: langConfig.exampleTopics.join(', '),
-      language_instructions: langConfig.promptInstructions,
     };
 
     // Get all messages except the last user message (that's our current_input)
