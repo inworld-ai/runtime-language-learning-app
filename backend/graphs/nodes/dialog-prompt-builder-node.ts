@@ -52,10 +52,14 @@ export class DialogPromptBuilderNode extends CustomNode {
     const messages = state.messages || [];
     const historyMessages = messages.slice(0, -1); // All except last
     const lastMessage = messages[messages.length - 1];
-    const currentInput = lastMessage?.role === 'user' ? lastMessage.content : '';
+    const currentInput =
+      lastMessage?.role === 'user' ? lastMessage.content : '';
 
     console.log('[DialogPromptBuilder] Language:', langConfig.name);
-    console.log('[DialogPromptBuilder] Messages in history:', historyMessages.length);
+    console.log(
+      '[DialogPromptBuilder] Messages in history:',
+      historyMessages.length
+    );
 
     const templateData = {
       messages: historyMessages.map((m) => ({
@@ -82,4 +86,3 @@ export class DialogPromptBuilderNode extends CustomNode {
     });
   }
 }
-

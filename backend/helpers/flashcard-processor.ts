@@ -41,7 +41,9 @@ export class FlashcardProcessor {
     if (this.languageCode !== languageCode) {
       this.languageCode = languageCode;
       this.languageConfig = getLanguageConfig(languageCode);
-      console.log(`FlashcardProcessor: Language changed to ${this.languageConfig.name}`);
+      console.log(
+        `FlashcardProcessor: Language changed to ${this.languageConfig.name}`
+      );
     }
   }
 
@@ -57,7 +59,7 @@ export class FlashcardProcessor {
     count: number = 1,
     userContext?: UserContextInterface
   ): Promise<Flashcard[]> {
-    const executor = getFlashcardGraph(this.languageCode);
+    const executor = getFlashcardGraph();
 
     // Generate flashcards in parallel
     const promises: Promise<Flashcard>[] = [];
@@ -126,7 +128,8 @@ export class FlashcardProcessor {
       // Check if this is a duplicate
       const isDuplicate = this.existingFlashcards.some(
         (existing) =>
-          existing.targetWord?.toLowerCase() === flashcard.targetWord?.toLowerCase()
+          existing.targetWord?.toLowerCase() ===
+          flashcard.targetWord?.toLowerCase()
       );
 
       if (isDuplicate) {

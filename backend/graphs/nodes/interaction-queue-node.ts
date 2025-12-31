@@ -9,7 +9,12 @@
  */
 
 import { CustomNode, ProcessContext } from '@inworld/runtime/graph';
-import { ConnectionsMap, InteractionInfo, State, TextInput } from '../../types/index.js';
+import {
+  ConnectionsMap,
+  InteractionInfo,
+  State,
+  TextInput,
+} from '../../types/index.js';
 
 export class InteractionQueueNode extends CustomNode {
   private connections: ConnectionsMap;
@@ -117,9 +122,7 @@ export class InteractionQueueNode extends CustomNode {
 
       // Try to mark as running
       if (dataStore.has(runningKey) || !dataStore.add(runningKey, '')) {
-        console.log(
-          `[InteractionQueue] Interaction ${nextId} already started`
-        );
+        console.log(`[InteractionQueue] Interaction ${nextId} already started`);
         return {
           text: '',
           sessionId: sessionId,
@@ -165,4 +168,3 @@ export class InteractionQueueNode extends CustomNode {
     }
   }
 }
-

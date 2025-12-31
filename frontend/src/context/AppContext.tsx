@@ -152,9 +152,7 @@ interface AppProviderProps {
 export function AppProvider({ children }: AppProviderProps) {
   const storageRef = useRef(new Storage());
   const wsClientRef = useRef(
-    new WebSocketClient(
-      `ws://${window.location.hostname}:3000`
-    )
+    new WebSocketClient(`ws://${window.location.hostname}:3000`)
   );
   const audioHandlerRef = useRef(new AudioHandler());
   const audioPlayerRef = useRef(new AudioPlayer());
@@ -172,7 +170,9 @@ export function AppProvider({ children }: AppProviderProps) {
   const pendingLLMResponseRef = useRef<string | null>(null);
   const lastPendingTranscriptionRef = useRef<string | null>(null);
   // Track the last processed pair to prevent duplicate additions
-  const lastProcessedPairRef = useRef<{ user: string; teacher: string } | null>(null);
+  const lastProcessedPairRef = useRef<{ user: string; teacher: string } | null>(
+    null
+  );
 
   // Refs for callbacks to avoid effect dependency issues
   const handleInterruptRef = useRef<() => void>(() => {});
@@ -200,7 +200,10 @@ export function AppProvider({ children }: AppProviderProps) {
         const response = await fetch('/api/languages');
         if (response.ok) {
           const data = await response.json();
-          dispatch({ type: 'SET_AVAILABLE_LANGUAGES', payload: data.languages });
+          dispatch({
+            type: 'SET_AVAILABLE_LANGUAGES',
+            payload: data.languages,
+          });
 
           const isValidLanguage = data.languages.some(
             (lang: Language) => lang.code === state.currentLanguage
@@ -269,7 +272,11 @@ export function AppProvider({ children }: AppProviderProps) {
     if (pendingTranscription && pendingLLMResponse) {
       // Check if we've already processed this exact pair (using ref for synchronous check)
       const lastPair = lastProcessedPairRef.current;
-      if (lastPair && lastPair.user === pendingTranscription && lastPair.teacher === pendingLLMResponse) {
+      if (
+        lastPair &&
+        lastPair.user === pendingTranscription &&
+        lastPair.teacher === pendingLLMResponse
+      ) {
         // Already processed this pair, just clean up
         dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: null });
         pendingLLMResponseRef.current = null;
@@ -282,18 +289,26 @@ export function AppProvider({ children }: AppProviderProps) {
         lastTeacherMessage?.content === pendingLLMResponse;
 
       if (isDuplicate) {
-        lastProcessedPairRef.current = { user: pendingTranscription, teacher: pendingLLMResponse };
+        lastProcessedPairRef.current = {
+          user: pendingTranscription,
+          teacher: pendingLLMResponse,
+        };
         dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: null });
         pendingLLMResponseRef.current = null;
         dispatch({ type: 'RESET_STREAMING_STATE' });
         return;
       }
 
-      const teacherAlreadyAdded = lastTeacherMessage?.content === pendingLLMResponse;
-      const userAlreadyAdded = lastUserMessage?.content === pendingTranscription;
+      const teacherAlreadyAdded =
+        lastTeacherMessage?.content === pendingLLMResponse;
+      const userAlreadyAdded =
+        lastUserMessage?.content === pendingTranscription;
 
       // Mark this pair as processed BEFORE adding (synchronous protection)
-      lastProcessedPairRef.current = { user: pendingTranscription, teacher: pendingLLMResponse };
+      lastProcessedPairRef.current = {
+        user: pendingTranscription,
+        teacher: pendingLLMResponse,
+      };
 
       if (teacherAlreadyAdded && !userAlreadyAdded) {
         storage.addMessage('user', pendingTranscription);
@@ -303,7 +318,10 @@ export function AppProvider({ children }: AppProviderProps) {
         });
 
         const conversationHistory = storage.getConversationHistory();
-        wsClient.send({ type: 'conversation_update', data: conversationHistory });
+        wsClient.send({
+          type: 'conversation_update',
+          data: conversationHistory,
+        });
 
         dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: null });
         pendingLLMResponseRef.current = null;
@@ -384,7 +402,10 @@ export function AppProvider({ children }: AppProviderProps) {
     wsClient.clearAllListeners();
 
     wsClient.on('connection', (status) => {
-      dispatch({ type: 'SET_CONNECTION_STATUS', payload: status as ConnectionStatus });
+      dispatch({
+        type: 'SET_CONNECTION_STATUS',
+        payload: status as ConnectionStatus,
+      });
 
       if (status === 'connected') {
         wsClient.send({
@@ -440,7 +461,7 @@ export function AppProvider({ children }: AppProviderProps) {
 
       // Check if this transcription was already added (e.g., by sendTextMessage)
       const alreadyAdded = lastPendingTranscriptionRef.current === text;
-      
+
       if (!alreadyAdded) {
         // Only set pending transcription for audio-based transcriptions
         dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: text });
@@ -472,7 +493,10 @@ export function AppProvider({ children }: AppProviderProps) {
 
     wsClient.on('llm_response_chunk', (data) => {
       if (!stateRef.current.llmResponseComplete) {
-        dispatch({ type: 'APPEND_LLM_CHUNK', payload: (data as { text: string }).text });
+        dispatch({
+          type: 'APPEND_LLM_CHUNK',
+          payload: (data as { text: string }).text,
+        });
       }
     });
 
@@ -482,7 +506,8 @@ export function AppProvider({ children }: AppProviderProps) {
       dispatch({ type: 'SET_LLM_COMPLETE', payload: true });
 
       const finalText =
-        (data as { text?: string }).text || stateRef.current.streamingLLMResponse;
+        (data as { text?: string }).text ||
+        stateRef.current.streamingLLMResponse;
       dispatch({ type: 'SET_STREAMING_LLM_RESPONSE', payload: finalText });
 
       // Store the LLM response and trigger conversation update
@@ -509,7 +534,9 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (reason === 'continuation_detected') {
         // User is continuing their utterance - discard partial response silently
-        console.log('[AppContext] Continuation detected - discarding partial response');
+        console.log(
+          '[AppContext] Continuation detected - discarding partial response'
+        );
         audioPlayer.stop();
         // Don't save the partial response - just reset streaming state
         dispatch({ type: 'RESET_STREAMING_STATE' });
@@ -522,8 +549,13 @@ export function AppProvider({ children }: AppProviderProps) {
 
     wsClient.on('conversation_rollback', (data) => {
       // Server removed messages due to utterance continuation - sync frontend state
-      const { messages, removedCount } = data as { messages: Array<{ role: string; content: string }>; removedCount: number };
-      console.log(`[AppContext] Conversation rollback - removed ${removedCount} messages`);
+      const { messages, removedCount } = data as {
+        messages: Array<{ role: string; content: string }>;
+        removedCount: number;
+      };
+      console.log(
+        `[AppContext] Conversation rollback - removed ${removedCount} messages`
+      );
 
       // Convert backend format to frontend format
       const chatHistory = messages.map((m) => ({
@@ -556,7 +588,9 @@ export function AppProvider({ children }: AppProviderProps) {
     });
 
     wsClient.on('language_changed', (data) => {
-      console.log(`Language changed to ${(data as { languageName: string }).languageName}`);
+      console.log(
+        `Language changed to ${(data as { languageName: string }).languageName}`
+      );
     });
 
     // Connect
@@ -619,7 +653,9 @@ export function AppProvider({ children }: AppProviderProps) {
         dispatch({ type: 'SET_SPEECH_DETECTED', payload: false });
       } catch (error) {
         console.error('Failed to start streaming:', error);
-        alert('Microphone access denied. Please enable microphone permissions.');
+        alert(
+          'Microphone access denied. Please enable microphone permissions.'
+        );
       }
     } else {
       audioHandler.stopStreaming();

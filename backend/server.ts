@@ -78,7 +78,7 @@ try {
   if (telemetryApiKey) {
     telemetry.init({
       apiKey: telemetryApiKey,
-      appName: 'Inworld Language Tutor',
+      appName: 'inworld-language-tutor',
       appVersion: '1.0.0',
     });
 
@@ -89,7 +89,9 @@ try {
       unit: 'clicks',
     });
   } else {
-    console.warn('[Telemetry] INWORLD_API_KEY not set. Metrics will be disabled.');
+    console.warn(
+      '[Telemetry] INWORLD_API_KEY not set. Metrics will be disabled.'
+    );
   }
 } catch (err) {
   console.error('[Telemetry] Initialization failed:', err);
@@ -405,7 +407,9 @@ async function gracefulShutdown(): Promise<void> {
 
   try {
     // Close all WebSocket connections
-    console.log(`[Server] Closing ${wss.clients.size} WebSocket connections...`);
+    console.log(
+      `[Server] Closing ${wss.clients.size} WebSocket connections...`
+    );
     wss.clients.forEach((ws) => {
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
         ws.close();

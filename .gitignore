@@ -143,3 +143,4 @@ backend/audio/
 .DS_Store
 CLAUDE.md
 templates/
+.claude

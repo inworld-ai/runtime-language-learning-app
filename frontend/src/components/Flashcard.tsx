@@ -51,7 +51,9 @@ export function Flashcard({ flashcard, onCardClick }: FlashcardProps) {
           {mnemonic && (
             <div className="flashcard-mnemonic">
               <span className="mnemonic-label">Remember:</span>{' '}
-              <span dangerouslySetInnerHTML={{ __html: escapeHtml(mnemonic) }} />
+              <span
+                dangerouslySetInnerHTML={{ __html: escapeHtml(mnemonic) }}
+              />
             </div>
           )}
         </div>

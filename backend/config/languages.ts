@@ -277,9 +277,7 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
 export function getLanguageConfig(code: string): LanguageConfig {
   const config = SUPPORTED_LANGUAGES[code];
   if (!config) {
-    console.warn(
-      `Language '${code}' not found, falling back to Spanish (es).`
-    );
+    console.warn(`Language '${code}' not found, falling back to Spanish (es).`);
     return SUPPORTED_LANGUAGES['es'];
   }
   return config;
@@ -313,4 +311,3 @@ export function getLanguageOptions(): Array<{
  * Default language code
  */
 export const DEFAULT_LANGUAGE_CODE = 'es';
-

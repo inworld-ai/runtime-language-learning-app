@@ -1,10 +1,18 @@
-import { useEffect, useRef, useCallback, useState, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import { useApp } from '../context/AppContext';
 import { Message } from './Message';
 import { StreamingMessage } from './StreamingMessage';
 
 export function ChatSection() {
-  const { state, toggleRecording, restartConversation, sendTextMessage } = useApp();
+  const { state, toggleRecording, restartConversation, sendTextMessage } =
+    useApp();
   const [textInput, setTextInput] = useState('');
   const {
     chatHistory,
@@ -52,7 +60,12 @@ export function ChatSection() {
   // Scroll when streaming source content updates
   useEffect(() => {
     scrollToBottomInstant();
-  }, [currentTranscript, pendingTranscription, streamingLLMResponse, scrollToBottomInstant]);
+  }, [
+    currentTranscript,
+    pendingTranscription,
+    streamingLLMResponse,
+    scrollToBottomInstant,
+  ]);
 
   const handleTextSubmit = useCallback(
     (e: FormEvent) => {

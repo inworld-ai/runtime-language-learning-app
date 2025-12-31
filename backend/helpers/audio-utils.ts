@@ -20,7 +20,9 @@ export function float32ToPCM16(float32Data: Float32Array): Int16Array {
  * This is an optimized version that handles both types to avoid
  * intermediate allocations in the audio pipeline.
  */
-export function audioDataToPCM16(audioData: number[] | Float32Array): Int16Array {
+export function audioDataToPCM16(
+  audioData: number[] | Float32Array
+): Int16Array {
   const pcm16 = new Int16Array(audioData.length);
   for (let i = 0; i < audioData.length; i++) {
     // Clamp to [-1, 1] range and convert to Int16 range [-32768, 32767]
@@ -85,4 +87,3 @@ export function decodeBase64ToFloat32(base64Audio: string): Float32Array {
   // Interpret bytes directly as Float32 (4 bytes per sample)
   return new Float32Array(cleanArray.buffer);
 }
-

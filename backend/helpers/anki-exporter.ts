@@ -16,7 +16,8 @@ export class AnkiExporter {
     // Add each flashcard as a card
     flashcards.forEach((flashcard) => {
       // Support both new 'targetWord' and legacy 'spanish' field
-      const targetWord = flashcard.targetWord || (flashcard as { spanish?: string }).spanish;
+      const targetWord =
+        flashcard.targetWord || (flashcard as { spanish?: string }).spanish;
 
       // Skip empty or error flashcards
       if (
@@ -86,7 +87,8 @@ export class AnkiExporter {
    */
   countValidFlashcards(flashcards: Flashcard[]): number {
     return flashcards.filter((flashcard) => {
-      const targetWord = flashcard.targetWord || (flashcard as { spanish?: string }).spanish;
+      const targetWord =
+        flashcard.targetWord || (flashcard as { spanish?: string }).spanish;
       return (
         targetWord &&
         flashcard.english &&

@@ -49,4 +49,3 @@ export class TranscriptExtractorNode extends CustomNode {
     // No cleanup needed
   }
 }
-

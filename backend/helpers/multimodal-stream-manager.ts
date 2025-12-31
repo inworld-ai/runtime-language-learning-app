@@ -78,7 +78,10 @@ export class MultimodalStreamManager {
     // Resolve all waiting consumers with done signal
     while (this.waitingResolvers.length > 0) {
       const resolve = this.waitingResolvers.shift()!;
-      resolve({ value: undefined as unknown as GraphTypes.MultimodalContent, done: true });
+      resolve({
+        value: undefined as unknown as GraphTypes.MultimodalContent,
+        done: true,
+      });
     }
   }
 
@@ -135,4 +138,3 @@ export class MultimodalStreamManager {
     return this.queue.length;
   }
 }
-

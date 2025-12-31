@@ -17,7 +17,8 @@ export function TranslationTooltip({
   onMouseEnter,
   onMouseLeave,
 }: TranslationTooltipProps) {
-  const { translation, isLoading, translate, clearTranslation } = useTranslator();
+  const { translation, isLoading, translate, clearTranslation } =
+    useTranslator();
   const tooltipRef = useRef<HTMLDivElement>(null);
   const lastTextRef = useRef<string>('');
 

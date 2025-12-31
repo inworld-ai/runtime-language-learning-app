@@ -42,7 +42,9 @@ export class TextInputNode extends CustomNode {
     }
     const state = connection.state;
     if (!state) {
-      throw Error(`Failed to read state from connection for sessionId:${sessionId}`);
+      throw Error(
+        `Failed to read state from connection for sessionId:${sessionId}`
+      );
     }
 
     // Update interactionId
@@ -59,4 +61,3 @@ export class TextInputNode extends CustomNode {
     return connection.state;
   }
 }
-

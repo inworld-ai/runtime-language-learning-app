@@ -12,11 +12,6 @@ import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { flashcardPromptTemplate } from '../helpers/prompt-templates.js';
 import { v4 } from 'uuid';
 import { Flashcard } from '../helpers/flashcard-processor.js';
-import {
-  LanguageConfig,
-  getLanguageConfig,
-  DEFAULT_LANGUAGE_CODE,
-} from '../config/languages.js';
 
 class FlashcardPromptBuilderNode extends CustomNode {
   async process(
@@ -24,7 +19,9 @@ class FlashcardPromptBuilderNode extends CustomNode {
     input: GraphTypes.Content | Record<string, unknown>
   ) {
     const builder = await PromptBuilder.create(flashcardPromptTemplate);
-    const renderedPrompt = await builder.build(input as Record<string, unknown>);
+    const renderedPrompt = await builder.build(
+      input as Record<string, unknown>
+    );
     return renderedPrompt;
   }
 }
@@ -79,9 +76,9 @@ class FlashcardParserNode extends CustomNode {
 }
 
 /**
- * Creates a flashcard generation graph for a specific language
+ * Creates a flashcard generation graph (language-agnostic)
  */
-function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph {
+function createFlashcardGraph(): Graph {
   const apiKey = process.env.INWORLD_API_KEY;
   if (!apiKey) {
     throw new Error('INWORLD_API_KEY environment variable is required');
@@ -111,7 +108,7 @@ function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph 
   const parserNode = new FlashcardParserNode({ id: 'flashcard-parser' });
 
   const executor = new GraphBuilder({
-    id: `flashcard-generation-graph-${languageConfig.code}`,
+    id: 'flashcard-generation-graph',
     enableRemoteConfig: false,
   })
     .addNode(promptBuilderNode)
@@ -128,30 +125,16 @@ function createFlashcardGraphForLanguage(languageConfig: LanguageConfig): Graph 
   return executor;
 }
 
-// Cache for language-specific flashcard graphs
-const flashcardGraphCache = new Map<string, Graph>();
+// Cache for the single flashcard graph instance
+let flashcardGraph: Graph | null = null;
 
 /**
- * Get or create a flashcard graph for a specific language
+ * Get or create the flashcard graph (language-agnostic, uses input params for language)
  */
-export function getFlashcardGraph(
-  languageCode: string = DEFAULT_LANGUAGE_CODE
-): Graph {
-  if (!flashcardGraphCache.has(languageCode)) {
-    const languageConfig = getLanguageConfig(languageCode);
-    console.log(
-      `Creating flashcard graph for language: ${languageConfig.name} (${languageCode})`
-    );
-    const graph = createFlashcardGraphForLanguage(languageConfig);
-    flashcardGraphCache.set(languageCode, graph);
+export function getFlashcardGraph(): Graph {
+  if (!flashcardGraph) {
+    console.log('Creating flashcard graph');
+    flashcardGraph = createFlashcardGraph();
   }
-
-  return flashcardGraphCache.get(languageCode)!;
-}
-
-/**
- * Legacy function for backwards compatibility
- */
-export function createFlashcardGraph(): Graph {
-  return getFlashcardGraph(DEFAULT_LANGUAGE_CODE);
+  return flashcardGraph;
 }

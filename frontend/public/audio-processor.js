@@ -33,7 +33,9 @@ class AudioProcessor extends AudioWorkletProcessor {
     this.inputBuffer = newBuffer;
 
     // Resample to 16kHz
-    const numOutputSamples = Math.floor(this.inputBuffer.length / this.resampleRatio);
+    const numOutputSamples = Math.floor(
+      this.inputBuffer.length / this.resampleRatio
+    );
     if (numOutputSamples === 0) return true;
 
     const resampledData = new Float32Array(numOutputSamples);
@@ -46,7 +48,8 @@ class AudioProcessor extends AudioWorkletProcessor {
       const lowerValue = this.inputBuffer[lowerIndex] || 0;
       const upperValue = this.inputBuffer[upperIndex] || 0;
 
-      resampledData[i] = lowerValue + (upperValue - lowerValue) * interpolationFactor;
+      resampledData[i] =
+        lowerValue + (upperValue - lowerValue) * interpolationFactor;
     }
 
     // Keep unconsumed input samples

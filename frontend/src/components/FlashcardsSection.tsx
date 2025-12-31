@@ -107,17 +107,17 @@ export function FlashcardsSection() {
       </div>
       <div className="flashcards-container">
         <div className="flashcards-grid" id="flashcardsGrid">
-        {sortedFlashcards.length === 0 ? (
-          <div className="empty-state"></div>
-        ) : (
-          sortedFlashcards.map((flashcard, index) => (
-            <Flashcard
-              key={`card-${flashcard.targetWord || flashcard.spanish || index}`}
-              flashcard={flashcard}
-              onCardClick={handleCardClick}
-            />
-          ))
-        )}
+          {sortedFlashcards.length === 0 ? (
+            <div className="empty-state"></div>
+          ) : (
+            sortedFlashcards.map((flashcard, index) => (
+              <Flashcard
+                key={`card-${flashcard.targetWord || flashcard.spanish || index}`}
+                flashcard={flashcard}
+                onCardClick={handleCardClick}
+              />
+            ))
+          )}
         </div>
       </div>
     </section>

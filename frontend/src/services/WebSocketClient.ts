@@ -91,7 +91,9 @@ export class WebSocketClient {
         this.ws.onopen = () => {
           // Ignore if this is a stale connection
           if (thisConnectionId !== this.connectionId) {
-            console.log('[WebSocketClient] Ignoring onopen from stale connection');
+            console.log(
+              '[WebSocketClient] Ignoring onopen from stale connection'
+            );
             return;
           }
 
@@ -125,7 +127,9 @@ export class WebSocketClient {
         this.ws.onclose = (event: CloseEvent) => {
           // Ignore if this is a stale connection
           if (thisConnectionId !== this.connectionId) {
-            console.log('[WebSocketClient] Ignoring onclose from stale connection');
+            console.log(
+              '[WebSocketClient] Ignoring onclose from stale connection'
+            );
             return;
           }
 
@@ -148,7 +152,9 @@ export class WebSocketClient {
         this.ws.onerror = (error) => {
           // Ignore if this is a stale connection
           if (thisConnectionId !== this.connectionId) {
-            console.log('[WebSocketClient] Ignoring onerror from stale connection');
+            console.log(
+              '[WebSocketClient] Ignoring onerror from stale connection'
+            );
             return;
           }
 
@@ -166,8 +172,7 @@ export class WebSocketClient {
 
   private scheduleReconnect(): void {
     this.reconnectAttempts++;
-    const delay =
-      this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     console.log(
       `Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
@@ -184,7 +189,10 @@ export class WebSocketClient {
     }, delay);
   }
 
-  private handleMessage(message: { type: string; [key: string]: unknown }): void {
+  private handleMessage(message: {
+    type: string;
+    [key: string]: unknown;
+  }): void {
     switch (message.type) {
       case 'transcript_update':
         this.emit('transcript_update', (message.data as { text: string }).text);

@@ -187,7 +187,10 @@ export class Storage {
       languageCode,
     }));
 
-    const updatedFlashcards = [...existingFlashcards, ...flashcardsWithLanguage];
+    const updatedFlashcards = [
+      ...existingFlashcards,
+      ...flashcardsWithLanguage,
+    ];
 
     // Keep only the last 100 flashcards per language
     if (updatedFlashcards.length > 100) {
