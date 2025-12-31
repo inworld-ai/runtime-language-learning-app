@@ -13,7 +13,7 @@ import { GraphTypes } from '@inworld/runtime/graph';
 
 import { ConversationGraphWrapper } from '../graphs/conversation-graph.js';
 import { MultimodalStreamManager } from './multimodal_stream_manager.js';
-import { decodeBase64ToFloat32, debugAddAudioChunk, debugLogAudioStats, debugSaveAudio } from './audio_utils.js';
+import { decodeBase64ToFloat32 } from './audio_utils.js';
 import { ConnectionsMap, INPUT_SAMPLE_RATE, TTS_SAMPLE_RATE } from '../types/index.js';
 import {
   getLanguageConfig,
@@ -318,10 +318,6 @@ export class ConnectionManager {
       // Decode base64 to Float32Array
       const float32Data = decodeBase64ToFloat32(base64Audio);
 
-      // Debug: log audio stats and collect for WAV export
-      debugLogAudioStats(this.sessionId, float32Data);
-      debugAddAudioChunk(this.sessionId, float32Data);
-
       // Push to multimodal stream - pass Float32Array directly,
       // MultimodalStreamManager will handle conversion when needed
       this.multimodalStreamManager.pushAudio({
@@ -512,9 +508,6 @@ export class ConnectionManager {
   async destroy(): Promise<void> {
     console.log(`[ConnectionManager] Destroying session ${this.sessionId}`);
     this.isDestroyed = true;
-
-    // Save debug audio if enabled (DEBUG_AUDIO=true)
-    debugSaveAudio(this.sessionId, INPUT_SAMPLE_RATE);
 
     // End the multimodal stream
     this.multimodalStreamManager.end();
