@@ -21,6 +21,24 @@ import { WebSocketClient } from '../services/WebSocketClient';
 import { AudioHandler } from '../services/AudioHandler';
 import { AudioPlayer } from '../services/AudioPlayer';
 
+// Helper to determine WebSocket URL for Cloud Run deployment
+const getWebSocketUrl = (): string => {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  if (backendUrl) {
+    // Convert https:// to wss:// or http:// to ws://
+    return backendUrl.replace(/^http/, 'ws');
+  }
+  // Local development: use same host with port 3000
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.hostname}:3000`;
+};
+
+// Helper for API URL for Cloud Run deployment
+const getApiUrl = (path: string): string => {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  return backendUrl ? `${backendUrl}${path}` : path;
+};
+
 // Action types
 type AppAction =
   | { type: 'SET_CONNECTION_STATUS'; payload: ConnectionStatus }
@@ -165,9 +183,7 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   const storageRef = useRef(new Storage());
-  const wsClientRef = useRef(
-    new WebSocketClient(`ws://${window.location.hostname}:3000`)
-  );
+  const wsClientRef = useRef(new WebSocketClient(getWebSocketUrl()));
   const audioHandlerRef = useRef(new AudioHandler());
   const audioPlayerRef = useRef(new AudioPlayer());
 
@@ -211,7 +227,7 @@ export function AppProvider({ children }: AppProviderProps) {
   useEffect(() => {
     const fetchLanguages = async () => {
       try {
-        const response = await fetch('/api/languages');
+        const response = await fetch(getApiUrl('/api/languages'));
         if (response.ok) {
           const data = await response.json();
           dispatch({

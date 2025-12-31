@@ -3,6 +3,12 @@ import { useApp } from '../context/AppContext';
 import { Flashcard } from './Flashcard';
 import type { Flashcard as FlashcardType } from '../types';
 
+// Helper for API URL for Cloud Run deployment
+const getApiUrl = (path: string): string => {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  return backendUrl ? `${backendUrl}${path}` : path;
+};
+
 export function FlashcardsSection() {
   const { state, wsClient } = useApp();
   const { flashcards, currentLanguage } = state;
@@ -41,7 +47,7 @@ export function FlashcardsSection() {
       };
       const languageName = languageNames[currentLanguage] || 'Language';
 
-      const response = await fetch('/api/export-anki', {
+      const response = await fetch(getApiUrl('/api/export-anki'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

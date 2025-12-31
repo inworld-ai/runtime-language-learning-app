@@ -144,3 +144,7 @@ backend/audio/
 CLAUDE.md
 templates/
 .claude
+
+# Deployment files
+deploy/
+.gcloudignore

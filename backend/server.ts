@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename);
 
 // Basic imports
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { telemetry, stopInworldRuntime } from '@inworld/runtime';
@@ -51,6 +52,13 @@ const wss = new WebSocketServer({ server });
 
 // Add JSON parsing middleware
 app.use(express.json());
+
+// Add CORS middleware for Cloud Run deployment
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true,
+}));
 
 // ============================================================
 // Global State
@@ -437,6 +445,11 @@ app.get('/api/languages', (_req, res) => {
     logger.error({ err: error }, 'get_languages_error');
     res.status(500).json({ error: 'Failed to get languages' });
   }
+});
+
+// Health check endpoint for Cloud Run
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 // ============================================================
