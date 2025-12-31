@@ -504,8 +504,46 @@ export function AppProvider({ children }: AppProviderProps) {
       audioPlayer.markStreamComplete();
     });
 
-    wsClient.on('interrupt', () => {
-      handleInterruptRef.current();
+    wsClient.on('interrupt', (data) => {
+      const reason = (data as { reason?: string })?.reason;
+
+      if (reason === 'continuation_detected') {
+        // User is continuing their utterance - discard partial response silently
+        console.log('[AppContext] Continuation detected - discarding partial response');
+        audioPlayer.stop();
+        // Don't save the partial response - just reset streaming state
+        dispatch({ type: 'RESET_STREAMING_STATE' });
+        pendingLLMResponseRef.current = null;
+      } else {
+        // Normal interrupt (speech_start) - use regular interrupt handling
+        handleInterruptRef.current();
+      }
+    });
+
+    wsClient.on('conversation_rollback', (data) => {
+      // Server removed messages due to utterance continuation - sync frontend state
+      const { messages, removedCount } = data as { messages: Array<{ role: string; content: string }>; removedCount: number };
+      console.log(`[AppContext] Conversation rollback - removed ${removedCount} messages`);
+
+      // Convert backend format to frontend format
+      const chatHistory = messages.map((m) => ({
+        role: m.role === 'user' ? 'learner' : 'teacher',
+        content: m.content,
+      })) as ChatMessage[];
+
+      // Update chat history to match server state
+      dispatch({ type: 'SET_CHAT_HISTORY', payload: chatHistory });
+
+      // Also update storage to stay in sync
+      storage.clearConversation();
+      messages.forEach((m) => {
+        storage.addMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
+      });
+
+      // Clear any pending state
+      dispatch({ type: 'SET_PENDING_TRANSCRIPTION', payload: null });
+      pendingLLMResponseRef.current = null;
+      lastPendingTranscriptionRef.current = null;
     });
 
     wsClient.on('flashcards_generated', (flashcards) => {

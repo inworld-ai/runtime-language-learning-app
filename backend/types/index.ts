@@ -44,6 +44,9 @@ export interface Connection {
   currentAudioExecutionStream?: GraphOutputStream;
   onSpeechDetected?: (interactionId: string) => void;
   onPartialTranscript?: (text: string, interactionId: string) => void;
+  // Utterance stitching support
+  pendingTranscript?: string; // Stores transcript from interrupted turn for stitching
+  isProcessingInterrupted?: boolean; // Flag to stop current LLM/TTS processing
 }
 
 /**

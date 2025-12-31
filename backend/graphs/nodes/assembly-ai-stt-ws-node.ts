@@ -381,13 +381,28 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
             return;
           }
 
-          // Final transcript
-          console.log(`[AssemblyAI] Turn detected [iteration:${iteration}]: "${transcript.substring(0, 50)}..."`);
+          // Final transcript - check for pending transcript to stitch
+          let finalTranscript = transcript;
 
-          transcriptText = transcript;
+          if (connection?.pendingTranscript) {
+            // Stitch the pending transcript with the new one
+            finalTranscript = `${connection.pendingTranscript} ${transcript}`.trim();
+            console.log(`[AssemblyAI] Stitched transcript [iteration:${iteration}]: "${finalTranscript.substring(0, 80)}..."`);
+            // Clear the pending transcript
+            connection.pendingTranscript = undefined;
+          } else {
+            console.log(`[AssemblyAI] Turn detected [iteration:${iteration}]: "${transcript.substring(0, 50)}..."`);
+          }
+
+          // Clear interrupt flag for new processing
+          if (connection) {
+            connection.isProcessingInterrupted = false;
+          }
+
+          transcriptText = finalTranscript;
           turnDetected = true;
           if (session) session.shouldStopProcessing = true;
-          turnResolve(transcript);
+          turnResolve(finalTranscript);
 
         } else if (msgType === 'Termination') {
           console.log(`[AssemblyAI] Session terminated [iteration:${iteration}]`);

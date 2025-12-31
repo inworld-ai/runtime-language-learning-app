@@ -269,6 +269,14 @@ export class WebSocketClient {
         this.emit('interrupt', { reason: message.reason });
         break;
 
+      case 'conversation_rollback':
+        this.emit('conversation_rollback', {
+          messages: message.messages,
+          removedCount: message.removedCount,
+          timestamp: message.timestamp,
+        });
+        break;
+
       case 'language_changed':
         this.emit('language_changed', {
           languageCode: message.languageCode,

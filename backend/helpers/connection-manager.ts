@@ -37,6 +37,10 @@ export class ConnectionManager {
     | ((messages: Array<{ role: string; content: string }>) => Promise<void>)
     | null = null;
 
+  // Processing state tracking for utterance stitching
+  private isProcessingResponse: boolean = false;
+  private currentTranscript: string = '';
+
   constructor(
     sessionId: string,
     ws: WebSocket,
@@ -194,6 +198,10 @@ export class ConnectionManager {
           if (data.text && data.interactionComplete) {
             transcription = data.text;
             console.log(`[ConnectionManager] Transcription (final): "${transcription}"`);
+
+            // Mark start of response processing for utterance stitching
+            this.markProcessingStart(transcription);
+
             this.sendToClient({
               type: 'transcription',
               text: transcription.trim(),
@@ -208,9 +216,18 @@ export class ConnectionManager {
           console.log('[ConnectionManager] Processing LLM ContentStream...');
           // Use array + join instead of string concatenation for O(n) vs O(n²)
           const responseChunks: string[] = [];
+          let wasInterrupted = false;
 
           for await (const chunk of stream) {
             if (this.isDestroyed) break;
+
+            // Check for interruption (user started speaking again for continuation)
+            if (connection.isProcessingInterrupted) {
+              console.log('[ConnectionManager] LLM stream interrupted for utterance continuation');
+              wasInterrupted = true;
+              break;
+            }
+
             if (chunk.text) {
               responseChunks.push(chunk.text);
               this.sendToClient({
@@ -221,17 +238,22 @@ export class ConnectionManager {
             }
           }
 
-          const currentResponse = responseChunks.join('');
-          if (currentResponse.trim()) {
-            llmResponse = currentResponse;
-            console.log(
-              `[ConnectionManager] LLM Response complete: "${llmResponse.substring(0, 50)}..."`
-            );
-            this.sendToClient({
-              type: 'llm_response_complete',
-              text: llmResponse.trim(),
-              timestamp: Date.now(),
-            });
+          // Only send completion if not interrupted
+          if (!wasInterrupted) {
+            const currentResponse = responseChunks.join('');
+            if (currentResponse.trim()) {
+              llmResponse = currentResponse;
+              console.log(
+                `[ConnectionManager] LLM Response complete: "${llmResponse.substring(0, 50)}..."`
+              );
+              this.sendToClient({
+                type: 'llm_response_complete',
+                text: llmResponse.trim(),
+                timestamp: Date.now(),
+              });
+            }
+          } else {
+            console.log('[ConnectionManager] LLM stream interrupted - skipping response complete');
           }
         },
 
@@ -240,9 +262,18 @@ export class ConnectionManager {
           const ttsStream = ttsData as GraphTypes.TTSOutputStream;
           console.log('[ConnectionManager] Processing TTS stream...');
           let isFirstChunk = true;
+          let wasInterrupted = false;
 
           for await (const chunk of ttsStream) {
             if (this.isDestroyed) break;
+
+            // Check for interruption (user started speaking again for continuation)
+            if (connection.isProcessingInterrupted) {
+              console.log('[ConnectionManager] TTS interrupted for utterance continuation');
+              wasInterrupted = true;
+              break;
+            }
+
             if (chunk.audio?.data) {
               // Log sample rate on first chunk
               if (isFirstChunk) {
@@ -267,22 +298,30 @@ export class ConnectionManager {
             }
           }
 
-          // Send completion signal
-          console.log('[ConnectionManager] TTS stream complete');
-          this.sendToClient({
-            type: 'audio_stream_complete',
-            timestamp: Date.now(),
-          });
+          // Mark processing complete (even if interrupted)
+          this.markProcessingComplete();
 
-          // Send conversation update
-          this.sendToClient({
-            type: 'conversation_update',
-            messages: connection.state.messages,
-            timestamp: Date.now(),
-          });
+          // Only send completion signals if not interrupted
+          if (!wasInterrupted) {
+            // Send completion signal
+            console.log('[ConnectionManager] TTS stream complete');
+            this.sendToClient({
+              type: 'audio_stream_complete',
+              timestamp: Date.now(),
+            });
 
-          // Trigger flashcard generation after TTS completes
-          this.triggerFlashcardGeneration();
+            // Send conversation update
+            this.sendToClient({
+              type: 'conversation_update',
+              messages: connection.state.messages,
+              timestamp: Date.now(),
+            });
+
+            // Trigger flashcard generation after TTS completes
+            this.triggerFlashcardGeneration();
+          } else {
+            console.log('[ConnectionManager] TTS stream interrupted - skipping completion signals');
+          }
         },
 
         // Handle errors
@@ -334,17 +373,33 @@ export class ConnectionManager {
    */
   private handleSpeechDetected(interactionId: string): void {
     console.log(`[ConnectionManager] Speech detected: ${interactionId}`);
+
+    // Check if we're currently processing a response - if so, this is a continuation
+    if (this.isProcessingResponse && this.currentTranscript) {
+      console.log(`[ConnectionManager] New speech during processing - interrupting for continuation`);
+      this.interruptForContinuation(this.currentTranscript);
+
+      // Send interrupt signal with continuation reason so frontend discards partial response
+      this.sendToClient({
+        type: 'interrupt',
+        reason: 'continuation_detected',
+        timestamp: Date.now(),
+      });
+    } else {
+      // Normal case - send regular interrupt signal
+      this.sendToClient({
+        type: 'interrupt',
+        reason: 'speech_start',
+        timestamp: Date.now(),
+      });
+    }
+
+    // Always send speech_detected for UI feedback
     this.sendToClient({
       type: 'speech_detected',
       interactionId,
       data: { text: '' },
       timestamp: Date.now(),
-    });
-
-    // Could also send interrupt signal here if needed
-    this.sendToClient({
-      type: 'interrupt',
-      reason: 'speech_start',
     });
   }
 
@@ -358,6 +413,64 @@ export class ConnectionManager {
       interactionId,
       timestamp: Date.now(),
     });
+  }
+
+  /**
+   * Interrupt current processing for utterance continuation/stitching.
+   * Called when user starts speaking again while we're processing the first utterance.
+   */
+  private interruptForContinuation(partialTranscript: string): void {
+    const connection = this.connections[this.sessionId];
+    if (connection) {
+      connection.isProcessingInterrupted = true;
+      connection.pendingTranscript = partialTranscript;
+      console.log(`[ConnectionManager] Interrupting for continuation. Stored: "${partialTranscript.substring(0, 50)}..."`);
+
+      // Remove the last user message and any assistant response that was added
+      // before the continuation was detected
+      const messages = connection.state.messages;
+      let removedCount = 0;
+
+      // Remove the last assistant message if it exists (the interrupted response)
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        const removed = messages.pop();
+        removedCount++;
+        console.log(`[ConnectionManager] Removed interrupted assistant message: "${removed?.content.substring(0, 50)}..."`);
+      }
+
+      // Remove the last user message (the partial utterance that will be stitched)
+      if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+        const removed = messages.pop();
+        removedCount++;
+        console.log(`[ConnectionManager] Removed partial user message: "${removed?.content.substring(0, 50)}..."`);
+      }
+
+      // Notify frontend to update its conversation history
+      if (removedCount > 0) {
+        this.sendToClient({
+          type: 'conversation_rollback',
+          removedCount,
+          messages: messages,
+          timestamp: Date.now(),
+        });
+      }
+    }
+  }
+
+  /**
+   * Mark the start of response processing (LLM/TTS)
+   */
+  private markProcessingStart(transcript: string): void {
+    this.isProcessingResponse = true;
+    this.currentTranscript = transcript;
+  }
+
+  /**
+   * Mark the end of response processing
+   */
+  private markProcessingComplete(): void {
+    this.isProcessingResponse = false;
+    this.currentTranscript = '';
   }
 
   /**
