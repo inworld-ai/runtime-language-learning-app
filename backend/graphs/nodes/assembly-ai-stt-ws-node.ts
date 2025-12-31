@@ -66,7 +66,10 @@ class AssemblyAISession {
       isExpired
     ) {
       if (isExpired) {
-        logger.info({ sessionId: this.sessionId }, 'session_expired_reconnecting');
+        logger.info(
+          { sessionId: this.sessionId },
+          'session_expired_reconnecting'
+        );
       }
       this.closeWebSocket();
       this.initializeWebSocket();
@@ -101,7 +104,10 @@ class AssemblyAISession {
           if (message.type === 'Begin') {
             this.assemblySessionId = message.id || message.session_id || '';
             this.sessionExpiresAt = message.expires_at || 0;
-            logger.debug({ assemblySessionId: this.assemblySessionId }, 'session_began');
+            logger.debug(
+              { assemblySessionId: this.assemblySessionId },
+              'session_began'
+            );
           }
         } catch {
           // Ignore parsing errors
@@ -152,7 +158,10 @@ class AssemblyAISession {
 
   private closeDueToInactivity(): void {
     const inactiveFor = Date.now() - this.lastActivityTime;
-    logger.info({ sessionId: this.sessionId, inactiveMs: inactiveFor }, 'closing_due_to_inactivity');
+    logger.info(
+      { sessionId: this.sessionId, inactiveMs: inactiveFor },
+      'closing_due_to_inactivity'
+    );
     this.shouldStopProcessing = true;
     this.close();
     this.onCleanup(this.sessionId);
@@ -243,11 +252,14 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       config.minEndOfTurnSilenceWhenConfident ?? 800;
     this.maxTurnSilence = config.maxTurnSilence ?? 3600;
 
-    logger.info({
-      threshold: this.endOfTurnConfidenceThreshold,
-      minSilenceMs: this.minEndOfTurnSilenceWhenConfident,
-      maxSilenceMs: this.maxTurnSilence,
-    }, 'stt_node_configured');
+    logger.info(
+      {
+        threshold: this.endOfTurnConfidenceThreshold,
+        minSilenceMs: this.minEndOfTurnSilenceWhenConfident,
+        maxSilenceMs: this.maxTurnSilence,
+      },
+      'stt_node_configured'
+    );
   }
 
   /**
@@ -268,11 +280,14 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
     });
 
     const url = `${this.wsEndpointBaseUrl}?${params.toString()}`;
-    logger.debug({
-      model: 'universal-streaming-multilingual',
-      threshold: this.endOfTurnConfidenceThreshold,
-      maxSilenceMs: this.maxTurnSilence,
-    }, 'connecting_to_assemblyai');
+    logger.debug(
+      {
+        model: 'universal-streaming-multilingual',
+        threshold: this.endOfTurnConfidenceThreshold,
+        maxSilenceMs: this.maxTurnSilence,
+      },
+      'connecting_to_assemblyai'
+    );
 
     return url;
   }
@@ -414,11 +429,20 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
             // Stitch the pending transcript with the new one
             finalTranscript =
               `${connection.pendingTranscript} ${transcript}`.trim();
-            logger.debug({ iteration, transcriptSnippet: finalTranscript.substring(0, 80) }, 'stitched_transcript');
+            logger.debug(
+              {
+                iteration,
+                transcriptSnippet: finalTranscript.substring(0, 80),
+              },
+              'stitched_transcript'
+            );
             // Clear the pending transcript
             connection.pendingTranscript = undefined;
           } else {
-            logger.debug({ iteration, transcriptSnippet: transcript.substring(0, 50) }, 'turn_detected');
+            logger.debug(
+              { iteration, transcriptSnippet: transcript.substring(0, 50) },
+              'turn_detected'
+            );
           }
 
           // Clear interrupt flag for new processing
@@ -455,14 +479,20 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
             if (session?.shouldStopProcessing) break;
 
             if (maxDurationReached && !transcriptText) {
-              logger.warn({ maxDurationMs: this.MAX_TRANSCRIPTION_DURATION_MS }, 'max_transcription_duration_reached');
+              logger.warn(
+                { maxDurationMs: this.MAX_TRANSCRIPTION_DURATION_MS },
+                'max_transcription_duration_reached'
+              );
               break;
             }
 
             const result = await multimodalStream.next();
 
             if (result.done) {
-              logger.debug({ iteration, audioChunkCount }, 'multimodal_stream_exhausted');
+              logger.debug(
+                { iteration, audioChunkCount },
+                'multimodal_stream_exhausted'
+              );
               isStreamExhausted = true;
               break;
             }
@@ -473,7 +503,10 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
 
             // Handle text input
             if (content.text !== undefined && content.text !== null) {
-              logger.debug({ iteration, textSnippet: content.text.substring(0, 50) }, 'text_input_detected');
+              logger.debug(
+                { iteration, textSnippet: content.text.substring(0, 50) },
+                'text_input_detected'
+              );
               isTextInput = true;
               textContent = content.text;
               transcriptText = content.text;
@@ -517,7 +550,10 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
         !turnCompleted &&
         !maxDurationReached
       ) {
-        logger.debug({ waitMs: this.TURN_COMPLETION_TIMEOUT_MS }, 'audio_ended_before_turn_waiting');
+        logger.debug(
+          { waitMs: this.TURN_COMPLETION_TIMEOUT_MS },
+          'audio_ended_before_turn_waiting'
+        );
 
         // Send silence to keep connection alive - AssemblyAI needs continuous audio
         const silenceIntervalMs = 100;
@@ -553,7 +589,10 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
 
       await audioProcessingPromise.catch(() => {});
 
-      logger.debug({ iteration, transcriptSnippet: transcriptText?.substring(0, 50) }, 'transcription_complete');
+      logger.debug(
+        { iteration, transcriptSnippet: transcriptText?.substring(0, 50) },
+        'transcription_complete'
+      );
 
       if (turnDetected) {
         connection.state.interactionId = '';

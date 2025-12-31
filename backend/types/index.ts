@@ -73,4 +73,3 @@ export interface InteractionInfo {
   text: string;
   interactionComplete: boolean;
 }
-

@@ -36,10 +36,7 @@ import {
   DEFAULT_LANGUAGE_CODE,
 } from '../config/languages.js';
 import { llmConfig } from '../config/llm.js';
-import {
-  serverConfig,
-  getAssemblyAISettings,
-} from '../config/server.js';
+import { serverConfig, getAssemblyAISettings } from '../config/server.js';
 import { graphLogger as logger } from '../utils/logger.js';
 
 export interface ConversationGraphConfig {

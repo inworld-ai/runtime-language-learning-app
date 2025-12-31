@@ -54,11 +54,13 @@ const wss = new WebSocketServer({ server });
 app.use(express.json());
 
 // Add CORS middleware for Cloud Run deployment
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+  })
+);
 
 // ============================================================
 // Global State
@@ -139,7 +141,9 @@ async function exportGraphConfigs(): Promise<void> {
   const graphs = [
     { id: 'flashcard-generation-graph', graph: getFlashcardGraph() },
     { id: 'response-feedback-graph', graph: getResponseFeedbackGraph() },
-    ...(graphWrapper ? [{ id: 'lang-learning-conversation-graph', graph: graphWrapper.graph }] : []),
+    ...(graphWrapper
+      ? [{ id: 'lang-learning-conversation-graph', graph: graphWrapper.graph }]
+      : []),
   ];
 
   for (const { id, graph } of graphs) {
@@ -190,7 +194,10 @@ wss.on('connection', async (ws) => {
   // Set up flashcard generation callback
   connectionManager.setFlashcardCallback(async (messages) => {
     if (isShuttingDown) {
-      logger.debug({ connectionId }, 'skipping_flashcard_generation_shutting_down');
+      logger.debug(
+        { connectionId },
+        'skipping_flashcard_generation_shutting_down'
+      );
       return;
     }
 
@@ -221,7 +228,10 @@ wss.on('connection', async (ws) => {
       }
     } catch (error) {
       if (!isShuttingDown) {
-        logger.error({ err: error, connectionId }, 'flashcard_generation_error');
+        logger.error(
+          { err: error, connectionId },
+          'flashcard_generation_error'
+        );
       }
     }
   });
@@ -229,7 +239,10 @@ wss.on('connection', async (ws) => {
   // Set up feedback generation callback
   connectionManager.setFeedbackCallback(async (messages, currentTranscript) => {
     if (isShuttingDown) {
-      logger.debug({ connectionId }, 'skipping_feedback_generation_shutting_down');
+      logger.debug(
+        { connectionId },
+        'skipping_feedback_generation_shutting_down'
+      );
       return;
     }
 
@@ -331,7 +344,10 @@ wss.on('connection', async (ws) => {
             })
           );
 
-          logger.info({ connectionId, language: languageConfig.name }, 'language_changed');
+          logger.info(
+            { connectionId, language: languageConfig.name },
+            'language_changed'
+          );
         }
       } else if (message.type === 'user_context') {
         const timezone = message.timezone || message.data?.timezone;
@@ -358,13 +374,19 @@ wss.on('connection', async (ws) => {
             languageCode: attrs.languageCode || DEFAULT_LANGUAGE_CODE,
           });
         } catch (error) {
-          logger.error({ err: error, connectionId }, 'flashcard_click_record_error');
+          logger.error(
+            { err: error, connectionId },
+            'flashcard_click_record_error'
+          );
         }
       } else if (message.type === 'text_message' && message.text) {
         // Handle text input (bypasses audio/STT)
         connectionManager.sendTextMessage(message.text);
       } else {
-        logger.debug({ connectionId, messageType: message.type }, 'received_message');
+        logger.debug(
+          { connectionId, messageType: message.type },
+          'received_message'
+        );
       }
     } catch (error) {
       logger.error({ err: error, connectionId }, 'message_processing_error');
@@ -384,7 +406,10 @@ wss.on('connection', async (ws) => {
       try {
         await manager.destroy();
       } catch (error) {
-        logger.error({ err: error, connectionId }, 'connection_manager_destroy_error');
+        logger.error(
+          { err: error, connectionId },
+          'connection_manager_destroy_error'
+        );
       }
       connectionManagers.delete(connectionId);
     }
@@ -449,7 +474,9 @@ app.get('/api/languages', (_req, res) => {
 
 // Health check endpoint for Cloud Run
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res
+    .status(200)
+    .json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 // ============================================================
@@ -495,7 +522,10 @@ async function gracefulShutdown(): Promise<void> {
 
   try {
     // Close all WebSocket connections
-    logger.info({ connectionCount: wss.clients.size }, 'closing_websocket_connections');
+    logger.info(
+      { connectionCount: wss.clients.size },
+      'closing_websocket_connections'
+    );
     wss.clients.forEach((ws) => {
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
         ws.close();

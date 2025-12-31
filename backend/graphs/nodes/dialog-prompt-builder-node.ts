@@ -33,7 +33,10 @@ export class DialogPromptBuilderNode extends CustomNode {
     state: State
   ): Promise<GraphTypes.LLMChatRequest> {
     logger.debug(
-      { languageCode: state.languageCode || 'es', messageCount: state.messages?.length || 0 },
+      {
+        languageCode: state.languageCode || 'es',
+        messageCount: state.messages?.length || 0,
+      },
       'building_prompt'
     );
 

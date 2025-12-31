@@ -245,7 +245,10 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
 export function getLanguageConfig(code: string): LanguageConfig {
   const config = SUPPORTED_LANGUAGES[code];
   if (!config) {
-    logger.warn({ requestedCode: code, fallback: 'es' }, 'language_not_found_using_fallback');
+    logger.warn(
+      { requestedCode: code, fallback: 'es' },
+      'language_not_found_using_fallback'
+    );
     return SUPPORTED_LANGUAGES['es'];
   }
   return config;

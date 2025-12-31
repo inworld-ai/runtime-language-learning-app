@@ -45,19 +45,19 @@ Get your Inworld Base64 API key from the [Inworld Portal](https://platform.inwor
 
 ### Required
 
-| Variable | Description |
-|----------|-------------|
-| `INWORLD_API_KEY` | Your Inworld AI API key (Base64 encoded) from the [Inworld Portal](https://platform.inworld.ai/) |
-| `ASSEMBLY_AI_API_KEY` | Your Assembly AI API key for speech-to-text |
+| Variable              | Description                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| `INWORLD_API_KEY`     | Your Inworld AI API key (Base64 encoded) from the [Inworld Portal](https://platform.inworld.ai/) |
+| `ASSEMBLY_AI_API_KEY` | Your Assembly AI API key for speech-to-text                                                      |
 
 ### Optional
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Server port number |
-| `LOG_LEVEL` | `info` | Logging level. Options: `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
-| `NODE_ENV` | `development` | Environment mode. Set to `production` for JSON logs (no pretty-printing) |
-| `ASSEMBLY_AI_EAGERNESS` | `medium` | Turn detection sensitivity for speech-to-text. Options: `low` (conservative, allows thinking pauses), `medium` (balanced), `high` (aggressive, quick responses) |
+| Variable                | Default       | Description                                                                                                                                                     |
+| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                  | `3000`        | Server port number                                                                                                                                              |
+| `LOG_LEVEL`             | `info`        | Logging level. Options: `trace`, `debug`, `info`, `warn`, `error`, `fatal`                                                                                      |
+| `NODE_ENV`              | `development` | Environment mode. Set to `production` for JSON logs (no pretty-printing)                                                                                        |
+| `ASSEMBLY_AI_EAGERNESS` | `medium`      | Turn detection sensitivity for speech-to-text. Options: `low` (conservative, allows thinking pauses), `medium` (balanced), `high` (aggressive, quick responses) |
 
 ### Step 4: Run the Application
 

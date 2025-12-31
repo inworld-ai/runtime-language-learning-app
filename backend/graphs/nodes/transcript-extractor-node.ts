@@ -35,7 +35,11 @@ export class TranscriptExtractorNode extends CustomNode {
     const interactionId = String(metadata.interactionId || iteration);
 
     logger.debug(
-      { iteration, transcriptSnippet: transcript?.substring(0, 50), interactionComplete },
+      {
+        iteration,
+        transcriptSnippet: transcript?.substring(0, 50),
+        interactionComplete,
+      },
       'transcript_extracted'
     );
 

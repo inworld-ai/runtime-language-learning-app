@@ -87,7 +87,10 @@ export class ConnectionManager {
         this.handlePartialTranscript(text, interactionId),
     };
 
-    this.logger.info({ language: this.languageConfig.name }, 'connection_manager_created');
+    this.logger.info(
+      { language: this.languageConfig.name },
+      'connection_manager_created'
+    );
   }
 
   /**
@@ -298,8 +301,12 @@ export class ConnectionManager {
               if (isFirstChunk) {
                 this.logger.debug(
                   {
-                    sampleRate: chunk.audio.sampleRate || serverConfig.audio.ttsSampleRate,
-                    bytes: Array.isArray(chunk.audio.data) ? chunk.audio.data.length : 'N/A',
+                    sampleRate:
+                      chunk.audio.sampleRate ||
+                      serverConfig.audio.ttsSampleRate,
+                    bytes: Array.isArray(chunk.audio.data)
+                      ? chunk.audio.data.length
+                      : 'N/A',
                   },
                   'tts_audio_chunk'
                 );
@@ -313,7 +320,8 @@ export class ConnectionManager {
                   type: 'audio_stream',
                   audio: audioResult.base64,
                   audioFormat: audioResult.format,
-                  sampleRate: chunk.audio.sampleRate || serverConfig.audio.ttsSampleRate,
+                  sampleRate:
+                    chunk.audio.sampleRate || serverConfig.audio.ttsSampleRate,
                   text: chunk.text || '',
                   isFirstChunk: isFirstChunk,
                   timestamp: Date.now(),
@@ -671,7 +679,10 @@ export class ConnectionManager {
       connection.state.voiceId = this.languageConfig.ttsConfig.speakerId;
     }
 
-    this.logger.info({ language: this.languageConfig.name }, 'language_changed');
+    this.logger.info(
+      { language: this.languageConfig.name },
+      'language_changed'
+    );
   }
 
   /**

@@ -30,7 +30,10 @@ export class StateUpdateNode extends CustomNode {
 
   process(context: ProcessContext, llmOutput: string): State {
     const sessionId = context.getDatastore().get('sessionId') as string;
-    logger.debug({ outputLength: llmOutput?.length || 0 }, 'state_update_processing');
+    logger.debug(
+      { outputLength: llmOutput?.length || 0 },
+      'state_update_processing'
+    );
 
     const connection = this.connections[sessionId];
     if (connection?.unloaded) {
@@ -42,7 +45,10 @@ export class StateUpdateNode extends CustomNode {
 
     // Only add assistant message if there's actual content
     if (llmOutput && llmOutput.trim().length > 0) {
-      logger.debug({ messageSnippet: llmOutput.substring(0, 50) }, 'adding_assistant_message');
+      logger.debug(
+        { messageSnippet: llmOutput.substring(0, 50) },
+        'adding_assistant_message'
+      );
       connection.state.messages.push({
         role: 'assistant',
         content: llmOutput,
@@ -56,7 +62,10 @@ export class StateUpdateNode extends CustomNode {
     // Mark interaction as completed
     const dataStore = context.getDatastore();
     dataStore.add('c' + connection.state.interactionId, '');
-    logger.debug({ interactionId: connection.state.interactionId }, 'interaction_completed');
+    logger.debug(
+      { interactionId: connection.state.interactionId },
+      'interaction_completed'
+    );
 
     return connection.state;
   }

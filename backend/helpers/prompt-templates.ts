@@ -25,4 +25,5 @@ async function loadTemplate(name: string): Promise<string> {
 
 export const conversationTemplate = await loadTemplate('conversation');
 export const flashcardPromptTemplate = await loadTemplate('flashcard');
-export const responseFeedbackPromptTemplate = await loadTemplate('response-feedback');
+export const responseFeedbackPromptTemplate =
+  await loadTemplate('response-feedback');

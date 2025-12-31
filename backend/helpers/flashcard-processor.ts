@@ -109,10 +109,7 @@ export class FlashcardProcessor {
         };
         executionResult = await executor.start(input, executionContext);
       } catch (err) {
-        logger.warn(
-          { err },
-          'executor_start_with_context_failed_falling_back'
-        );
+        logger.warn({ err }, 'executor_start_with_context_failed_falling_back');
         executionResult = await executor.start(input);
       }
       let finalData: GraphTypes.Content | null = null;

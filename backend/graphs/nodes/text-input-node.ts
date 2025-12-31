@@ -28,7 +28,10 @@ export class TextInputNode extends CustomNode {
   }
 
   process(_context: ProcessContext, input: TextInput): State {
-    logger.debug({ textSnippet: input.text?.substring(0, 50) }, 'text_input_processing');
+    logger.debug(
+      { textSnippet: input.text?.substring(0, 50) },
+      'text_input_processing'
+    );
 
     const { text, interactionId, sessionId } = input;
 

@@ -38,7 +38,10 @@ export class InteractionQueueNode extends CustomNode {
     state: State
   ): TextInput {
     const sessionId = interactionInfo.sessionId;
-    logger.debug({ interactionId: interactionInfo.interactionId }, 'processing_interaction');
+    logger.debug(
+      { interactionId: interactionInfo.interactionId },
+      'processing_interaction'
+    );
 
     // Get current voiceId from connection state
     const connection = this.connections[sessionId];
@@ -55,7 +58,10 @@ export class InteractionQueueNode extends CustomNode {
         QUEUED_PREFIX + interactionInfo.interactionId,
         interactionInfo.text
       );
-      logger.debug({ interactionId: interactionInfo.interactionId }, 'interaction_queued');
+      logger.debug(
+        { interactionId: interactionInfo.interactionId },
+        'interaction_queued'
+      );
     }
 
     // Get all keys and categorize them
@@ -86,7 +92,14 @@ export class InteractionQueueNode extends CustomNode {
       return getIteration(a) - getIteration(b);
     });
 
-    logger.debug({ queued: queuedIds.length, completed: completedCount, running: runningCount }, 'queue_state');
+    logger.debug(
+      {
+        queued: queuedIds.length,
+        completed: completedCount,
+        running: runningCount,
+      },
+      'queue_state'
+    );
 
     // Decide if we should start processing the next interaction
     if (queuedIds.length === 0) {
@@ -137,7 +150,10 @@ export class InteractionQueueNode extends CustomNode {
         };
       }
 
-      logger.debug({ textSnippet: queuedText.substring(0, 50) }, 'starting_llm_processing');
+      logger.debug(
+        { textSnippet: queuedText.substring(0, 50) },
+        'starting_llm_processing'
+      );
 
       return {
         text: queuedText,
@@ -147,7 +163,10 @@ export class InteractionQueueNode extends CustomNode {
       };
     } else {
       // An interaction is currently running, wait
-      logger.debug({ waitingFor: queuedIds[completedCount] }, 'waiting_for_interaction');
+      logger.debug(
+        { waitingFor: queuedIds[completedCount] },
+        'waiting_for_interaction'
+      );
       return {
         text: '',
         sessionId: sessionId,

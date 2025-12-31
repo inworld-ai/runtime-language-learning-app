@@ -18,7 +18,10 @@ export type AssemblyAIEagerness = 'low' | 'medium' | 'high';
  * AssemblyAI turn detection presets based on their documentation
  * @see https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection
  */
-const assemblyAIPresets: Record<AssemblyAIEagerness, AssemblyAITurnDetectionSettings> = {
+const assemblyAIPresets: Record<
+  AssemblyAIEagerness,
+  AssemblyAITurnDetectionSettings
+> = {
   /**
    * Aggressive - Quick responses for rapid back-and-forth
    * Use cases: Agent Assist, IVR replacements, Retail/E-commerce, Telecom
@@ -27,7 +30,8 @@ const assemblyAIPresets: Record<AssemblyAIEagerness, AssemblyAITurnDetectionSett
     endOfTurnConfidenceThreshold: 0.4,
     minEndOfTurnSilenceWhenConfident: 160,
     maxTurnSilence: 400,
-    description: 'Aggressive - Quick responses for rapid back-and-forth (IVR, order confirmations)',
+    description:
+      'Aggressive - Quick responses for rapid back-and-forth (IVR, order confirmations)',
   },
 
   /**
@@ -38,7 +42,8 @@ const assemblyAIPresets: Record<AssemblyAIEagerness, AssemblyAITurnDetectionSett
     endOfTurnConfidenceThreshold: 0.4,
     minEndOfTurnSilenceWhenConfident: 400,
     maxTurnSilence: 1280,
-    description: 'Balanced - Natural middle ground for most conversational turns',
+    description:
+      'Balanced - Natural middle ground for most conversational turns',
   },
 
   /**
@@ -49,7 +54,8 @@ const assemblyAIPresets: Record<AssemblyAIEagerness, AssemblyAITurnDetectionSett
     endOfTurnConfidenceThreshold: 0.7,
     minEndOfTurnSilenceWhenConfident: 800,
     maxTurnSilence: 3600,
-    description: 'Conservative - Patient, allows thinking pauses (Language Learning, Healthcare)',
+    description:
+      'Conservative - Patient, allows thinking pauses (Language Learning, Healthcare)',
   },
 };
 
@@ -74,7 +80,8 @@ export const serverConfig = {
    */
   assemblyAI: {
     /** Turn detection eagerness level */
-    eagerness: (process.env.ASSEMBLY_AI_EAGERNESS || 'medium') as AssemblyAIEagerness,
+    eagerness: (process.env.ASSEMBLY_AI_EAGERNESS ||
+      'medium') as AssemblyAIEagerness,
     /** Format turns in output (typically false for real-time processing) */
     formatTurns: false,
   },

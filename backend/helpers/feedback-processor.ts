@@ -47,7 +47,10 @@ export class FeedbackProcessor {
 
     // Remove the last assistant message so conversation ends with user's utterance
     let conversationMessages = messages;
-    if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+    if (
+      messages.length > 0 &&
+      messages[messages.length - 1].role === 'assistant'
+    ) {
       conversationMessages = messages.slice(0, -1);
     }
 
@@ -66,10 +69,7 @@ export class FeedbackProcessor {
         };
         executionResult = await executor.start(input, executionContext);
       } catch (err) {
-        logger.warn(
-          { err },
-          'executor_start_with_context_failed_falling_back'
-        );
+        logger.warn({ err }, 'executor_start_with_context_failed_falling_back');
         executionResult = await executor.start(input);
       }
 

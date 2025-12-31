@@ -43,7 +43,10 @@ export function createLogger(module: string): pino.Logger {
  * @param module - Module name
  * @param sessionId - Session/connection identifier
  */
-export function createSessionLogger(module: string, sessionId: string): pino.Logger {
+export function createSessionLogger(
+  module: string,
+  sessionId: string
+): pino.Logger {
   return logger.child({ module, sessionId });
 }
 
