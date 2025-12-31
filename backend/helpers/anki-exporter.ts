@@ -8,7 +8,7 @@ export class AnkiExporter {
    */
   async exportFlashcards(
     flashcards: Flashcard[],
-    deckName: string = 'Aprendemo Language Cards'
+    deckName: string = 'Inworld Language Tutor Cards'
   ): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const apkg = new (AnkiExport as any).default(deckName);
@@ -32,7 +32,7 @@ export class AnkiExporter {
       const back = this.formatCardBack(flashcard);
 
       // Add tags for organization
-      const tags = ['aprendemo'];
+      const tags = ['inworld-language-tutor'];
 
       // Add language tag if available
       if (flashcard.languageCode) {

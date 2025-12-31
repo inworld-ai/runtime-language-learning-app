@@ -20,7 +20,7 @@ export function Header() {
   return (
     <header className="header">
       <div className="container">
-        <h1 className="logo">Aprendemo</h1>
+        <h1 className="logo">Inworld Language Tutor</h1>
         <div className="header-controls">
           <div className="language-selector">
             <select

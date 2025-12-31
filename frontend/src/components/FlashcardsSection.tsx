@@ -48,7 +48,7 @@ export function FlashcardsSection() {
         },
         body: JSON.stringify({
           flashcards: validFlashcards,
-          deckName: `Aprendemo ${languageName} Cards`,
+          deckName: `Inworld Language Tutor ${languageName} Cards`,
           languageCode: currentLanguage,
         }),
       });
@@ -61,7 +61,7 @@ export function FlashcardsSection() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `aprendemo_${currentLanguage}_cards.apkg`;
+      a.download = `inworld_language_tutor_${currentLanguage}_cards.apkg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

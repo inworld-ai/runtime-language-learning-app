@@ -78,7 +78,7 @@ try {
   if (telemetryApiKey) {
     telemetry.init({
       apiKey: telemetryApiKey,
-      appName: 'Aprendemo',
+      appName: 'Inworld Language Tutor',
       appVersion: '1.0.0',
     });
 
@@ -334,7 +334,7 @@ app.post('/api/export-anki', async (req, res) => {
       return;
     }
 
-    const defaultDeckName = `Aprendemo ${languageCode || 'Language'} Cards`;
+    const defaultDeckName = `Inworld Language Tutor ${languageCode || 'Language'} Cards`;
     const apkgBuffer = await exporter.exportFlashcards(
       flashcards,
       deckName || defaultDeckName
