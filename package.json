@@ -46,7 +46,7 @@
     "@inworld/runtime": "^0.8.0",
     "anki-apkg-export": "^4.0.3",
     "dotenv": "^17.2.1",
-    "express": "^4.19.2",
+    "express": "^4.22.1",
     "uuid": "^11.1.0",
     "ws": "^8.18.0"
   }
