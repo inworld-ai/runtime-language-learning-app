@@ -11,8 +11,7 @@ import { Message } from './Message';
 import { StreamingMessage } from './StreamingMessage';
 
 export function ChatSection() {
-  const { state, toggleRecording, restartConversation, sendTextMessage } =
-    useApp();
+  const { state, toggleRecording, sendTextMessage } = useApp();
   const [textInput, setTextInput] = useState('');
   const {
     chatHistory,
@@ -23,7 +22,19 @@ export function ChatSection() {
     speechDetected,
     connectionStatus,
     currentResponseId,
+    currentLanguage,
+    currentConversationId,
+    conversations,
+    availableLanguages,
   } = state;
+
+  // Get the flag for the current conversation or selected language
+  const getCurrentFlag = (): string => {
+    const currentConversation = conversations.find(c => c.id === currentConversationId);
+    const langCode = currentConversation?.languageCode || currentLanguage;
+    const lang = availableLanguages.find(l => l.code === langCode);
+    return lang?.flag || '🌐';
+  };
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const responseIdRef = useRef<string | null>(null);
@@ -96,51 +107,39 @@ export function ChatSection() {
   return (
     <section className="chat-section">
       <div className="section-header">
-        <h2>Conversation</h2>
-        <div className="button-group">
-          <button
-            className="restart-button"
-            id="restartButton"
-            onClick={restartConversation}
-            disabled={!isConnected}
-            title="Restart conversation"
+        <h2>
+          Conversation
+          <span className="section-header-flag">{getCurrentFlag()}</span>
+        </h2>
+        <button
+          className={`mic-button ${isRecording ? 'recording' : ''}`}
+          id="micButton"
+          onClick={toggleRecording}
+          disabled={!isConnected}
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21.5 2v6h-6M21.5 8A9.5 9.5 0 0 0 12 2.5 9.5 9.5 0 0 0 2.5 12 9.5 9.5 0 0 0 12 21.5 9.5 9.5 0 0 0 21.5 12" />
-            </svg>
-          </button>
-          <button
-            className={`mic-button ${isRecording ? 'recording' : ''}`}
-            id="micButton"
-            onClick={toggleRecording}
-            disabled={!isConnected}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-            >
-              <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z" />
-              <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          </button>
-        </div>
+            <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z" />
+            <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+        </button>
       </div>
       <div className="chat-container">
         <div className="messages" id="messages" ref={messagesContainerRef}>
+          {/* Loading overlay when not connected */}
+          {connectionStatus !== 'connected' && (
+            <div className="chat-loading">
+              <div className="chat-loading-spinner" />
+            </div>
+          )}
+
           {/* Render existing conversation history */}
           {chatHistory.map((message, index) => (
             <Message key={`msg-${index}`} message={message} />
@@ -185,6 +184,7 @@ export function ChatSection() {
             onChange={(e) => setTextInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!isConnected}
+            maxLength={200}
           />
           <button
             type="submit"

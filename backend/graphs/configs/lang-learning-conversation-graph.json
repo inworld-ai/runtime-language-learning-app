@@ -131,7 +131,7 @@
               "config": {
                 "model_id": "inworld-tts-1",
                 "inference": {
-                  "speaking_rate": 1.1,
+                  "speaking_rate": 1,
                   "temperature": 1.1
                 },
                 "postprocessing": {
@@ -251,7 +251,7 @@
             "config": {
               "model_id": "inworld-tts-1",
               "inference": {
-                "speaking_rate": 1.1,
+                "speaking_rate": 1,
                 "temperature": 1.1
               },
               "postprocessing": {

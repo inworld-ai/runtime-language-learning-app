@@ -5,15 +5,16 @@
 [![Documentation](https://img.shields.io/badge/Documentation-Read_Docs-blue)](https://docs.inworld.ai/docs/node/overview)
 [![Model Providers](https://img.shields.io/badge/Model_Providers-See_Models-purple)](https://docs.inworld.ai/docs/models#llm)
 
-A Node.js app where you can learn languages through conversation and flashcard studying, powered by Inworld AI Runtime. This is a demonstration of the Inworld Runtime Node.js SDK.
+A conversational language learning app powered by Inworld AI Runtime. Practice speaking with an AI tutor, get real-time feedback on your responses, and build vocabulary with auto-generated flashcards.
 
 ![App](screenshot.jpg)
 
 ## Prerequisites
 
 - Node.js (v20 or higher)
+- npm
 - An Inworld AI account and API key
-- An Assembly AI account and API key
+- An AssemblyAI account and API key (for speech-to-text)
 
 ## Get Started
 
@@ -35,100 +36,123 @@ npm install
 Create a `.env` file in the root directory:
 
 ```bash
-INWORLD_API_KEY=your_api_key_here
-ASSEMBLY_AI_API_KEY=your_api_key_here
+INWORLD_API_KEY=your_inworld_base64_key
+ASSEMBLY_AI_API_KEY=your_assemblyai_key
 ```
 
-Get your Inworld Base64 API key from the [Inworld Portal](https://platform.inworld.ai/).
-
-## Environment Variables
-
-### Required
-
-| Variable              | Description                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| `INWORLD_API_KEY`     | Your Inworld AI API key (Base64 encoded) from the [Inworld Portal](https://platform.inworld.ai/) |
-| `ASSEMBLY_AI_API_KEY` | Your Assembly AI API key for speech-to-text                                                      |
-
-### Optional
-
-| Variable                | Default       | Description                                                                                                                                                     |
-| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                  | `3000`        | Server port number                                                                                                                                              |
-| `LOG_LEVEL`             | `info`        | Logging level. Options: `trace`, `debug`, `info`, `warn`, `error`, `fatal`                                                                                      |
-| `NODE_ENV`              | `development` | Environment mode. Set to `production` for JSON logs (no pretty-printing)                                                                                        |
-| `ASSEMBLY_AI_EAGERNESS` | `medium`      | Turn detection sensitivity for speech-to-text. Options: `low` (conservative, allows thinking pauses), `medium` (balanced), `high` (aggressive, quick responses) |
+| Service | Get Key From | Purpose |
+|---------|-------------|---------|
+| **Inworld** | [platform.inworld.ai](https://platform.inworld.ai/) | AI conversations (Base64 API key) |
+| **AssemblyAI** | [assemblyai.com](https://www.assemblyai.com/) | Speech-to-text |
 
 ### Step 4: Run the Application
 
-For development:
+**For development** (with auto-reload on file changes):
 
 ```bash
 npm run dev
 ```
 
-For production:
+Open [http://localhost:3000](http://localhost:3000)
+
+**For production**:
 
 ```bash
 npm run build
 npm start
 ```
 
+### Step 5 (Optional): Set Up Supabase for User Auth
+
+Without Supabase, the app works in anonymous mode using localStorage.
+
+**a) Create a Supabase project** at [supabase.com](https://supabase.com)
+
+**b) Push the database schema:**
+
+```bash
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+npx supabase db push
+```
+
+Find your project ref in the Supabase dashboard URL: `supabase.com/dashboard/project/YOUR_PROJECT_REF`
+
+**c) Create `frontend/.env.local`:**
+
+```bash
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your_anon_key
+```
+
+Find these in: Supabase Dashboard > Settings > API
+
 ## Repo Structure
 
 ```
 language-learning-node/
 ├── backend/
-│   ├── config/               # Configuration
-│   │   ├── languages.ts      # Language definitions and teacher personas
-│   │   ├── llm.ts            # LLM model configuration
-│   │   └── server.ts         # Server and audio settings
-│   ├── graphs/               # Graph definitions
-│   │   ├── configs/          # Auto-exported graph JSON configs
-│   │   ├── nodes/            # Graph node implementations
-│   │   ├── conversation-graph.ts
-│   │   ├── flashcard-graph.ts
-│   │   └── response-feedback-graph.ts
-│   ├── helpers/              # Helper utilities
-│   │   ├── anki-exporter.ts
-│   │   ├── audio-buffer.ts
-│   │   ├── audio-utils.ts
-│   │   ├── connection-manager.ts
-│   │   ├── feedback-processor.ts
-│   │   ├── flashcard-processor.ts
-│   │   ├── multimodal-stream-manager.ts
-│   │   └── prompt-templates.ts
+│   ├── __tests__/            # Backend unit tests
+│   ├── config/               # Language & server configuration
+│   ├── graphs/               # Inworld Runtime conversation graphs
+│   │   ├── configs/          # Graph JSON configurations
+│   │   └── nodes/            # Custom graph nodes (STT, TTS, etc.)
+│   ├── helpers/              # Audio utils, connection management, etc.
 │   ├── prompts/              # Nunjucks prompt templates
-│   │   ├── conversation.njk
-│   │   ├── flashcard.njk
-│   │   └── response-feedback.njk
-│   ├── types/                # TypeScript type definitions
-│   ├── utils/                # Utility modules
-│   │   └── logger.ts         # Structured logging (pino)
-│   └── server.ts             # Backend server
-├── frontend/                 # React frontend application
-│   ├── public/               # Static assets
+│   ├── services/             # Server components
+│   ├── utils/                # Logger
+│   └── server.ts             # Express + WebSocket server entry point
+├── frontend/
 │   ├── src/
+│   │   ├── __tests__/        # Frontend unit tests
 │   │   ├── components/       # React components
-│   │   ├── context/          # React context providers
+│   │   ├── context/          # App state & auth (React Context)
 │   │   ├── hooks/            # Custom React hooks
-│   │   ├── services/         # Frontend services
-│   │   ├── styles/           # CSS styles
-│   │   └── types/            # TypeScript type definitions
-│   └── index.html
-├── package.json              # Dependencies
-└── LICENSE                   # MIT License
+│   │   ├── services/         # WebSocket client, audio, storage
+│   │   ├── styles/           # CSS
+│   │   └── types/            # TypeScript types
+│   └── vitest.config.ts      # Frontend test config
+├── supabase/                 # Database migrations (optional)
+├── deploy/                   # Deployment configurations
+├── package.json
+└── .env                      # Environment variables
 ```
 
-## Graph Registration
+## Architecture
 
-On server startup, graph JSON configurations are automatically exported to `backend/graphs/configs/`. To register graphs with the Inworld Portal for use with [Experiments](https://docs.inworld.ai/docs/node/guides/experiments):
+The app uses a real-time audio streaming architecture:
 
-1. Start the server (`npm run dev`)
-2. Find the exported JSON files in `backend/graphs/configs/`
-3. In the [Inworld Portal](https://platform.inworld.ai/), go to **Register Graph**
-4. Enter the graph ID (e.g., `flashcard-generation-graph`)
-5. Click **Create Variant** and upload the corresponding JSON file
+1. **Frontend** captures microphone audio and streams it via WebSocket
+2. **Backend** processes audio through an Inworld Runtime graph:
+   - AssemblyAI handles speech-to-text with voice activity detection
+   - LLM generates contextual responses in the target language
+   - TTS converts responses back to audio
+3. **Flashcards** are auto-generated from conversation vocabulary
+4. **Response feedback** provides grammar and usage corrections
+
+## Environment Variables Reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `INWORLD_API_KEY` | Yes | Inworld AI Base64 API key |
+| `ASSEMBLY_AI_API_KEY` | Yes | AssemblyAI API key |
+| `PORT` | No | Server port (default: 3000) |
+| `LOG_LEVEL` | No | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
+| `NODE_ENV` | No | `development` or `production` |
+| `ASSEMBLY_AI_EAGERNESS` | No | Turn detection: `low`, `medium`, `high` (default: medium) |
+
+## Testing
+
+Run the test suite to verify core functionality:
+
+```bash
+npm test              # Run all tests
+npm run test:backend  # Backend tests only
+npm run test:frontend # Frontend tests only
+npm run test:watch    # Watch mode for backend
+```
+
+Tests cover critical paths: audio conversion, language configuration, storage persistence, and flashcard deduplication.
 
 ## Troubleshooting
 

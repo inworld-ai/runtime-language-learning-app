@@ -278,3 +278,29 @@ export class ConversationGraphWrapper {
     });
   }
 }
+
+// Cache for the conversation graph wrapper instance
+let conversationGraphWrapper: ConversationGraphWrapper | null = null;
+
+/**
+ * Get or create the conversation graph wrapper
+ */
+export function getConversationGraph(
+  config: ConversationGraphConfig
+): ConversationGraphWrapper {
+  if (!conversationGraphWrapper) {
+    logger.info('creating_conversation_graph_wrapper');
+    conversationGraphWrapper = ConversationGraphWrapper.create(config);
+  }
+  return conversationGraphWrapper;
+}
+
+/**
+ * Destroy the conversation graph wrapper and clear the cache
+ */
+export async function destroyConversationGraph(): Promise<void> {
+  if (conversationGraphWrapper) {
+    await conversationGraphWrapper.destroy();
+    conversationGraphWrapper = null;
+  }
+}

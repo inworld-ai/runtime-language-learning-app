@@ -96,7 +96,7 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     ttsConfig: {
       speakerId: 'Diego',
       modelId: 'inworld-tts-1',
-      speakingRate: 1.1,
+      speakingRate: 1,
       temperature: 1.1,
       languageCode: 'es-MX',
     },

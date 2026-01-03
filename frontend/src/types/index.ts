@@ -32,6 +32,20 @@ export interface ConversationHistory {
   messages: ConversationMessage[];
 }
 
+// Multi-conversation support
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  languageCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationData {
+  id: string;
+  messages: ConversationMessage[];
+}
+
 // Flashcard
 export interface Flashcard {
   targetWord: string;
@@ -40,6 +54,7 @@ export interface Flashcard {
   mnemonic: string;
   timestamp?: string;
   languageCode?: string;
+  conversationId?: string;
   // Legacy fields for backward compatibility
   spanish?: string;
   word?: string;
@@ -138,6 +153,11 @@ export interface AppState {
 
   // User
   userId: string;
+
+  // Multi-conversation support
+  conversations: ConversationSummary[];
+  currentConversationId: string | null;
+  sidebarOpen: boolean;
 }
 
 // Outgoing WebSocket message
