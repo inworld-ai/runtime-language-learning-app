@@ -112,77 +112,90 @@ export function Header() {
 
                 {/* Auth Section */}
                 {isConfigured && (
-                <>
-                  <div className="dropdown-divider" />
-                  {isLoading ? (
-                    <div className="dropdown-item dropdown-loading">Loading...</div>
-                  ) : user ? (
-                    <>
-                      <div className="dropdown-item dropdown-user">
-                        <span className="dropdown-label">Signed in as</span>
-                        <span className="dropdown-email">{user.email}</span>
+                  <>
+                    <div className="dropdown-divider" />
+                    {isLoading ? (
+                      <div className="dropdown-item dropdown-loading">
+                        Loading...
                       </div>
+                    ) : user ? (
+                      <>
+                        <div className="dropdown-item dropdown-user">
+                          <span className="dropdown-label">Signed in as</span>
+                          <span className="dropdown-email">{user.email}</span>
+                        </div>
+                        <button
+                          className="dropdown-item dropdown-button"
+                          onClick={handleSignOut}
+                        >
+                          Sign Out
+                        </button>
+                      </>
+                    ) : !showAuthForm ? (
                       <button
                         className="dropdown-item dropdown-button"
-                        onClick={handleSignOut}
+                        onClick={() => setShowAuthForm(true)}
                       >
-                        Sign Out
+                        Sign In
                       </button>
-                    </>
-                  ) : !showAuthForm ? (
-                    <button
-                      className="dropdown-item dropdown-button"
-                      onClick={() => setShowAuthForm(true)}
-                    >
-                      Sign In
-                    </button>
-                  ) : (
-                    <form onSubmit={handleSubmit} className="dropdown-auth-form">
-                      <div className="dropdown-auth-header">
-                        {isSignUp ? 'Create Account' : 'Sign In'}
-                      </div>
-                      {error && <div className="dropdown-auth-error">{error}</div>}
-                      <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        autoComplete="email"
-                        className="dropdown-input"
-                      />
-                      <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        minLength={6}
-                        autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                        className="dropdown-input"
-                      />
-                      <button
-                        type="submit"
-                        className="dropdown-submit"
-                        disabled={submitting}
+                    ) : (
+                      <form
+                        onSubmit={handleSubmit}
+                        className="dropdown-auth-form"
                       >
-                        {submitting ? '...' : isSignUp ? 'Create Account' : 'Sign In'}
-                      </button>
-                      <button
-                        type="button"
-                        className="dropdown-toggle-auth"
-                        onClick={toggleAuthMode}
-                      >
-                        {isSignUp
-                          ? 'Have an account? Sign In'
-                          : 'Need an account? Sign Up'}
-                      </button>
-                    </form>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                        <div className="dropdown-auth-header">
+                          {isSignUp ? 'Create Account' : 'Sign In'}
+                        </div>
+                        {error && (
+                          <div className="dropdown-auth-error">{error}</div>
+                        )}
+                        <input
+                          type="email"
+                          placeholder="Email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          autoComplete="email"
+                          className="dropdown-input"
+                        />
+                        <input
+                          type="password"
+                          placeholder="Password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          minLength={6}
+                          autoComplete={
+                            isSignUp ? 'new-password' : 'current-password'
+                          }
+                          className="dropdown-input"
+                        />
+                        <button
+                          type="submit"
+                          className="dropdown-submit"
+                          disabled={submitting}
+                        >
+                          {submitting
+                            ? '...'
+                            : isSignUp
+                              ? 'Create Account'
+                              : 'Sign In'}
+                        </button>
+                        <button
+                          type="button"
+                          className="dropdown-toggle-auth"
+                          onClick={toggleAuthMode}
+                        >
+                          {isSignUp
+                            ? 'Have an account? Sign In'
+                            : 'Need an account? Sign Up'}
+                        </button>
+                      </form>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

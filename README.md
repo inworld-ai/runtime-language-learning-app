@@ -40,10 +40,10 @@ INWORLD_API_KEY=your_inworld_base64_key
 ASSEMBLY_AI_API_KEY=your_assemblyai_key
 ```
 
-| Service | Get Key From | Purpose |
-|---------|-------------|---------|
-| **Inworld** | [platform.inworld.ai](https://platform.inworld.ai/) | AI conversations (Base64 API key) |
-| **AssemblyAI** | [assemblyai.com](https://www.assemblyai.com/) | Speech-to-text |
+| Service        | Get Key From                                        | Purpose                           |
+| -------------- | --------------------------------------------------- | --------------------------------- |
+| **Inworld**    | [platform.inworld.ai](https://platform.inworld.ai/) | AI conversations (Base64 API key) |
+| **AssemblyAI** | [assemblyai.com](https://www.assemblyai.com/)       | Speech-to-text                    |
 
 ### Step 4: Run the Application
 
@@ -132,14 +132,14 @@ The app uses a real-time audio streaming architecture:
 
 ## Environment Variables Reference
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `INWORLD_API_KEY` | Yes | Inworld AI Base64 API key |
-| `ASSEMBLY_AI_API_KEY` | Yes | AssemblyAI API key |
-| `PORT` | No | Server port (default: 3000) |
-| `LOG_LEVEL` | No | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
-| `NODE_ENV` | No | `development` or `production` |
-| `ASSEMBLY_AI_EAGERNESS` | No | Turn detection: `low`, `medium`, `high` (default: medium) |
+| Variable                | Required | Description                                                        |
+| ----------------------- | -------- | ------------------------------------------------------------------ |
+| `INWORLD_API_KEY`       | Yes      | Inworld AI Base64 API key                                          |
+| `ASSEMBLY_AI_API_KEY`   | Yes      | AssemblyAI API key                                                 |
+| `PORT`                  | No       | Server port (default: 3000)                                        |
+| `LOG_LEVEL`             | No       | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
+| `NODE_ENV`              | No       | `development` or `production`                                      |
+| `ASSEMBLY_AI_EAGERNESS` | No       | Turn detection: `low`, `medium`, `high` (default: medium)          |
 
 ## Testing
 

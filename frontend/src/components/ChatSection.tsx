@@ -30,9 +30,11 @@ export function ChatSection() {
 
   // Get the flag for the current conversation or selected language
   const getCurrentFlag = (): string => {
-    const currentConversation = conversations.find(c => c.id === currentConversationId);
+    const currentConversation = conversations.find(
+      (c) => c.id === currentConversationId
+    );
     const langCode = currentConversation?.languageCode || currentLanguage;
-    const lang = availableLanguages.find(l => l.code === langCode);
+    const lang = availableLanguages.find((l) => l.code === langCode);
     return lang?.flag || '🌐';
   };
 

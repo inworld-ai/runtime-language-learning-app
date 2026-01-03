@@ -25,7 +25,10 @@ import { serverLogger as logger } from './utils/logger.js';
 
 // Import services
 import { initTelemetry } from './services/telemetry.js';
-import { initializeGraph, exportGraphConfigs } from './services/graph-service.js';
+import {
+  initializeGraph,
+  exportGraphConfigs,
+} from './services/graph-service.js';
 import { setupWebSocketHandlers } from './services/websocket-handler.js';
 import { apiRouter } from './services/api-routes.js';
 import { createGracefulShutdown } from './services/shutdown.js';
@@ -54,7 +57,9 @@ initTelemetry();
 // API routes
 app.use('/api', apiRouter);
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res
+    .status(200)
+    .json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 // Static files

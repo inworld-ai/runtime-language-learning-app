@@ -50,17 +50,31 @@ export class HybridStorage extends Storage {
     return summary;
   }
 
-  override deleteConversation(conversationId: string, languageCode: string): void {
+  override deleteConversation(
+    conversationId: string,
+    languageCode: string
+  ): void {
     super.deleteConversation(conversationId, languageCode);
-    this.supabaseStorage?.deleteConversation(conversationId).catch(console.error);
+    this.supabaseStorage
+      ?.deleteConversation(conversationId)
+      .catch(console.error);
   }
 
-  override renameConversation(conversationId: string, newTitle: string, languageCode: string): void {
+  override renameConversation(
+    conversationId: string,
+    newTitle: string,
+    languageCode: string
+  ): void {
     super.renameConversation(conversationId, newTitle, languageCode);
-    this.supabaseStorage?.renameConversation(conversationId, newTitle).catch(console.error);
+    this.supabaseStorage
+      ?.renameConversation(conversationId, newTitle)
+      .catch(console.error);
   }
 
-  override addFlashcards(newFlashcards: Flashcard[], languageCode: string): Flashcard[] {
+  override addFlashcards(
+    newFlashcards: Flashcard[],
+    languageCode: string
+  ): Flashcard[] {
     const result = super.addFlashcards(newFlashcards, languageCode);
     this.supabaseStorage
       ?.addFlashcards(newFlashcards, languageCode)
@@ -79,16 +93,26 @@ export class HybridStorage extends Storage {
     newFlashcards: Flashcard[],
     languageCode: string
   ): Flashcard[] {
-    const result = super.addFlashcardsForConversation(conversationId, newFlashcards, languageCode);
+    const result = super.addFlashcardsForConversation(
+      conversationId,
+      newFlashcards,
+      languageCode
+    );
     this.supabaseStorage
-      ?.addFlashcardsForConversation(conversationId, newFlashcards, languageCode)
+      ?.addFlashcardsForConversation(
+        conversationId,
+        newFlashcards,
+        languageCode
+      )
       .catch(console.error);
     return result;
   }
 
   override clearFlashcardsForConversation(conversationId: string): void {
     super.clearFlashcardsForConversation(conversationId);
-    this.supabaseStorage?.clearFlashcardsForConversation(conversationId).catch(console.error);
+    this.supabaseStorage
+      ?.clearFlashcardsForConversation(conversationId)
+      .catch(console.error);
   }
 
   // Migration: upload localStorage data to Supabase
@@ -165,7 +189,9 @@ export class HybridStorage extends Storage {
 
         // Merge: remote conversations + local conversations not in remote
         const remoteIds = new Set(remoteConversations.map((c) => c.id));
-        const localOnly = localConversations.filter((c) => !remoteIds.has(c.id));
+        const localOnly = localConversations.filter(
+          (c) => !remoteIds.has(c.id)
+        );
         const merged = [...remoteConversations, ...localOnly];
 
         // Sort by updatedAt descending
@@ -233,4 +259,91 @@ export class HybridStorage extends Storage {
     return { conversations, flashcards };
   }
 
+  // Sync ALL conversations from Supabase (regardless of language)
+  // Returns a flat list merged with local conversations
+  async syncAllConversationsFromSupabase(): Promise<ConversationSummary[]> {
+    if (!this.supabaseStorage) {
+      return super.getAllConversations();
+    }
+
+    try {
+      // Get all remote conversations (no language filter)
+      const remoteConversations =
+        await this.supabaseStorage.getAllConversations();
+      const localConversations = super.getAllConversations();
+
+      // Merge: remote conversations + local conversations not in remote
+      const remoteIds = new Set(remoteConversations.map((c) => c.id));
+      const localOnly = localConversations.filter((c) => !remoteIds.has(c.id));
+      const merged = [...remoteConversations, ...localOnly];
+
+      // Sort by updatedAt descending
+      merged.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+
+      // Save merged conversations to localStorage (grouped by language)
+      const byLanguage = new Map<string, ConversationSummary[]>();
+      for (const conv of merged) {
+        const lang = conv.languageCode;
+        if (!byLanguage.has(lang)) {
+          byLanguage.set(lang, []);
+        }
+        byLanguage.get(lang)!.push(conv);
+      }
+      for (const [lang, convos] of byLanguage) {
+        localStorage.setItem(
+          `aprende-conversations-${lang}`,
+          JSON.stringify(convos)
+        );
+      }
+
+      // Load remote conversation messages and flashcards to localStorage
+      for (const conv of remoteConversations) {
+        const data = await this.supabaseStorage.getConversation(conv.id);
+        if (data) {
+          localStorage.setItem(
+            `aprende-conversation-${conv.id}`,
+            JSON.stringify(data)
+          );
+        }
+
+        // Also sync flashcards for this conversation
+        const remoteFlashcards =
+          await this.supabaseStorage.getFlashcardsForConversation(conv.id);
+        if (remoteFlashcards.length > 0) {
+          // Merge with any local flashcards (remote takes priority)
+          const localFlashcards = super.getFlashcardsForConversation(conv.id);
+          const seenWords = new Set<string>();
+          const mergedFlashcards: Flashcard[] = [];
+
+          // Remote flashcards take priority
+          for (const f of remoteFlashcards) {
+            const word = (f.targetWord || '').toLowerCase();
+            if (!seenWords.has(word)) {
+              seenWords.add(word);
+              mergedFlashcards.push(f);
+            }
+          }
+          // Add local flashcards not in remote
+          for (const f of localFlashcards) {
+            const word = (f.targetWord || '').toLowerCase();
+            if (!seenWords.has(word)) {
+              seenWords.add(word);
+              mergedFlashcards.push(f);
+            }
+          }
+
+          super.saveFlashcardsForConversation(conv.id, mergedFlashcards);
+        }
+      }
+
+      console.log(`Synced ${merged.length} conversations from Supabase`);
+      return merged;
+    } catch (e) {
+      console.error('Failed to sync all conversations from Supabase:', e);
+      return super.getAllConversations();
+    }
+  }
 }

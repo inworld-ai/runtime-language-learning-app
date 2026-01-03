@@ -11,7 +11,13 @@ export function Sidebar() {
     toggleSidebar,
     changeLanguage,
   } = useApp();
-  const { conversations, currentConversationId, sidebarOpen, availableLanguages, currentLanguage } = state;
+  const {
+    conversations,
+    currentConversationId,
+    sidebarOpen,
+    availableLanguages,
+    currentLanguage,
+  } = state;
 
   // Helper to get flag for a language code
   const getFlag = (languageCode: string): string => {
@@ -25,7 +31,9 @@ export function Sidebar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
 
-  const currentLang = availableLanguages.find(l => l.code === currentLanguage);
+  const currentLang = availableLanguages.find(
+    (l) => l.code === currentLanguage
+  );
 
   // Focus input when editing starts
   useEffect(() => {
@@ -38,7 +46,10 @@ export function Sidebar() {
   // Close language menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+      if (
+        langMenuRef.current &&
+        !langMenuRef.current.contains(event.target as Node)
+      ) {
         setShowLangMenu(false);
       }
     }
@@ -198,8 +209,12 @@ export function Sidebar() {
                         className="conversation-button"
                         onClick={() => selectConversation(conversation.id)}
                       >
-                        <span className="conversation-flag-left">{getFlag(conversation.languageCode)}</span>
-                        <span className="conversation-title">{conversation.title}</span>
+                        <span className="conversation-flag-left">
+                          {getFlag(conversation.languageCode)}
+                        </span>
+                        <span className="conversation-title">
+                          {conversation.title}
+                        </span>
                       </button>
                       <div className="conversation-actions">
                         <button

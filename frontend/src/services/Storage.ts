@@ -155,7 +155,9 @@ export class Storage {
     }
   }
 
-  private migrateToMultiConversation(languageCode: string): ConversationSummary[] {
+  private migrateToMultiConversation(
+    languageCode: string
+  ): ConversationSummary[] {
     // Check if there's legacy conversation data
     const legacyData = localStorage.getItem(this.conversationKey);
     const currentLanguage = this.getLanguage();
@@ -220,7 +222,11 @@ export class Storage {
     }
   }
 
-  saveConversation(conversationId: string, messages: ConversationMessage[], languageCode: string): void {
+  saveConversation(
+    conversationId: string,
+    messages: ConversationMessage[],
+    languageCode: string
+  ): void {
     try {
       const conversationData: ConversationData = {
         id: conversationId,
@@ -297,14 +303,20 @@ export class Storage {
       // If this was the current conversation, clear current
       const currentId = this.getCurrentConversationId(languageCode);
       if (currentId === conversationId) {
-        localStorage.removeItem(this.currentConversationKeyPrefix + languageCode);
+        localStorage.removeItem(
+          this.currentConversationKeyPrefix + languageCode
+        );
       }
     } catch (error) {
       console.error('Failed to delete conversation:', error);
     }
   }
 
-  renameConversation(conversationId: string, newTitle: string, languageCode: string): void {
+  renameConversation(
+    conversationId: string,
+    newTitle: string,
+    languageCode: string
+  ): void {
     try {
       const list = this.getConversationList(languageCode);
       const index = list.findIndex((c) => c.id === conversationId);
@@ -323,7 +335,9 @@ export class Storage {
 
   getCurrentConversationId(languageCode: string): string | null {
     try {
-      return localStorage.getItem(this.currentConversationKeyPrefix + languageCode);
+      return localStorage.getItem(
+        this.currentConversationKeyPrefix + languageCode
+      );
     } catch {
       return null;
     }
@@ -355,8 +369,9 @@ export class Storage {
         }
       }
       // Sort by updatedAt descending (most recent first)
-      allConversations.sort((a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      allConversations.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       );
       return allConversations;
     } catch (error) {
@@ -466,7 +481,10 @@ export class Storage {
     }
   }
 
-  saveFlashcardsForConversation(conversationId: string, flashcards: Flashcard[]): void {
+  saveFlashcardsForConversation(
+    conversationId: string,
+    flashcards: Flashcard[]
+  ): void {
     try {
       const key = this.flashcardsConversationKeyPrefix + conversationId;
       localStorage.setItem(key, JSON.stringify(flashcards));
@@ -480,7 +498,8 @@ export class Storage {
     newFlashcards: Flashcard[],
     languageCode: string
   ): Flashcard[] {
-    const existingFlashcards = this.getFlashcardsForConversation(conversationId);
+    const existingFlashcards =
+      this.getFlashcardsForConversation(conversationId);
 
     // Filter out duplicates
     const uniqueNewFlashcards = newFlashcards.filter((newCard) => {

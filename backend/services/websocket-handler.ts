@@ -61,7 +61,9 @@ export function setupWebSocketHandlers(wss: WebSocketServer): void {
     connectionManagers.set(connectionId, connectionManager);
     flashcardProcessors.set(connectionId, flashcardProcessor);
     feedbackProcessors.set(connectionId, feedbackProcessor);
-    connectionAttributes.set(connectionId, { languageCode: defaultLanguageCode });
+    connectionAttributes.set(connectionId, {
+      languageCode: defaultLanguageCode,
+    });
 
     // Set up flashcard generation callback
     connectionManager.setFlashcardCallback(async (messages) => {
@@ -109,48 +111,53 @@ export function setupWebSocketHandlers(wss: WebSocketServer): void {
     });
 
     // Set up feedback generation callback
-    connectionManager.setFeedbackCallback(async (messages, currentTranscript) => {
-      if (isShuttingDown()) {
-        logger.debug(
-          { connectionId },
-          'skipping_feedback_generation_shutting_down'
-        );
-        return;
-      }
-
-      try {
-        const attrs = connectionAttributes.get(connectionId) || {};
-        const userAttributes: Record<string, string> = {
-          timezone: attrs.timezone || '',
-        };
-
-        const targetingKey = attrs.userId || connectionId;
-        const userContext = {
-          attributes: userAttributes,
-          targetingKey,
-        };
-
-        const feedback = await feedbackProcessor.generateFeedback(
-          messages,
-          currentTranscript,
-          userContext
-        );
-
-        if (feedback) {
-          ws.send(
-            JSON.stringify({
-              type: 'feedback_generated',
-              messageContent: currentTranscript,
-              feedback,
-            })
+    connectionManager.setFeedbackCallback(
+      async (messages, currentTranscript) => {
+        if (isShuttingDown()) {
+          logger.debug(
+            { connectionId },
+            'skipping_feedback_generation_shutting_down'
           );
+          return;
         }
-      } catch (error) {
-        if (!isShuttingDown()) {
-          logger.error({ err: error, connectionId }, 'feedback_generation_error');
+
+        try {
+          const attrs = connectionAttributes.get(connectionId) || {};
+          const userAttributes: Record<string, string> = {
+            timezone: attrs.timezone || '',
+          };
+
+          const targetingKey = attrs.userId || connectionId;
+          const userContext = {
+            attributes: userAttributes,
+            targetingKey,
+          };
+
+          const feedback = await feedbackProcessor.generateFeedback(
+            messages,
+            currentTranscript,
+            userContext
+          );
+
+          if (feedback) {
+            ws.send(
+              JSON.stringify({
+                type: 'feedback_generated',
+                messageContent: currentTranscript,
+                feedback,
+              })
+            );
+          }
+        } catch (error) {
+          if (!isShuttingDown()) {
+            logger.error(
+              { err: error, connectionId },
+              'feedback_generation_error'
+            );
+          }
         }
       }
-    });
+    );
 
     // Start the graph for this connection
     try {
@@ -251,7 +258,11 @@ function handleLanguageChange(
     newLanguageCode = requestedCode;
   } else if (requestedCode) {
     logger.warn(
-      { connectionId, invalidCode: requestedCode, fallback: DEFAULT_LANGUAGE_CODE },
+      {
+        connectionId,
+        invalidCode: requestedCode,
+        fallback: DEFAULT_LANGUAGE_CODE,
+      },
       'invalid_language_code_using_default'
     );
   }
@@ -319,7 +330,16 @@ function handleUserContext(
 
 function handleFlashcardClicked(
   connectionId: string,
-  message: { card?: { id?: string; targetWord?: string; spanish?: string; word?: string; english?: string; translation?: string } }
+  message: {
+    card?: {
+      id?: string;
+      targetWord?: string;
+      spanish?: string;
+      word?: string;
+      english?: string;
+      translation?: string;
+    };
+  }
 ): void {
   const card = message.card;
   if (!card || typeof card !== 'object') {
@@ -338,10 +358,7 @@ function handleFlashcardClicked(
       languageCode: attrs.languageCode || DEFAULT_LANGUAGE_CODE,
     });
   } catch (error) {
-    logger.error(
-      { err: error, connectionId },
-      'flashcard_click_record_error'
-    );
+    logger.error({ err: error, connectionId }, 'flashcard_click_record_error');
   }
 }
 
@@ -358,7 +375,12 @@ function handleTextMessage(
   }
   if (text.length > 200) {
     logger.warn({ connectionId, length: text.length }, 'text_message_too_long');
-    ws.send(JSON.stringify({ type: 'error', message: 'Text message too long (max 200 chars)' }));
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Text message too long (max 200 chars)',
+      })
+    );
     return;
   }
   connectionManager.sendTextMessage(text.trim());

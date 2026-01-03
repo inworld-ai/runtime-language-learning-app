@@ -9,7 +9,11 @@ import { WebSocketServer } from 'ws';
 import { stopInworldRuntime } from '@inworld/runtime';
 
 import { serverLogger as logger } from '../utils/logger.js';
-import { connectionManagers, setShuttingDown, isShuttingDown } from './state.js';
+import {
+  connectionManagers,
+  setShuttingDown,
+  isShuttingDown,
+} from './state.js';
 import { destroyGraph } from './graph-service.js';
 
 export function createGracefulShutdown(

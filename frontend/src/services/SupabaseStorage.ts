@@ -39,7 +39,9 @@ export class SupabaseStorage {
 
   // Conversations
 
-  async getConversationList(languageCode: string): Promise<ConversationSummary[]> {
+  async getConversationList(
+    languageCode: string
+  ): Promise<ConversationSummary[]> {
     const { data } = await this.supabase
       .from('conversations')
       .select('id, title, language_code, created_at, updated_at')
@@ -56,7 +58,25 @@ export class SupabaseStorage {
     }));
   }
 
-  async getConversation(conversationId: string): Promise<ConversationData | null> {
+  async getAllConversations(): Promise<ConversationSummary[]> {
+    const { data } = await this.supabase
+      .from('conversations')
+      .select('id, title, language_code, created_at, updated_at')
+      .eq('user_id', this.userId)
+      .order('updated_at', { ascending: false });
+
+    return (data ?? []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      languageCode: c.language_code,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
+    }));
+  }
+
+  async getConversation(
+    conversationId: string
+  ): Promise<ConversationData | null> {
     const { data: messages } = await this.supabase
       .from('conversation_messages')
       .select('role, content, created_at')
@@ -165,7 +185,10 @@ export class SupabaseStorage {
     await this.supabase.from('conversations').delete().eq('id', conversationId);
   }
 
-  async renameConversation(conversationId: string, newTitle: string): Promise<void> {
+  async renameConversation(
+    conversationId: string,
+    newTitle: string
+  ): Promise<void> {
     await this.supabase
       .from('conversations')
       .update({ title: newTitle, updated_at: new Date().toISOString() })
@@ -221,7 +244,9 @@ export class SupabaseStorage {
   }
 
   // Per-conversation flashcard methods
-  async getFlashcardsForConversation(conversationId: string): Promise<Flashcard[]> {
+  async getFlashcardsForConversation(
+    conversationId: string
+  ): Promise<Flashcard[]> {
     const { data } = await this.supabase
       .from('flashcards')
       .select('*')

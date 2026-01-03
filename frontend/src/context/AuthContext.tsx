@@ -14,8 +14,14 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isConfigured: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string
+  ) => Promise<{ error: string | null }>;
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -64,7 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  const signUp = async (email: string, password: string): Promise<{ error: string | null }> => {
+  const signUp = async (
+    email: string,
+    password: string
+  ): Promise<{ error: string | null }> => {
     if (!supabase) return { error: 'Supabase not configured' };
 
     const { error } = await supabase.auth.signUp({
@@ -75,7 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null };
   };
 
-  const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
+  const signIn = async (
+    email: string,
+    password: string
+  ): Promise<{ error: string | null }> => {
     if (!supabase) return { error: 'Supabase not configured' };
 
     const { error } = await supabase.auth.signInWithPassword({

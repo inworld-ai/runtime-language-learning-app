@@ -171,18 +171,27 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_SIDEBAR_OPEN':
       return { ...state, sidebarOpen: action.payload };
     case 'ADD_CONVERSATION':
-      return { ...state, conversations: [action.payload, ...state.conversations] };
+      return {
+        ...state,
+        conversations: [action.payload, ...state.conversations],
+      };
     case 'REMOVE_CONVERSATION':
       return {
         ...state,
-        conversations: state.conversations.filter((c) => c.id !== action.payload),
+        conversations: state.conversations.filter(
+          (c) => c.id !== action.payload
+        ),
       };
     case 'RENAME_CONVERSATION':
       return {
         ...state,
         conversations: state.conversations.map((c) =>
           c.id === action.payload.id
-            ? { ...c, title: action.payload.title, updatedAt: new Date().toISOString() }
+            ? {
+                ...c,
+                title: action.payload.title,
+                updatedAt: new Date().toISOString(),
+              }
             : c
         ),
       };
@@ -247,32 +256,57 @@ export function AppProvider({ children }: AppProviderProps) {
       // Sync data on login
       if (!hasMigratedRef.current) {
         hasMigratedRef.current = true;
-        const languages = stateRef.current.availableLanguages.map((l) => l.code);
-        const langsToSync = languages.length > 0 ? languages : [stateRef.current.currentLanguage];
+        const languages = stateRef.current.availableLanguages.map(
+          (l) => l.code
+        );
+        const langsToSync =
+          languages.length > 0 ? languages : [stateRef.current.currentLanguage];
 
-        // First try to sync FROM Supabase (existing user on new device)
+        // First try to sync ALL conversations FROM Supabase (existing user on new device)
         // Then migrate any local data TO Supabase
-        storage.syncFromSupabase(langsToSync).then(({ conversations }) => {
-          // If user has conversations in Supabase, reload the UI state
-          const currentLang = stateRef.current.currentLanguage;
-          const remoteConvos = conversations.get(currentLang);
-          if (remoteConvos && remoteConvos.length > 0) {
-            dispatch({ type: 'SET_CONVERSATIONS', payload: remoteConvos });
-            // Load the most recent conversation
-            const mostRecent = remoteConvos[0];
-            dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: mostRecent.id });
-            const convData = storage.getConversation(mostRecent.id);
-            if (convData) {
-              const chatHistory = convData.messages.map((m) => ({
-                role: m.role === 'user' ? 'learner' : 'teacher',
-                content: m.content,
-              })) as ChatMessage[];
-              dispatch({ type: 'SET_CHAT_HISTORY', payload: chatHistory });
+        storage
+          .syncAllConversationsFromSupabase()
+          .then((allConversations) => {
+            // If user has conversations in Supabase, reload the UI state with ALL of them
+            if (allConversations.length > 0) {
+              dispatch({
+                type: 'SET_CONVERSATIONS',
+                payload: allConversations,
+              });
+              // Load the most recent conversation
+              const mostRecent = allConversations[0];
+              dispatch({
+                type: 'SET_CURRENT_CONVERSATION_ID',
+                payload: mostRecent.id,
+              });
+              // Update language to match the most recent conversation
+              if (
+                mostRecent.languageCode !== stateRef.current.currentLanguage
+              ) {
+                dispatch({
+                  type: 'SET_LANGUAGE',
+                  payload: mostRecent.languageCode,
+                });
+                storage.saveLanguage(mostRecent.languageCode);
+              }
+              const convData = storage.getConversation(mostRecent.id);
+              if (convData) {
+                const chatHistory = convData.messages.map((m) => ({
+                  role: m.role === 'user' ? 'learner' : 'teacher',
+                  content: m.content,
+                })) as ChatMessage[];
+                dispatch({ type: 'SET_CHAT_HISTORY', payload: chatHistory });
+              }
+              // Load flashcards for the most recent conversation
+              const flashcards = storage.getFlashcardsForConversation(
+                mostRecent.id
+              );
+              dispatch({ type: 'SET_FLASHCARDS', payload: flashcards });
             }
-          }
-          // Also migrate any local data that isn't in Supabase yet
-          return storage.migrateToSupabase(langsToSync);
-        }).catch(console.error);
+            // Also migrate any local data that isn't in Supabase yet
+            return storage.migrateToSupabase(langsToSync);
+          })
+          .catch(console.error);
       }
     } else {
       storage.clearSupabaseClient();
@@ -292,7 +326,9 @@ export function AppProvider({ children }: AppProviderProps) {
   // Refs for callbacks to avoid effect dependency issues
   const handleInterruptRef = useRef<() => void>(() => {});
   const checkAndUpdateConversationRef = useRef<() => void>(() => {});
-  const processPendingFlashcardsRef = useRef<(conversationId: string) => void>(() => {});
+  const processPendingFlashcardsRef = useRef<(conversationId: string) => void>(
+    () => {}
+  );
 
   // Initialize audio player
   useEffect(() => {
@@ -317,7 +353,10 @@ export function AppProvider({ children }: AppProviderProps) {
       // Update language to match the most recent conversation
       const mostRecentConvo = allConversations[0];
       if (mostRecentConvo.languageCode !== state.currentLanguage) {
-        dispatch({ type: 'SET_LANGUAGE', payload: mostRecentConvo.languageCode });
+        dispatch({
+          type: 'SET_LANGUAGE',
+          payload: mostRecentConvo.languageCode,
+        });
         storage.saveLanguage(mostRecentConvo.languageCode);
       }
       storage.setCurrentConversationId(mostRecentConvo.languageCode, currentId);
@@ -410,17 +449,27 @@ export function AppProvider({ children }: AppProviderProps) {
 
     // Auto-create conversation if none exists and we're about to add messages
     if (!conversationId && (pendingTranscription || pendingLLMResponse)) {
-      const newConversation = storage.createConversation(currentState.currentLanguage);
+      const newConversation = storage.createConversation(
+        currentState.currentLanguage
+      );
       conversationId = newConversation.id;
       conversationTitle = newConversation.title;
       dispatch({ type: 'ADD_CONVERSATION', payload: newConversation });
-      dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: newConversation.id });
-      storage.setCurrentConversationId(currentState.currentLanguage, newConversation.id);
+      dispatch({
+        type: 'SET_CURRENT_CONVERSATION_ID',
+        payload: newConversation.id,
+      });
+      storage.setCurrentConversationId(
+        currentState.currentLanguage,
+        newConversation.id
+      );
       // Process any flashcards that arrived before conversation was created
       processPendingFlashcardsRef.current(newConversation.id);
     } else if (conversationId) {
       // Get title from existing conversation in state
-      const currentConvo = currentState.conversations.find((c) => c.id === conversationId);
+      const currentConvo = currentState.conversations.find(
+        (c) => c.id === conversationId
+      );
       conversationTitle = currentConvo?.title || null;
     }
 
@@ -499,10 +548,24 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (teacherAlreadyAdded && !userAlreadyAdded) {
         // Auto-rename conversation on first user message (if still has default name)
-        if (conversationId && conversationTitle && /^Chat \d{5}$/.test(conversationTitle)) {
-          const newTitle = pendingTranscription.length > 10 ? pendingTranscription.slice(0, 10) + '...' : pendingTranscription;
-          storage.renameConversation(conversationId, newTitle, currentState.currentLanguage);
-          dispatch({ type: 'RENAME_CONVERSATION', payload: { id: conversationId, title: newTitle } });
+        if (
+          conversationId &&
+          conversationTitle &&
+          /^Chat \d{5}$/.test(conversationTitle)
+        ) {
+          const newTitle =
+            pendingTranscription.length > 10
+              ? pendingTranscription.slice(0, 10) + '...'
+              : pendingTranscription;
+          storage.renameConversation(
+            conversationId,
+            newTitle,
+            currentState.currentLanguage
+          );
+          dispatch({
+            type: 'RENAME_CONVERSATION',
+            payload: { id: conversationId, title: newTitle },
+          });
         }
 
         storage.addMessage('user', pendingTranscription);
@@ -526,10 +589,24 @@ export function AppProvider({ children }: AppProviderProps) {
       // Add user message only if not already added
       if (!userAlreadyAdded) {
         // Auto-rename conversation on first user message (if still has default name)
-        if (conversationId && conversationTitle && /^Chat \d{5}$/.test(conversationTitle)) {
-          const newTitle = pendingTranscription.length > 10 ? pendingTranscription.slice(0, 10) + '...' : pendingTranscription;
-          storage.renameConversation(conversationId, newTitle, currentState.currentLanguage);
-          dispatch({ type: 'RENAME_CONVERSATION', payload: { id: conversationId, title: newTitle } });
+        if (
+          conversationId &&
+          conversationTitle &&
+          /^Chat \d{5}$/.test(conversationTitle)
+        ) {
+          const newTitle =
+            pendingTranscription.length > 10
+              ? pendingTranscription.slice(0, 10) + '...'
+              : pendingTranscription;
+          storage.renameConversation(
+            conversationId,
+            newTitle,
+            currentState.currentLanguage
+          );
+          dispatch({
+            type: 'RENAME_CONVERSATION',
+            payload: { id: conversationId, title: newTitle },
+          });
         }
 
         storage.addMessage('user', pendingTranscription);
@@ -566,7 +643,9 @@ export function AppProvider({ children }: AppProviderProps) {
     const pending = pendingFlashcardsRef.current;
 
     if (pending.length > 0) {
-      console.log(`[AppContext] Processing ${pending.length} pending flashcards for conversation ${conversationId}`);
+      console.log(
+        `[AppContext] Processing ${pending.length} pending flashcards for conversation ${conversationId}`
+      );
       const updatedFlashcards = storage.addFlashcardsForConversation(
         conversationId,
         pending,
@@ -579,6 +658,17 @@ export function AppProvider({ children }: AppProviderProps) {
 
   // Keep ref updated
   processPendingFlashcardsRef.current = processPendingFlashcards;
+
+  // Process pending flashcards when conversation ID becomes available
+  // This handles the race condition where flashcards arrive before the conversation is created
+  useEffect(() => {
+    if (
+      state.currentConversationId &&
+      pendingFlashcardsRef.current.length > 0
+    ) {
+      processPendingFlashcards(state.currentConversationId);
+    }
+  }, [state.currentConversationId, processPendingFlashcards]);
 
   // Handle interrupt
   const handleInterrupt = useCallback(() => {
@@ -812,8 +902,13 @@ export function AppProvider({ children }: AppProviderProps) {
         dispatch({ type: 'SET_FLASHCARDS', payload: updatedFlashcards });
       } else {
         // No conversation yet - queue flashcards for later processing
-        console.log(`[AppContext] Queuing ${cards.length} flashcards (no conversation yet)`);
-        pendingFlashcardsRef.current = [...pendingFlashcardsRef.current, ...cards];
+        console.log(
+          `[AppContext] Queuing ${cards.length} flashcards (no conversation yet)`
+        );
+        pendingFlashcardsRef.current = [
+          ...pendingFlashcardsRef.current,
+          ...cards,
+        ];
       }
     });
 
@@ -930,25 +1025,49 @@ export function AppProvider({ children }: AppProviderProps) {
 
       // Auto-create conversation if none exists
       if (!conversationId) {
-        const newConversation = storage.createConversation(stateRef.current.currentLanguage);
+        const newConversation = storage.createConversation(
+          stateRef.current.currentLanguage
+        );
         conversationId = newConversation.id;
         conversationTitle = newConversation.title;
         dispatch({ type: 'ADD_CONVERSATION', payload: newConversation });
-        dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: newConversation.id });
-        storage.setCurrentConversationId(stateRef.current.currentLanguage, newConversation.id);
+        dispatch({
+          type: 'SET_CURRENT_CONVERSATION_ID',
+          payload: newConversation.id,
+        });
+        storage.setCurrentConversationId(
+          stateRef.current.currentLanguage,
+          newConversation.id
+        );
         // Process any flashcards that arrived before conversation was created
         processPendingFlashcardsRef.current(newConversation.id);
       } else {
         // Get title from existing conversation in state
-        const currentConvo = stateRef.current.conversations.find((c) => c.id === conversationId);
+        const currentConvo = stateRef.current.conversations.find(
+          (c) => c.id === conversationId
+        );
         conversationTitle = currentConvo?.title || null;
       }
 
       // Auto-rename conversation on first user message (if still has default name)
-      if (conversationId && conversationTitle && /^Chat \d{5}$/.test(conversationTitle)) {
-        const newTitle = trimmedText.length > 10 ? trimmedText.slice(0, 10) + '...' : trimmedText;
-        storage.renameConversation(conversationId, newTitle, stateRef.current.currentLanguage);
-        dispatch({ type: 'RENAME_CONVERSATION', payload: { id: conversationId, title: newTitle } });
+      if (
+        conversationId &&
+        conversationTitle &&
+        /^Chat \d{5}$/.test(conversationTitle)
+      ) {
+        const newTitle =
+          trimmedText.length > 10
+            ? trimmedText.slice(0, 10) + '...'
+            : trimmedText;
+        storage.renameConversation(
+          conversationId,
+          newTitle,
+          stateRef.current.currentLanguage
+        );
+        dispatch({
+          type: 'RENAME_CONVERSATION',
+          payload: { id: conversationId, title: newTitle },
+        });
       }
 
       // Add user message to chat history immediately (unlike audio where we wait for transcription)
@@ -984,18 +1103,28 @@ export function AppProvider({ children }: AppProviderProps) {
       audioPlayer.stop();
 
       // Save current conversation first if it exists
-      if (state.currentConversationId && stateRef.current.chatHistory.length > 0) {
+      if (
+        state.currentConversationId &&
+        stateRef.current.chatHistory.length > 0
+      ) {
         const messages = stateRef.current.chatHistory.map((m) => ({
           role: m.role === 'learner' ? 'user' : 'assistant',
           content: m.content,
           timestamp: new Date().toISOString(),
         })) as import('../types').ConversationMessage[];
-        storage.saveConversation(state.currentConversationId, messages, state.currentLanguage);
+        storage.saveConversation(
+          state.currentConversationId,
+          messages,
+          state.currentLanguage
+        );
       }
 
       // Find the conversation to get its language
-      const conversation = stateRef.current.conversations.find((c) => c.id === conversationId);
-      const targetLanguage = conversation?.languageCode || state.currentLanguage;
+      const conversation = stateRef.current.conversations.find(
+        (c) => c.id === conversationId
+      );
+      const targetLanguage =
+        conversation?.languageCode || state.currentLanguage;
 
       // Switch language if different
       if (targetLanguage !== state.currentLanguage) {
@@ -1018,7 +1147,10 @@ export function AppProvider({ children }: AppProviderProps) {
         dispatch({ type: 'SET_CHAT_HISTORY', payload: [] });
       }
 
-      dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: conversationId });
+      dispatch({
+        type: 'SET_CURRENT_CONVERSATION_ID',
+        payload: conversationId,
+      });
       storage.setCurrentConversationId(targetLanguage, conversationId);
 
       // Load flashcards for this specific conversation
@@ -1046,7 +1178,12 @@ export function AppProvider({ children }: AppProviderProps) {
       // Close sidebar on mobile
       dispatch({ type: 'SET_SIDEBAR_OPEN', payload: false });
     },
-    [state.isRecording, state.currentConversationId, state.currentLanguage, state.connectionStatus]
+    [
+      state.isRecording,
+      state.currentConversationId,
+      state.currentLanguage,
+      state.connectionStatus,
+    ]
   );
 
   // Create a new conversation
@@ -1064,19 +1201,29 @@ export function AppProvider({ children }: AppProviderProps) {
     audioPlayer.stop();
 
     // Save current conversation first if it exists
-    if (state.currentConversationId && stateRef.current.chatHistory.length > 0) {
+    if (
+      state.currentConversationId &&
+      stateRef.current.chatHistory.length > 0
+    ) {
       const messages = stateRef.current.chatHistory.map((m) => ({
         role: m.role === 'learner' ? 'user' : 'assistant',
         content: m.content,
         timestamp: new Date().toISOString(),
       })) as import('../types').ConversationMessage[];
-      storage.saveConversation(state.currentConversationId, messages, state.currentLanguage);
+      storage.saveConversation(
+        state.currentConversationId,
+        messages,
+        state.currentLanguage
+      );
     }
 
     // Create new conversation
     const newConversation = storage.createConversation(state.currentLanguage);
     dispatch({ type: 'ADD_CONVERSATION', payload: newConversation });
-    dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: newConversation.id });
+    dispatch({
+      type: 'SET_CURRENT_CONVERSATION_ID',
+      payload: newConversation.id,
+    });
     storage.setCurrentConversationId(state.currentLanguage, newConversation.id);
 
     // Clear chat and flashcards (new conversation has no flashcards)
@@ -1094,7 +1241,12 @@ export function AppProvider({ children }: AppProviderProps) {
 
     // Close sidebar on mobile
     dispatch({ type: 'SET_SIDEBAR_OPEN', payload: false });
-  }, [state.isRecording, state.currentConversationId, state.currentLanguage, state.connectionStatus]);
+  }, [
+    state.isRecording,
+    state.currentConversationId,
+    state.currentLanguage,
+    state.connectionStatus,
+  ]);
 
   // Delete a conversation
   const deleteConversation = useCallback(
@@ -1102,7 +1254,9 @@ export function AppProvider({ children }: AppProviderProps) {
       const storage = storageRef.current;
 
       // Find the conversation to get its language code
-      const conversation = stateRef.current.conversations.find((c) => c.id === conversationId);
+      const conversation = stateRef.current.conversations.find(
+        (c) => c.id === conversationId
+      );
       const languageCode = conversation?.languageCode || state.currentLanguage;
 
       storage.deleteConversation(conversationId, languageCode);
@@ -1122,7 +1276,12 @@ export function AppProvider({ children }: AppProviderProps) {
         }
       }
     },
-    [state.currentLanguage, state.currentConversationId, selectConversation, createNewConversation]
+    [
+      state.currentLanguage,
+      state.currentConversationId,
+      selectConversation,
+      createNewConversation,
+    ]
   );
 
   // Rename a conversation
@@ -1133,18 +1292,26 @@ export function AppProvider({ children }: AppProviderProps) {
       if (!trimmedTitle) return;
 
       // Find the conversation to get its language code
-      const conversation = stateRef.current.conversations.find((c) => c.id === conversationId);
+      const conversation = stateRef.current.conversations.find(
+        (c) => c.id === conversationId
+      );
       const languageCode = conversation?.languageCode || state.currentLanguage;
 
       storage.renameConversation(conversationId, trimmedTitle, languageCode);
-      dispatch({ type: 'RENAME_CONVERSATION', payload: { id: conversationId, title: trimmedTitle } });
+      dispatch({
+        type: 'RENAME_CONVERSATION',
+        payload: { id: conversationId, title: trimmedTitle },
+      });
     },
     [state.currentLanguage]
   );
 
   // Toggle sidebar
   const toggleSidebar = useCallback(() => {
-    dispatch({ type: 'SET_SIDEBAR_OPEN', payload: !stateRef.current.sidebarOpen });
+    dispatch({
+      type: 'SET_SIDEBAR_OPEN',
+      payload: !stateRef.current.sidebarOpen,
+    });
   }, []);
 
   const value: AppContextType = {

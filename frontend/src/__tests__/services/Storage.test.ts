@@ -167,8 +167,16 @@ describe('Storage', () => {
     it('saves and retrieves conversation messages', () => {
       const conv = storage.createConversation('es');
       const messages = [
-        { role: 'user' as const, content: 'Hola', timestamp: new Date().toISOString() },
-        { role: 'assistant' as const, content: '¡Hola!', timestamp: new Date().toISOString() },
+        {
+          role: 'user' as const,
+          content: 'Hola',
+          timestamp: new Date().toISOString(),
+        },
+        {
+          role: 'assistant' as const,
+          content: '¡Hola!',
+          timestamp: new Date().toISOString(),
+        },
       ];
 
       storage.saveConversation(conv.id, messages, 'es');
@@ -214,7 +222,12 @@ describe('Storage', () => {
       storage.addFlashcards(cards1 as any, 'es');
 
       const cards2 = [
-        { targetWord: 'hola', english: 'hello again', example: '', mnemonic: '' },
+        {
+          targetWord: 'hola',
+          english: 'hello again',
+          example: '',
+          mnemonic: '',
+        },
       ];
       const result = storage.addFlashcards(cards2 as any, 'es');
 
@@ -244,7 +257,14 @@ describe('Storage', () => {
       // Add 110 flashcards
       for (let i = 0; i < 110; i++) {
         storage.addFlashcards(
-          [{ targetWord: `word${i}`, english: `translation${i}`, example: '', mnemonic: '' }] as any,
+          [
+            {
+              targetWord: `word${i}`,
+              english: `translation${i}`,
+              example: '',
+              mnemonic: '',
+            },
+          ] as any,
           'es'
         );
       }
@@ -257,7 +277,9 @@ describe('Storage', () => {
   describe('clearFlashcards', () => {
     it('clears flashcards for a language', () => {
       storage.addFlashcards(
-        [{ targetWord: 'hola', english: 'hello', example: '', mnemonic: '' }] as any,
+        [
+          { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
+        ] as any,
         'es'
       );
       storage.clearFlashcards('es');
@@ -268,11 +290,20 @@ describe('Storage', () => {
 
     it('does not affect flashcards for other languages', () => {
       storage.addFlashcards(
-        [{ targetWord: 'hola', english: 'hello', example: '', mnemonic: '' }] as any,
+        [
+          { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
+        ] as any,
         'es'
       );
       storage.addFlashcards(
-        [{ targetWord: 'bonjour', english: 'hello', example: '', mnemonic: '' }] as any,
+        [
+          {
+            targetWord: 'bonjour',
+            english: 'hello',
+            example: '',
+            mnemonic: '',
+          },
+        ] as any,
         'fr'
       );
 
@@ -303,19 +334,32 @@ describe('Storage', () => {
 
       storage.addFlashcardsForConversation(
         conv1.id,
-        [{ targetWord: 'hola', english: 'hello', example: '', mnemonic: '' }] as any,
+        [
+          { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
+        ] as any,
         'es'
       );
       storage.addFlashcardsForConversation(
         conv2.id,
-        [{ targetWord: 'adios', english: 'goodbye', example: '', mnemonic: '' }] as any,
+        [
+          {
+            targetWord: 'adios',
+            english: 'goodbye',
+            example: '',
+            mnemonic: '',
+          },
+        ] as any,
         'es'
       );
 
       expect(storage.getFlashcardsForConversation(conv1.id).length).toBe(1);
-      expect(storage.getFlashcardsForConversation(conv1.id)[0].targetWord).toBe('hola');
+      expect(storage.getFlashcardsForConversation(conv1.id)[0].targetWord).toBe(
+        'hola'
+      );
       expect(storage.getFlashcardsForConversation(conv2.id).length).toBe(1);
-      expect(storage.getFlashcardsForConversation(conv2.id)[0].targetWord).toBe('adios');
+      expect(storage.getFlashcardsForConversation(conv2.id)[0].targetWord).toBe(
+        'adios'
+      );
     });
   });
 
