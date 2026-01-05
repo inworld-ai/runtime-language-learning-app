@@ -128,7 +128,10 @@ export function FlashcardsSection() {
           ) : (
             sortedFlashcards.map((flashcard, index) => {
               const cardId =
-                flashcard.targetWord || flashcard.spanish || flashcard.word || '';
+                flashcard.targetWord ||
+                flashcard.spanish ||
+                flashcard.word ||
+                '';
               return (
                 <Flashcard
                   key={`card-${cardId || index}`}

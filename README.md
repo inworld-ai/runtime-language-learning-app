@@ -139,7 +139,7 @@ The app uses a real-time audio streaming architecture:
 | `PORT`                  | No       | Server port (default: 3000)                                        |
 | `LOG_LEVEL`             | No       | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
 | `NODE_ENV`              | No       | `development` or `production`                                      |
-| `ASSEMBLY_AI_EAGERNESS` | No       | Turn detection: `low`, `medium`, `high` (default: high)          |
+| `ASSEMBLY_AI_EAGERNESS` | No       | Turn detection: `low`, `medium`, `high` (default: high)            |
 
 ## Testing
 

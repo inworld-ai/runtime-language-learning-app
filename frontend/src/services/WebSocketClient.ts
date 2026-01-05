@@ -62,7 +62,10 @@ export class WebSocketClient {
 
   private emit(event: string, data?: unknown): void {
     const callbacks = this.listeners.get(event);
-    console.log(`[WebSocketClient] emit('${event}'), listeners:`, callbacks?.length ?? 0);
+    console.log(
+      `[WebSocketClient] emit('${event}'), listeners:`,
+      callbacks?.length ?? 0
+    );
     if (callbacks) {
       callbacks.forEach((callback) => callback(data));
     }
