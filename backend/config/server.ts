@@ -81,7 +81,7 @@ export const serverConfig = {
   assemblyAI: {
     /** Turn detection eagerness level */
     eagerness: (process.env.ASSEMBLY_AI_EAGERNESS ||
-      'medium') as AssemblyAIEagerness,
+      'high') as AssemblyAIEagerness,
     /** Format turns in output (typically false for real-time processing) */
     formatTurns: false,
   },

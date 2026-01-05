@@ -62,6 +62,7 @@ export class WebSocketClient {
 
   private emit(event: string, data?: unknown): void {
     const callbacks = this.listeners.get(event);
+    console.log(`[WebSocketClient] emit('${event}'), listeners:`, callbacks?.length ?? 0);
     if (callbacks) {
       callbacks.forEach((callback) => callback(data));
     }
@@ -296,6 +297,24 @@ export class WebSocketClient {
         this.emit('language_changed', {
           languageCode: message.languageCode,
           languageName: message.languageName,
+        });
+        break;
+
+      case 'tts_pronounce_audio':
+        this.emit('tts_pronounce_audio', {
+          audio: message.audio,
+          audioFormat: message.audioFormat || 'float32',
+          sampleRate: message.sampleRate,
+        });
+        break;
+
+      case 'tts_pronounce_complete':
+        this.emit('tts_pronounce_complete', {});
+        break;
+
+      case 'tts_pronounce_error':
+        this.emit('tts_pronounce_error', {
+          error: message.error,
         });
         break;
 

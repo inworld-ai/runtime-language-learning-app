@@ -58,6 +58,7 @@ type AppAction =
   | { type: 'SET_SPEECH_DETECTED'; payload: boolean }
   | { type: 'SET_FLASHCARDS'; payload: Flashcard[] }
   | { type: 'ADD_FLASHCARDS'; payload: Flashcard[] }
+  | { type: 'SET_PRONOUNCING_CARD_ID'; payload: string | null }
   | {
       type: 'SET_FEEDBACK';
       payload: { messageContent: string; feedback: string };
@@ -85,6 +86,7 @@ const createInitialState = (storage: HybridStorage): AppState => ({
   isRecording: false,
   speechDetected: false,
   flashcards: [],
+  pronouncingCardId: null,
   feedbackMap: {},
   userId: storage.getOrCreateUserId(),
   conversations: [],
@@ -138,6 +140,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       );
       return { ...state, flashcards: [...state.flashcards, ...newCards] };
     }
+    case 'SET_PRONOUNCING_CARD_ID':
+      return { ...state, pronouncingCardId: action.payload };
     case 'SET_FEEDBACK':
       return {
         ...state,
@@ -213,6 +217,7 @@ interface AppContextType {
   changeLanguage: (newLanguage: string) => void;
   handleInterrupt: () => void;
   sendTextMessage: (text: string) => void;
+  pronounceWord: (text: string) => void;
   // Conversation actions
   selectConversation: (conversationId: string) => void;
   createNewConversation: () => void;
@@ -234,6 +239,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const wsClientRef = useRef(new WebSocketClient(getWebSocketUrl()));
   const audioHandlerRef = useRef(new AudioHandler());
   const audioPlayerRef = useRef(new AudioPlayer());
+  const ttsAudioPlayerRef = useRef(new AudioPlayer());
   const hasMigratedRef = useRef(false);
 
   const [state, dispatch] = useReducer(
@@ -330,11 +336,13 @@ export function AppProvider({ children }: AppProviderProps) {
     () => {}
   );
 
-  // Initialize audio player
+  // Initialize audio players
   useEffect(() => {
     audioPlayerRef.current.initialize().catch(console.error);
+    ttsAudioPlayerRef.current.initialize().catch(console.error);
     return () => {
       audioPlayerRef.current.destroy();
+      ttsAudioPlayerRef.current.destroy();
     };
   }, []);
 
@@ -840,6 +848,30 @@ export function AppProvider({ children }: AppProviderProps) {
       audioPlayer.markStreamComplete();
     });
 
+    // TTS pronunciation handlers (for flashcard pronunciation)
+    const ttsAudioPlayer = ttsAudioPlayerRef.current;
+    wsClient.on('tts_pronounce_audio', (data) => {
+      const audioData = data as {
+        audio: string;
+        audioFormat: string;
+        sampleRate: number;
+      };
+      ttsAudioPlayer.addAudioStream(
+        audioData.audio,
+        audioData.sampleRate,
+        false,
+        audioData.audioFormat as 'int16' | 'float32'
+      );
+    });
+
+    wsClient.on('tts_pronounce_complete', () => {
+      dispatch({ type: 'SET_PRONOUNCING_CARD_ID', payload: null });
+    });
+
+    wsClient.on('tts_pronounce_error', () => {
+      dispatch({ type: 'SET_PRONOUNCING_CARD_ID', payload: null });
+    });
+
     wsClient.on('interrupt', (data) => {
       const reason = (data as { reason?: string })?.reason;
 
@@ -1087,6 +1119,29 @@ export function AppProvider({ children }: AppProviderProps) {
     [state.connectionStatus]
   );
 
+  // Pronounce a word using TTS (for flashcard pronunciation)
+  const pronounceWord = useCallback(
+    (text: string) => {
+      const wsClient = wsClientRef.current;
+      const ttsAudioPlayer = ttsAudioPlayerRef.current;
+      const trimmedText = text.trim();
+
+      if (state.connectionStatus !== 'connected' || !trimmedText) return;
+
+      // Stop any currently playing TTS audio
+      ttsAudioPlayer.stop();
+
+      // Use the text itself as the card ID for tracking
+      dispatch({ type: 'SET_PRONOUNCING_CARD_ID', payload: trimmedText });
+      wsClient.send({
+        type: 'tts_pronounce_request',
+        text: trimmedText,
+        languageCode: state.currentLanguage,
+      });
+    },
+    [state.connectionStatus, state.currentLanguage]
+  );
+
   // Select a conversation from the sidebar
   const selectConversation = useCallback(
     (conversationId: string) => {
@@ -1325,6 +1380,7 @@ export function AppProvider({ children }: AppProviderProps) {
     changeLanguage,
     handleInterrupt,
     sendTextMessage,
+    pronounceWord,
     selectConversation,
     createNewConversation,
     deleteConversation,

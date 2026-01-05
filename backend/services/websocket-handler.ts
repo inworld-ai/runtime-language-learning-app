@@ -6,6 +6,7 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { telemetry } from '@inworld/runtime';
+import { GraphTypes } from '@inworld/runtime/graph';
 
 import { ConnectionManager } from '../helpers/connection-manager.js';
 import { FlashcardProcessor } from '../helpers/flashcard-processor.js';
@@ -16,6 +17,8 @@ import {
   DEFAULT_LANGUAGE_CODE,
 } from '../config/languages.js';
 import { serverLogger as logger } from '../utils/logger.js';
+import { getSimpleTTSGraph } from '../graphs/simple-tts-graph.js';
+import { serverConfig } from '../config/server.js';
 
 import {
   connections,
@@ -233,6 +236,8 @@ function handleMessage(
       handleFlashcardClicked(connectionId, message);
     } else if (message.type === 'text_message') {
       handleTextMessage(connectionId, ws, connectionManager, message);
+    } else if (message.type === 'tts_pronounce_request') {
+      handleTTSPronounce(connectionId, ws, message);
     } else {
       logger.debug(
         { connectionId, messageType: message.type },
@@ -384,4 +389,106 @@ function handleTextMessage(
     return;
   }
   connectionManager.sendTextMessage(text.trim());
+}
+
+/**
+ * Convert audio data to base64 string for WebSocket transmission
+ * Inworld TTS returns Float32 PCM in [-1.0, 1.0] range
+ */
+function convertAudioToBase64(audio: {
+  data?: string | number[] | Float32Array;
+  sampleRate?: number;
+}): { base64: string; format: 'float32' | 'int16' } | null {
+  if (!audio.data) return null;
+
+  if (typeof audio.data === 'string') {
+    // Already base64 - assume Int16 format for backwards compatibility
+    return { base64: audio.data, format: 'int16' };
+  }
+
+  // Inworld SDK returns audio.data as an array of raw bytes (0-255)
+  // These bytes ARE the Float32 PCM data in IEEE 754 format (4 bytes per sample)
+  const audioBuffer = Array.isArray(audio.data)
+    ? Buffer.from(audio.data)
+    : Buffer.from(
+        audio.data.buffer,
+        audio.data.byteOffset,
+        audio.data.byteLength
+      );
+
+  return {
+    base64: audioBuffer.toString('base64'),
+    format: 'float32',
+  };
+}
+
+async function handleTTSPronounce(
+  connectionId: string,
+  ws: WebSocket,
+  message: { text?: string; languageCode?: string }
+): Promise<void> {
+  const text = message.text;
+  const languageCode = message.languageCode || DEFAULT_LANGUAGE_CODE;
+
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    ws.send(
+      JSON.stringify({ type: 'tts_pronounce_error', error: 'Empty text' })
+    );
+    return;
+  }
+
+  if (text.length > 100) {
+    logger.warn(
+      { connectionId, length: text.length },
+      'tts_pronounce_text_too_long'
+    );
+    ws.send(
+      JSON.stringify({ type: 'tts_pronounce_error', error: 'Text too long' })
+    );
+    return;
+  }
+
+  try {
+    const graph = getSimpleTTSGraph(languageCode);
+    const executionResult = await graph.start({ text: text.trim() });
+
+    for await (const res of executionResult.outputStream) {
+      if ('processResponse' in res) {
+        const resultWithProcess = res as {
+          processResponse: (
+            handlers: Record<string, (data: unknown) => Promise<void> | void>
+          ) => Promise<void>;
+        };
+        await resultWithProcess.processResponse({
+          TTSOutputStream: async (ttsData: unknown) => {
+            const ttsStream = ttsData as GraphTypes.TTSOutputStream;
+            for await (const chunk of ttsStream) {
+              if (chunk.audio?.data) {
+                const audioResult = convertAudioToBase64(chunk.audio);
+                if (audioResult) {
+                  ws.send(
+                    JSON.stringify({
+                      type: 'tts_pronounce_audio',
+                      audio: audioResult.base64,
+                      audioFormat: audioResult.format,
+                      sampleRate:
+                        chunk.audio.sampleRate ||
+                        serverConfig.audio.ttsSampleRate,
+                    })
+                  );
+                }
+              }
+            }
+          },
+        });
+      }
+    }
+
+    ws.send(JSON.stringify({ type: 'tts_pronounce_complete' }));
+  } catch (error) {
+    logger.error({ err: error, connectionId }, 'tts_pronounce_error');
+    ws.send(
+      JSON.stringify({ type: 'tts_pronounce_error', error: 'TTS failed' })
+    );
+  }
 }

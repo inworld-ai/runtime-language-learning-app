@@ -147,6 +147,7 @@ export interface AppState {
 
   // Flashcards
   flashcards: Flashcard[];
+  pronouncingCardId: string | null;
 
   // Feedback (keyed by user message content)
   feedbackMap: Record<string, string>;

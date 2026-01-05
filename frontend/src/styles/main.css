@@ -528,6 +528,7 @@ body {
     color: #1a1a1a;
     text-align: left;
     transition: background-color 0.15s ease;
+    width: 100%;
 }
 
 .dropdown-button:hover {
@@ -1026,7 +1027,6 @@ body {
     display: flex;
     gap: 8px;
     padding-top: 16px;
-    border-top: 1px solid #e5e5e5;
     margin-top: 16px;
 }
 
@@ -1161,6 +1161,59 @@ body {
     color: #1a1a1a;
 }
 
+/* Pronounce button on flashcard */
+.pronounce-button {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid #d1d5db;
+    background: #ffffff;
+    color: #6b7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 10;
+    padding: 0;
+}
+
+.pronounce-button:hover:not(:disabled) {
+    border-color: #1a1a1a;
+    color: #1a1a1a;
+    transform: scale(1.08);
+}
+
+.pronounce-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.pronounce-button.loading {
+    border-color: #6b7280;
+}
+
+.pronounce-button svg {
+    width: 18px;
+    height: 18px;
+}
+
+.pronounce-spinner {
+    animation: spin-pronounce 1s linear infinite;
+}
+
+@keyframes spin-pronounce {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .flashcard-back {
     background: #ffffff;
     border: 2px solid #e5e5e5;
@@ -1248,6 +1301,18 @@ body {
     .flashcard-front,
     .flashcard-back {
         padding: 16px;
+    }
+
+    .pronounce-button {
+        width: 32px;
+        height: 32px;
+        bottom: 8px;
+        right: 8px;
+    }
+
+    .pronounce-button svg {
+        width: 16px;
+        height: 16px;
     }
 }
 
@@ -1552,5 +1617,5 @@ body {
 }
 
 .message.learner:hover {
-    background: #c8e6d5;
+    background: #333333;
 }

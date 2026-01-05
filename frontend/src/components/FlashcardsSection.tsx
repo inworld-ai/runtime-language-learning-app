@@ -10,8 +10,8 @@ const getApiUrl = (path: string): string => {
 };
 
 export function FlashcardsSection() {
-  const { state, wsClient } = useApp();
-  const { flashcards, currentLanguage } = state;
+  const { state, wsClient, pronounceWord } = useApp();
+  const { flashcards, currentLanguage, pronouncingCardId } = state;
   const [isExporting, setIsExporting] = useState(false);
 
   const handleCardClick = useCallback(
@@ -19,6 +19,16 @@ export function FlashcardsSection() {
       wsClient.send({ type: 'flashcard_clicked', card });
     },
     [wsClient]
+  );
+
+  const handlePronounce = useCallback(
+    (card: FlashcardType) => {
+      const targetWord = card.targetWord || card.spanish || card.word || '';
+      if (!targetWord) return;
+
+      pronounceWord(targetWord);
+    },
+    [pronounceWord]
   );
 
   const exportToAnki = useCallback(async () => {
@@ -116,13 +126,19 @@ export function FlashcardsSection() {
           {sortedFlashcards.length === 0 ? (
             <div className="empty-state"></div>
           ) : (
-            sortedFlashcards.map((flashcard, index) => (
-              <Flashcard
-                key={`card-${flashcard.targetWord || flashcard.spanish || index}`}
-                flashcard={flashcard}
-                onCardClick={handleCardClick}
-              />
-            ))
+            sortedFlashcards.map((flashcard, index) => {
+              const cardId =
+                flashcard.targetWord || flashcard.spanish || flashcard.word || '';
+              return (
+                <Flashcard
+                  key={`card-${cardId || index}`}
+                  flashcard={flashcard}
+                  onCardClick={handleCardClick}
+                  onPronounce={handlePronounce}
+                  isPronouncing={pronouncingCardId === cardId}
+                />
+              );
+            })
           )}
         </div>
       </div>
