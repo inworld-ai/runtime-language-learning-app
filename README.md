@@ -148,6 +148,7 @@ When Supabase is configured, the app stores and retrieves user memories using se
 - **Personalized responses**: The AI uses retrieved memories to personalize conversations
 
 Memory types:
+
 - `learning_progress`: Vocabulary struggles, grammar patterns, learning achievements
 - `personal_context`: Interests, goals, preferences shared by the user
 
@@ -155,16 +156,16 @@ Without Supabase, the app works in anonymous mode using localStorage (no memory 
 
 ## Environment Variables Reference
 
-| Variable                     | Required | Description                                                        |
-| ---------------------------- | -------- | ------------------------------------------------------------------ |
-| `INWORLD_API_KEY`            | Yes      | Inworld AI Base64 API key                                          |
-| `ASSEMBLY_AI_API_KEY`        | Yes      | AssemblyAI API key                                                 |
-| `PORT`                       | No       | Server port (default: 3000)                                        |
-| `LOG_LEVEL`                  | No       | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
-| `NODE_ENV`                   | No       | `development` or `production`                                      |
-| `ASSEMBLY_AI_EAGERNESS`      | No       | Turn detection: `low`, `medium`, `high` (default: high)            |
-| `SUPABASE_URL`               | No       | Supabase project URL (enables memory feature)                      |
-| `SUPABASE_SERVICE_ROLE_KEY`  | No       | Supabase service role key (for backend memory storage)             |
+| Variable                    | Required | Description                                                        |
+| --------------------------- | -------- | ------------------------------------------------------------------ |
+| `INWORLD_API_KEY`           | Yes      | Inworld AI Base64 API key                                          |
+| `ASSEMBLY_AI_API_KEY`       | Yes      | AssemblyAI API key                                                 |
+| `PORT`                      | No       | Server port (default: 3000)                                        |
+| `LOG_LEVEL`                 | No       | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
+| `NODE_ENV`                  | No       | `development` or `production`                                      |
+| `ASSEMBLY_AI_EAGERNESS`     | No       | Turn detection: `low`, `medium`, `high` (default: high)            |
+| `SUPABASE_URL`              | No       | Supabase project URL (enables memory feature)                      |
+| `SUPABASE_SERVICE_ROLE_KEY` | No       | Supabase service role key (for backend memory storage)             |
 
 ## Testing
 
