@@ -34,6 +34,10 @@ export class ConnectionManager {
   private languageCode: string;
   private languageConfig: LanguageConfig;
   private logger: ReturnType<typeof createSessionLogger>;
+  private restartAttempts = 0;
+  private readonly MAX_RESTART_ATTEMPTS = 3;
+  private lastRestartTime = 0;
+  private readonly RESTART_COOLDOWN_MS = 5000; // Prevent rapid restart loops
 
   // Callback for flashcard processing
   private flashcardCallback:
@@ -187,6 +191,86 @@ export class ConnectionManager {
     }
 
     this.logger.info('graph_execution_completed');
+
+    // Auto-restart if the graph completed but we weren't destroyed
+    // This handles timeout scenarios (DEADLINE_EXCEEDED) gracefully
+    if (!this.isDestroyed) {
+      await this.handleGraphCompletion();
+    }
+  }
+
+  /**
+   * Handle unexpected graph completion by restarting
+   */
+  private async handleGraphCompletion(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRestart = now - this.lastRestartTime;
+
+    // Reset restart attempts if enough time has passed (successful operation)
+    if (timeSinceLastRestart > 30000) {
+      this.restartAttempts = 0;
+    }
+
+    // Check if we should attempt restart
+    if (this.restartAttempts >= this.MAX_RESTART_ATTEMPTS) {
+      this.logger.warn(
+        { attempts: this.restartAttempts },
+        'max_restart_attempts_reached'
+      );
+      this.sendToClient({
+        type: 'error',
+        message:
+          'Connection lost. Please refresh the page to continue the conversation.',
+        code: 'GRAPH_RESTART_FAILED',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    // Cooldown check to prevent rapid restart loops
+    if (timeSinceLastRestart < this.RESTART_COOLDOWN_MS) {
+      this.logger.debug(
+        { cooldownMs: this.RESTART_COOLDOWN_MS - timeSinceLastRestart },
+        'restart_cooldown_active'
+      );
+      await new Promise((resolve) =>
+        setTimeout(resolve, this.RESTART_COOLDOWN_MS - timeSinceLastRestart)
+      );
+    }
+
+    this.restartAttempts++;
+    this.lastRestartTime = Date.now();
+
+    this.logger.info(
+      { attempt: this.restartAttempts },
+      'auto_restarting_graph_after_timeout'
+    );
+
+    // Create a fresh multimodal stream manager
+    this.multimodalStreamManager = new MultimodalStreamManager();
+
+    // Update the connection's reference to the new stream manager
+    const connection = this.connections[this.sessionId];
+    if (connection) {
+      connection.multimodalStreamManager = this.multimodalStreamManager;
+    }
+
+    // Notify client that we're recovering
+    this.sendToClient({
+      type: 'connection_recovered',
+      message: 'Connection restored after idle timeout.',
+      timestamp: Date.now(),
+    });
+
+    // Restart graph execution
+    const multimodalStream = this.createMultimodalStreamGenerator();
+    this.graphExecution = this.executeGraph(multimodalStream);
+
+    this.graphExecution.catch((error) => {
+      if (!this.isDestroyed) {
+        this.logger.error({ err: error }, 'graph_restart_error');
+      }
+    });
   }
 
   /**

@@ -48,8 +48,7 @@ class AssemblyAISession {
   constructor(
     public readonly sessionId: string,
     private apiKey: string,
-    private url: string,
-    private onCleanup: (sessionId: string) => void
+    private url: string
   ) {}
 
   /**
@@ -156,15 +155,29 @@ class AssemblyAISession {
     }, this.INACTIVITY_TIMEOUT_MS);
   }
 
+  /**
+   * Clear the inactivity timer without closing the connection.
+   * Used when we know no audio will be coming (e.g., text-only interactions).
+   */
+  public clearInactivityTimer(): void {
+    if (this.inactivityTimeout) {
+      clearTimeout(this.inactivityTimeout);
+      this.inactivityTimeout = null;
+    }
+  }
+
   private closeDueToInactivity(): void {
     const inactiveFor = Date.now() - this.lastActivityTime;
     logger.info(
       { sessionId: this.sessionId, inactiveMs: inactiveFor },
       'closing_due_to_inactivity'
     );
-    this.shouldStopProcessing = true;
-    this.close();
-    this.onCleanup(this.sessionId);
+    // Only close the WebSocket to stop billing, but keep the session reusable.
+    // Don't set shouldStopProcessing - this allows the graph to continue waiting
+    // for input and reconnect when audio arrives.
+    this.closeWebSocket();
+    // Note: We intentionally do NOT call onCleanup here anymore.
+    // The session stays in the map and can be reactivated by ensureConnection().
   }
 
   private closeWebSocket(): void {
@@ -367,8 +380,7 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
       session = new AssemblyAISession(
         sessionId,
         this.apiKey,
-        this.buildWebSocketUrl(),
-        (id) => this.sessions.delete(id)
+        this.buildWebSocketUrl()
       );
       this.sessions.set(sessionId, session);
     }
@@ -511,7 +523,12 @@ export class AssemblyAISTTWebSocketNode extends CustomNode {
               textContent = content.text;
               transcriptText = content.text;
               turnDetected = true;
-              if (session) session.shouldStopProcessing = true;
+              if (session) {
+                session.shouldStopProcessing = true;
+                // Clear inactivity timer since we're handling text, not audio
+                // This prevents the 60s timeout from firing and disrupting the session
+                session.clearInactivityTimer();
+              }
               turnResolve(transcriptText);
               break;
             }
