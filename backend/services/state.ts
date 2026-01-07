@@ -7,6 +7,7 @@
 import { ConnectionManager } from '../helpers/connection-manager.js';
 import { FlashcardProcessor } from '../helpers/flashcard-processor.js';
 import { FeedbackProcessor } from '../helpers/feedback-processor.js';
+import { MemoryProcessor } from '../helpers/memory-processor.js';
 import { ConnectionsMap } from '../types/index.js';
 
 // Shared connections map (used by graph nodes)
@@ -16,6 +17,7 @@ export const connections: ConnectionsMap = {};
 export const connectionManagers = new Map<string, ConnectionManager>();
 export const flashcardProcessors = new Map<string, FlashcardProcessor>();
 export const feedbackProcessors = new Map<string, FeedbackProcessor>();
+export const memoryProcessors = new Map<string, MemoryProcessor>();
 export const connectionAttributes = new Map<
   string,
   { timezone?: string; userId?: string; languageCode?: string }

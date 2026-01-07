@@ -78,7 +78,14 @@ npx supabase db push
 
 Find your project ref in the Supabase dashboard URL: `supabase.com/dashboard/project/YOUR_PROJECT_REF`
 
-**c) Create `frontend/.env.local`:**
+**c) Add Supabase variables to `.env` (root):**
+
+```bash
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+**d) Create `frontend/.env.local`:**
 
 ```bash
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -132,14 +139,16 @@ The app uses a real-time audio streaming architecture:
 
 ## Environment Variables Reference
 
-| Variable                | Required | Description                                                        |
-| ----------------------- | -------- | ------------------------------------------------------------------ |
-| `INWORLD_API_KEY`       | Yes      | Inworld AI Base64 API key                                          |
-| `ASSEMBLY_AI_API_KEY`   | Yes      | AssemblyAI API key                                                 |
-| `PORT`                  | No       | Server port (default: 3000)                                        |
-| `LOG_LEVEL`             | No       | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
-| `NODE_ENV`              | No       | `development` or `production`                                      |
-| `ASSEMBLY_AI_EAGERNESS` | No       | Turn detection: `low`, `medium`, `high` (default: high)            |
+| Variable                     | Required | Description                                                        |
+| ---------------------------- | -------- | ------------------------------------------------------------------ |
+| `INWORLD_API_KEY`            | Yes      | Inworld AI Base64 API key                                          |
+| `ASSEMBLY_AI_API_KEY`        | Yes      | AssemblyAI API key                                                 |
+| `PORT`                       | No       | Server port (default: 3000)                                        |
+| `LOG_LEVEL`                  | No       | `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: info) |
+| `NODE_ENV`                   | No       | `development` or `production`                                      |
+| `ASSEMBLY_AI_EAGERNESS`      | No       | Turn detection: `low`, `medium`, `high` (default: high)            |
+| `SUPABASE_URL`               | No       | Supabase project URL (enables memory feature)                      |
+| `SUPABASE_SERVICE_ROLE_KEY`  | No       | Supabase service role key (for backend memory storage)             |
 
 ## Testing
 

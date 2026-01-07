@@ -26,6 +26,7 @@ import {
 import { AssemblyAISTTWebSocketNode } from './nodes/assembly-ai-stt-ws-node.js';
 import { DialogPromptBuilderNode } from './nodes/dialog-prompt-builder-node.js';
 import { InteractionQueueNode } from './nodes/interaction-queue-node.js';
+import { MemoryRetrievalNode } from './nodes/memory-retrieval-node.js';
 import { StateUpdateNode } from './nodes/state-update-node.js';
 import { TextInputNode } from './nodes/text-input-node.js';
 import { TranscriptExtractorNode } from './nodes/transcript-extractor-node.js';
@@ -124,6 +125,12 @@ export class ConversationGraphWrapper {
       reportToClient: true,
     });
 
+    const memoryRetrievalNode = new MemoryRetrievalNode({
+      id: `memory-retrieval-node${postfix}`,
+      connections,
+      reportToClient: false,
+    });
+
     const dialogPromptBuilderNode = new DialogPromptBuilderNode({
       id: `dialog-prompt-builder-node${postfix}`,
       connections,
@@ -187,6 +194,7 @@ export class ConversationGraphWrapper {
       .addNode(transcriptExtractorNode)
       .addNode(interactionQueueNode)
       .addNode(textInputNode)
+      .addNode(memoryRetrievalNode)
       .addNode(dialogPromptBuilderNode)
       .addNode(llmNode)
       .addNode(textChunkingNode)
@@ -232,8 +240,9 @@ export class ConversationGraphWrapper {
         },
       })
 
-      // TextInput updates state and passes to prompt builder
-      .addEdge(textInputNode, dialogPromptBuilderNode)
+      // TextInput updates state, retrieves memories, then builds prompt
+      .addEdge(textInputNode, memoryRetrievalNode)
+      .addEdge(memoryRetrievalNode, dialogPromptBuilderNode)
 
       // Also pass state to TTS builder for voice selection
       .addEdge(textInputNode, ttsRequestBuilderNode)

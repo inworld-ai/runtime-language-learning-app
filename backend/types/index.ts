@@ -30,6 +30,8 @@ export interface State {
   languageCode: string;
   // Output modalities (for graph routing)
   output_modalities: ('text' | 'audio')[];
+  // User ID for memory retrieval/creation (optional - anonymous users won't have this)
+  userId?: string;
 }
 
 /**

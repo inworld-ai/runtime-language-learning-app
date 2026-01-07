@@ -70,8 +70,12 @@
         "to_node": "feedback-extractor"
       }
     ],
-    "end_nodes": ["feedback-extractor"],
-    "start_nodes": ["feedback-prompt-builder"]
+    "end_nodes": [
+      "feedback-extractor"
+    ],
+    "start_nodes": [
+      "feedback-prompt-builder"
+    ]
   },
   "components": [
     {

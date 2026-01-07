@@ -11,6 +11,7 @@ import { GraphTypes } from '@inworld/runtime/graph';
 import { ConnectionManager } from '../helpers/connection-manager.js';
 import { FlashcardProcessor } from '../helpers/flashcard-processor.js';
 import { FeedbackProcessor } from '../helpers/feedback-processor.js';
+import { MemoryProcessor } from '../helpers/memory-processor.js';
 import {
   getLanguageConfig,
   getSupportedLanguageCodes,
@@ -25,6 +26,7 @@ import {
   connectionManagers,
   flashcardProcessors,
   feedbackProcessors,
+  memoryProcessors,
   connectionAttributes,
   isShuttingDown,
 } from './state.js';
@@ -60,10 +62,14 @@ export function setupWebSocketHandlers(wss: WebSocketServer): void {
     // Create feedback processor
     const feedbackProcessor = new FeedbackProcessor(defaultLanguageCode);
 
+    // Create memory processor
+    const memoryProcessor = new MemoryProcessor(defaultLanguageCode);
+
     // Store processors
     connectionManagers.set(connectionId, connectionManager);
     flashcardProcessors.set(connectionId, flashcardProcessor);
     feedbackProcessors.set(connectionId, feedbackProcessor);
+    memoryProcessors.set(connectionId, memoryProcessor);
     connectionAttributes.set(connectionId, {
       languageCode: defaultLanguageCode,
     });
@@ -162,6 +168,29 @@ export function setupWebSocketHandlers(wss: WebSocketServer): void {
       }
     );
 
+    // Set up memory generation callback (fire-and-forget)
+    connectionManager.setMemoryCallback((messages) => {
+      if (isShuttingDown()) {
+        return;
+      }
+
+      const attrs = connectionAttributes.get(connectionId) || {};
+      const userId = attrs.userId;
+
+      if (!userId) {
+        // Can't create memories without a user ID
+        return;
+      }
+
+      // Increment turn and check if we should create a memory
+      memoryProcessor.incrementTurn();
+
+      if (memoryProcessor.shouldCreateMemory()) {
+        // Fire and forget - createMemoryAsync handles errors internally
+        memoryProcessor.createMemoryAsync(userId, messages);
+      }
+    });
+
     // Start the graph for this connection
     try {
       await connectionManager.start();
@@ -201,6 +230,7 @@ export function setupWebSocketHandlers(wss: WebSocketServer): void {
       // Clean up other processors
       flashcardProcessors.delete(connectionId);
       feedbackProcessors.delete(connectionId);
+      memoryProcessors.delete(connectionId);
       connectionAttributes.delete(connectionId);
     });
   });
@@ -288,12 +318,14 @@ function handleLanguageChange(
     // Update all processors
     flashcardProcessors.get(connectionId)?.setLanguage(newLanguageCode);
     feedbackProcessors.get(connectionId)?.setLanguage(newLanguageCode);
+    memoryProcessors.get(connectionId)?.setLanguage(newLanguageCode);
     connectionManager.setLanguage(newLanguageCode);
 
     // Reset conversation on language change
     connectionManager.reset();
     flashcardProcessors.get(connectionId)?.reset();
     feedbackProcessors.get(connectionId)?.reset();
+    memoryProcessors.get(connectionId)?.reset();
 
     // Send confirmation
     ws.send(
@@ -331,6 +363,14 @@ function handleUserContext(
     userId: userId || currentAttrs.userId,
     languageCode: languageCode || currentAttrs.languageCode,
   });
+
+  // Set user ID on connection manager for memory retrieval
+  if (userId) {
+    const manager = connectionManagers.get(connectionId);
+    if (manager) {
+      manager.setUserId(userId);
+    }
+  }
 }
 
 function handleFlashcardClicked(

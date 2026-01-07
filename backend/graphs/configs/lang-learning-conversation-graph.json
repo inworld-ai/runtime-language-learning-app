@@ -54,6 +54,16 @@
         }
       },
       {
+        "type": "MemoryRetrievalNodeType",
+        "id": "memory-retrieval-node-lang-learning",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
         "type": "DialogPromptBuilderNodeType",
         "id": "dialog-prompt-builder-node-lang-learning",
         "execution_config": {
@@ -182,6 +192,10 @@
       },
       {
         "from_node": "text-input-node-lang-learning",
+        "to_node": "memory-retrieval-node-lang-learning"
+      },
+      {
+        "from_node": "memory-retrieval-node-lang-learning",
         "to_node": "dialog-prompt-builder-node-lang-learning"
       },
       {
@@ -219,8 +233,12 @@
         "loop": true
       }
     ],
-    "end_nodes": ["tts-node-lang-learning"],
-    "start_nodes": ["audio-input-proxy-lang-learning"]
+    "end_nodes": [
+      "tts-node-lang-learning"
+    ],
+    "start_nodes": [
+      "audio-input-proxy-lang-learning"
+    ]
   },
   "components": [
     {

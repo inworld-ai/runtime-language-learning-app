@@ -11,9 +11,15 @@
 import { CustomNode, GraphTypes, ProcessContext } from '@inworld/runtime/graph';
 import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { ConnectionsMap, State } from '../../types/index.js';
+import { MemoryMatch } from '../../types/memory.js';
 import { getLanguageConfig } from '../../config/languages.js';
 import { conversationTemplate } from '../../helpers/prompt-templates.js';
 import { graphLogger as logger } from '../../utils/logger.js';
+
+// Extended state type that includes memories
+export interface StateWithMemories extends State {
+  relevantMemories?: MemoryMatch[];
+}
 
 export class DialogPromptBuilderNode extends CustomNode {
   constructor(props: {
@@ -30,12 +36,13 @@ export class DialogPromptBuilderNode extends CustomNode {
 
   async process(
     _context: ProcessContext,
-    state: State
+    state: StateWithMemories
   ): Promise<GraphTypes.LLMChatRequest> {
     logger.debug(
       {
         languageCode: state.languageCode || 'es',
         messageCount: state.messages?.length || 0,
+        memoryCount: state.relevantMemories?.length || 0,
       },
       'building_prompt'
     );
@@ -70,6 +77,7 @@ export class DialogPromptBuilderNode extends CustomNode {
         content: m.content,
       })),
       current_input: currentInput,
+      relevant_memories: state.relevantMemories || [],
       ...templateVars,
     };
 

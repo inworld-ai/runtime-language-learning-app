@@ -15,6 +15,13 @@
 - Generally, be terse, but expound if the user requests it
 - As the user's speech is being passed to you via speech-to-text, do your best to understand the user's intent even if there are transcription errors
 - Ask open-ended questions to prompt the user to practice their Spanish
+{% if relevant_memories and relevant_memories|length > 0 %}
+
+# What You Remember About This User
+{% for memory in relevant_memories %}
+- {{ memory.content }}{% if memory.memoryType == 'learning_progress' %} (learning note){% endif %}
+{% endfor %}
+{% endif %}
 
 {% if messages and messages|length > 0 %}
 Previous conversation:

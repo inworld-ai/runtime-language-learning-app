@@ -79,4 +79,23 @@ export const llmConfig = {
       presencePenalty: 0,
     },
   } satisfies LLMNodeConfig,
+
+  /**
+   * Memory generation LLM - creates memories from conversation context
+   * Non-streaming, moderate temperature for varied but accurate memories
+   */
+  memoryGeneration: {
+    provider: 'openai',
+    model: 'gpt-4.1-nano',
+    stream: false,
+    textGenerationConfig: {
+      maxNewTokens: 200,
+      maxPromptLength: 2000,
+      temperature: 0.7,
+      topP: 1,
+      repetitionPenalty: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    },
+  } satisfies LLMNodeConfig,
 } as const;

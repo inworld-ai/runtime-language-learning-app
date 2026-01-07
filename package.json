@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@inworld/runtime": "https://storage.googleapis.com/assets-inworld-ai/node-packages/inworld-runtime-0.9.0-rc.14.tgz",
+    "@supabase/supabase-js": "^2.89.0",
     "anki-apkg-export": "^4.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",

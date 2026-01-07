@@ -48,6 +48,14 @@ export class ConnectionManager {
       ) => Promise<void>)
     | null = null;
 
+  // Callback for memory creation (non-blocking, fire-and-forget)
+  private memoryCallback:
+    | ((messages: Array<{ role: string; content: string }>) => void)
+    | null = null;
+
+  // User ID for memory retrieval/creation
+  private userId: string | undefined = undefined;
+
   // Processing state tracking for utterance stitching
   private isProcessingResponse: boolean = false;
   private currentTranscript: string = '';
@@ -140,12 +148,18 @@ export class ConnectionManager {
 
     this.logger.info('graph_execution_started');
 
+    // Build dataStoreContent - only include userId if defined
+    const dataStoreContent: Record<string, unknown> = {
+      sessionId: this.sessionId,
+      state: connection.state,
+    };
+    if (this.userId) {
+      dataStoreContent.userId = this.userId;
+    }
+
     const { outputStream } = await this.graphWrapper.graph.start(taggedStream, {
       executionId: this.sessionId,
-      dataStoreContent: {
-        sessionId: this.sessionId,
-        state: connection.state,
-      },
+      dataStoreContent,
       userContext: {
         attributes: {
           languageCode: this.languageCode,
@@ -350,9 +364,10 @@ export class ConnectionManager {
               timestamp: Date.now(),
             });
 
-            // Trigger flashcard and feedback generation after TTS completes
+            // Trigger flashcard, feedback, and memory generation after TTS completes
             this.triggerFlashcardGeneration();
             this.triggerFeedbackGeneration();
+            this.triggerMemoryGeneration();
           } else {
             this.logger.debug('tts_interrupted_skipping_completion');
           }
@@ -615,6 +630,25 @@ export class ConnectionManager {
     );
   }
 
+  /**
+   * Trigger memory generation (non-blocking, fire-and-forget)
+   * The callback handles turn counting and decides whether to create a memory
+   */
+  private triggerMemoryGeneration(): void {
+    if (!this.memoryCallback) return;
+
+    const connection = this.connections[this.sessionId];
+    if (!connection) return;
+
+    const recentMessages = connection.state.messages.slice(-10).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    // Fire and forget - the callback is synchronous and handles async internally
+    this.memoryCallback(recentMessages);
+  }
+
   // ============================================================
   // Public API (compatible with AudioProcessor)
   // ============================================================
@@ -634,6 +668,26 @@ export class ConnectionManager {
     ) => Promise<void>
   ): void {
     this.feedbackCallback = callback;
+  }
+
+  setMemoryCallback(
+    callback: (messages: Array<{ role: string; content: string }>) => void
+  ): void {
+    this.memoryCallback = callback;
+  }
+
+  /**
+   * Set the user ID for memory retrieval and creation
+   * This should be called when user context is received
+   */
+  setUserId(userId: string): void {
+    this.userId = userId;
+    // Also update connection state so it flows through the graph
+    const connection = this.connections[this.sessionId];
+    if (connection) {
+      connection.state.userId = userId;
+    }
+    this.logger.info({ userId: userId.substring(0, 8) }, 'user_id_set');
   }
 
   getConversationState(): {

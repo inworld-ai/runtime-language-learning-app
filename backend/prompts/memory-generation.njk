@@ -1,0 +1,30 @@
+You are analyzing a language learning conversation to extract memorable facts about the user.
+
+Conversation context ({{target_language}} learning session):
+{% for message in messages %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+
+Based on this conversation, create ONE concise memory about the user in English. Focus on:
+- Learning progress: vocabulary struggles, grammar issues, topics covered, skill improvements
+- Personal context: interests, goals, preferences, life details they shared
+
+Output format (JSON):
+{
+  "memory": "The user [specific fact about them]",
+  "type": "learning_progress" or "personal_context",
+  "topics": ["topic1", "topic2"],
+  "importance": 0.5
+}
+
+Rules:
+- Memory must be in English (even if conversation was in another language)
+- Keep it factual, specific, and concise (1-2 sentences)
+- Topics should be 1-3 relevant keywords
+- Importance scale:
+  - 0.3: Minor detail (casual mention)
+  - 0.5: Normal (general learning note or preference)
+  - 0.7: Significant (clear goal, major struggle, important interest)
+  - 0.9: Critical (explicit request to remember, strong preference)
+- If nothing memorable was said, return: {"memory": "", "type": "personal_context", "topics": [], "importance": 0}
+- Return ONLY the JSON object, no other text
