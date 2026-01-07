@@ -127,7 +127,6 @@ export class ConversationGraphWrapper {
 
     const memoryRetrievalNode = new MemoryRetrievalNode({
       id: `memory-retrieval-node${postfix}`,
-      connections,
       reportToClient: false,
     });
 

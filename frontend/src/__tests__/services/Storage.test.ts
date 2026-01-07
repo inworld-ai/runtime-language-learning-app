@@ -25,27 +25,6 @@ describe('Storage', () => {
     });
   });
 
-  describe('getOrCreateUserId', () => {
-    it('creates a user ID on first call', () => {
-      const id = storage.getOrCreateUserId();
-      expect(id).toBeTruthy();
-      expect(typeof id).toBe('string');
-    });
-
-    it('returns same ID on subsequent calls', () => {
-      const id1 = storage.getOrCreateUserId();
-      const id2 = storage.getOrCreateUserId();
-      expect(id1).toBe(id2);
-    });
-
-    it('persists user ID across instances', () => {
-      const id1 = storage.getOrCreateUserId();
-      const newStorage = new Storage();
-      const id2 = newStorage.getOrCreateUserId();
-      expect(id1).toBe(id2);
-    });
-  });
-
   describe('addMessage', () => {
     it('adds message to conversation history', () => {
       storage.addMessage('user', 'Hello');

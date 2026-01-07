@@ -348,9 +348,9 @@ function handleUserContext(
   connectionId: string,
   message: {
     timezone?: string;
-    userId?: string;
+    userId?: string | null;
     languageCode?: string;
-    data?: { timezone?: string; userId?: string; languageCode?: string };
+    data?: { timezone?: string; userId?: string | null; languageCode?: string };
   }
 ): void {
   const timezone = message.timezone || message.data?.timezone;

@@ -70,7 +70,8 @@ type AppAction =
   | { type: 'SET_SIDEBAR_OPEN'; payload: boolean }
   | { type: 'ADD_CONVERSATION'; payload: ConversationSummary }
   | { type: 'REMOVE_CONVERSATION'; payload: string }
-  | { type: 'RENAME_CONVERSATION'; payload: { id: string; title: string } };
+  | { type: 'RENAME_CONVERSATION'; payload: { id: string; title: string } }
+  | { type: 'SET_USER_ID'; payload: string | null };
 
 // Initial state
 const createInitialState = (storage: HybridStorage): AppState => ({
@@ -88,7 +89,7 @@ const createInitialState = (storage: HybridStorage): AppState => ({
   flashcards: [],
   pronouncingCardId: null,
   feedbackMap: {},
-  userId: storage.getOrCreateUserId(),
+  userId: null,
   conversations: [],
   currentConversationId: null,
   sidebarOpen: false,
@@ -199,6 +200,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
             : c
         ),
       };
+    case 'SET_USER_ID':
+      return { ...state, userId: action.payload };
     default:
       return state;
   }
@@ -257,6 +260,9 @@ export function AppProvider({ children }: AppProviderProps) {
     const storage = storageRef.current;
 
     if (supabase && user) {
+      // Immediately update userId from auth
+      dispatch({ type: 'SET_USER_ID', payload: user.id });
+
       storage.setSupabaseClient(supabase, user.id);
 
       // Sync data on login
@@ -315,6 +321,9 @@ export function AppProvider({ children }: AppProviderProps) {
           .catch(console.error);
       }
     } else {
+      // Clear userId on logout
+      dispatch({ type: 'SET_USER_ID', payload: null });
+
       storage.clearSupabaseClient();
       hasMigratedRef.current = false;
     }
@@ -994,14 +1003,15 @@ export function AppProvider({ children }: AppProviderProps) {
         wsClient.send({
           type: 'user_context',
           timezone: tz,
-          userId: state.userId,
+          // Use auth user ID - will be null if not authenticated
+          userId: user?.id || null,
           languageCode: state.currentLanguage,
         });
       } catch {
         // ignore
       }
     }
-  }, [state.connectionStatus, state.userId, state.currentLanguage]);
+  }, [state.connectionStatus, user, state.currentLanguage]);
 
   // Toggle recording
   const toggleRecording = useCallback(async () => {

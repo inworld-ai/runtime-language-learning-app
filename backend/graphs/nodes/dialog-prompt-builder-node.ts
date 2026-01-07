@@ -10,16 +10,10 @@
 
 import { CustomNode, GraphTypes, ProcessContext } from '@inworld/runtime/graph';
 import { PromptBuilder } from '@inworld/runtime/primitives/llm';
-import { ConnectionsMap, State } from '../../types/index.js';
-import { MemoryMatch } from '../../types/memory.js';
+import { ConnectionsMap, StateWithMemories } from '../../types/index.js';
 import { getLanguageConfig } from '../../config/languages.js';
 import { conversationTemplate } from '../../helpers/prompt-templates.js';
 import { graphLogger as logger } from '../../utils/logger.js';
-
-// Extended state type that includes memories
-export interface StateWithMemories extends State {
-  relevantMemories?: MemoryMatch[];
-}
 
 export class DialogPromptBuilderNode extends CustomNode {
   constructor(props: {

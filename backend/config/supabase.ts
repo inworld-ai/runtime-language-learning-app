@@ -5,6 +5,9 @@
  * Uses service role key for admin access (bypasses RLS).
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Supabase');
 
 let supabaseClient: SupabaseClient | null = null;
 
@@ -21,7 +24,7 @@ export function getSupabaseClient(): SupabaseClient | null {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    // Supabase not configured - memory features will be disabled
+    logger.debug('supabase_not_configured');
     return null;
   }
 
@@ -32,6 +35,7 @@ export function getSupabaseClient(): SupabaseClient | null {
     },
   });
 
+  logger.info('supabase_client_initialized');
   return supabaseClient;
 }
 

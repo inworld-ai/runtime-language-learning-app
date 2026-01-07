@@ -62,7 +62,7 @@ npm run build
 npm start
 ```
 
-### Step 5 (Optional): Set Up Supabase for User Auth
+### Step 5 (Optional): Set Up Supabase for Auth & Memory
 
 Without Supabase, the app works in anonymous mode using localStorage.
 
@@ -75,6 +75,8 @@ npx supabase login
 npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
+
+This creates all tables, indexes, RLS policies, and the `match_memories` function for semantic search.
 
 Find your project ref in the Supabase dashboard URL: `supabase.com/dashboard/project/YOUR_PROJECT_REF`
 
@@ -136,6 +138,20 @@ The app uses a real-time audio streaming architecture:
    - TTS converts responses back to audio
 3. **Flashcards** are auto-generated from conversation vocabulary
 4. **Response feedback** provides grammar and usage corrections
+
+## Memory System
+
+When Supabase is configured, the app stores and retrieves user memories using semantic search:
+
+- **Automatic memory creation**: Every few conversation turns, the system extracts memorable facts
+- **Semantic retrieval**: Relevant memories are retrieved using vector similarity search (pgvector)
+- **Personalized responses**: The AI uses retrieved memories to personalize conversations
+
+Memory types:
+- `learning_progress`: Vocabulary struggles, grammar patterns, learning achievements
+- `personal_context`: Interests, goals, preferences shared by the user
+
+Without Supabase, the app works in anonymous mode using localStorage (no memory persistence).
 
 ## Environment Variables Reference
 

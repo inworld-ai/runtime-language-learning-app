@@ -10,19 +10,20 @@
 
 import { CustomNode, ProcessContext } from '@inworld/runtime/graph';
 import { TextEmbedder } from '@inworld/runtime/primitives/embeddings';
-import { State, ConnectionsMap } from '../../types/index.js';
-import { MemoryMatch } from '../../types/memory.js';
+import { State, StateWithMemories } from '../../types/index.js';
 import { getMemoryService } from '../../services/memory-service.js';
 import { isSupabaseConfigured } from '../../config/supabase.js';
 import { embedderConfig } from '../../config/embedder.js';
 import { graphLogger as logger } from '../../utils/logger.js';
 
-/**
- * Extended state with relevant memories
- */
-export interface StateWithMemories extends State {
-  relevantMemories?: MemoryMatch[];
-}
+// Re-export for backwards compatibility
+export type { StateWithMemories } from '../../types/index.js';
+
+/** Maximum number of memories to retrieve */
+const MEMORY_RETRIEVAL_LIMIT = 3;
+
+/** Minimum similarity threshold for memory matches */
+const MEMORY_SIMILARITY_THRESHOLD = 0.5;
 
 // Singleton embedder - shared across all MemoryRetrievalNode instances
 let sharedEmbedder: TextEmbedder | null = null;
@@ -42,9 +43,14 @@ async function initSharedEmbedder(): Promise<void> {
 
   sharedInitPromise = (async () => {
     try {
+      const apiKey = process.env.INWORLD_API_KEY;
+      if (!apiKey) {
+        throw new Error('INWORLD_API_KEY environment variable is required');
+      }
+
       sharedEmbedder = await TextEmbedder.create({
         remoteConfig: {
-          apiKey: process.env.INWORLD_API_KEY!,
+          apiKey,
           provider: embedderConfig.provider,
           modelName: embedderConfig.modelName,
         },
@@ -61,28 +67,36 @@ async function initSharedEmbedder(): Promise<void> {
 }
 
 export class MemoryRetrievalNode extends CustomNode {
-  constructor(props: {
-    id: string;
-    connections: ConnectionsMap;
-    reportToClient?: boolean;
-  }) {
+  constructor(props: { id: string; reportToClient?: boolean }) {
     super({
       id: props.id,
       reportToClient: props.reportToClient,
     });
-    logger.info({ nodeId: props.id }, 'memory_retrieval_node_constructed');
     // Note: embedder is initialized lazily on first use, not during construction
   }
 
+  /**
+   * Cleanup method for pattern consistency with other nodes
+   */
+  destroy(): void {
+    // Embedder is shared singleton, not destroyed per-node
+  }
+
   async process(
-    context: ProcessContext,
+    _context: ProcessContext,
     state: State
   ): Promise<StateWithMemories> {
-    logger.info({ nodeId: this.id, hasState: !!state }, 'memory_retrieval_node_entered');
+    logger.info(
+      { nodeId: this.id, hasState: !!state },
+      'memory_retrieval_node_entered'
+    );
 
     // Get user ID from state (flows through the graph from connection.state)
     const userId = state.userId;
-    logger.info({ userId: userId?.substring(0, 8) }, 'memory_retrieval_got_userId');
+    logger.info(
+      { userId: userId?.substring(0, 8) },
+      'memory_retrieval_got_userId'
+    );
 
     // If no userId or Supabase not configured, skip memory retrieval
     if (!userId || !isSupabaseConfigured()) {
@@ -104,7 +118,10 @@ export class MemoryRetrievalNode extends CustomNode {
 
     try {
       logger.info(
-        { userId: userId.substring(0, 8), userMessage: lastUserMessage.content.substring(0, 50) },
+        {
+          userId: userId.substring(0, 8),
+          userMessage: lastUserMessage.content.substring(0, 50),
+        },
         'memory_retrieval_starting'
       );
 
@@ -120,22 +137,28 @@ export class MemoryRetrievalNode extends CustomNode {
       logger.debug('embedding_user_message');
       const embedResponse = await sharedEmbedder.embed(lastUserMessage.content);
       const queryEmbedding = TextEmbedder.toArray(embedResponse);
-      logger.debug({ embeddingLength: queryEmbedding.length }, 'embedding_generated');
+      logger.debug(
+        { embeddingLength: queryEmbedding.length },
+        'embedding_generated'
+      );
 
       // Retrieve similar memories
       const memoryService = getMemoryService();
       const memories = await memoryService.retrieveMemories(
         userId,
         queryEmbedding,
-        3, // limit: up to 3 memories
-        0.5 // threshold: lowered from 0.65 for testing
+        MEMORY_RETRIEVAL_LIMIT,
+        MEMORY_SIMILARITY_THRESHOLD
       );
 
       logger.info(
         {
           memoriesFound: memories.length,
           userId: userId.substring(0, 8),
-          memories: memories.map(m => ({ content: m.content.substring(0, 50), similarity: m.similarity }))
+          memories: memories.map((m) => ({
+            content: m.content.substring(0, 50),
+            similarity: m.similarity,
+          })),
         },
         'memories_retrieved_for_prompt'
       );

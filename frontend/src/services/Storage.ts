@@ -15,24 +15,6 @@ export class Storage {
   private flashcardsKey = 'aprende-flashcards'; // Legacy per-language flashcards
   private flashcardsConversationKeyPrefix = 'aprende-flashcards-conv-'; // + conversationId
   private languageKey = 'aprende-language';
-  private userIdKey = 'aprende-user-id';
-
-  // User ID methods
-  getOrCreateUserId(): string {
-    try {
-      let id = localStorage.getItem(this.userIdKey);
-      if (!id) {
-        id =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `u_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        localStorage.setItem(this.userIdKey, id);
-      }
-      return id;
-    } catch {
-      return `u_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    }
-  }
 
   // Language preference methods
   getLanguage(): string {

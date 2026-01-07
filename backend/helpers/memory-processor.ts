@@ -31,6 +31,9 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('MemoryProcessor');
 
+/** Number of recent messages to include for memory generation context */
+const MEMORY_MESSAGE_CONTEXT_LIMIT = 10;
+
 // Singleton graph instance - shared across all MemoryProcessor instances
 let sharedGraph: Graph | null = null;
 let sharedEmbedder: TextEmbedder | null = null;
@@ -50,10 +53,15 @@ async function initSharedResources(): Promise<void> {
 
   sharedInitPromise = (async () => {
     try {
+      const apiKey = process.env.INWORLD_API_KEY;
+      if (!apiKey) {
+        throw new Error('INWORLD_API_KEY environment variable is required');
+      }
+
       // Initialize embedder
       sharedEmbedder = await TextEmbedder.create({
         remoteConfig: {
-          apiKey: process.env.INWORLD_API_KEY!,
+          apiKey,
           provider: embedderConfig.provider,
           modelName: embedderConfig.modelName,
         },
@@ -157,7 +165,7 @@ export class MemoryProcessor {
 
       // Step 1: Generate memory using LLM
       const input = {
-        messages: messages.slice(-10), // Last 10 messages for context
+        messages: messages.slice(-MEMORY_MESSAGE_CONTEXT_LIMIT),
         target_language: langConfig.name,
       };
 

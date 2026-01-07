@@ -38,6 +38,7 @@ export class ConnectionManager {
   private readonly MAX_RESTART_ATTEMPTS = 3;
   private lastRestartTime = 0;
   private readonly RESTART_COOLDOWN_MS = 5000; // Prevent rapid restart loops
+  private readonly RESTART_RESET_THRESHOLD_MS = 30000; // Reset attempts after stable operation
 
   // Callback for flashcard processing
   private flashcardCallback:
@@ -207,7 +208,7 @@ export class ConnectionManager {
     const timeSinceLastRestart = now - this.lastRestartTime;
 
     // Reset restart attempts if enough time has passed (successful operation)
-    if (timeSinceLastRestart > 30000) {
+    if (timeSinceLastRestart > this.RESTART_RESET_THRESHOLD_MS) {
       this.restartAttempts = 0;
     }
 

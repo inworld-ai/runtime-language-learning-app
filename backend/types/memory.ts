@@ -4,12 +4,20 @@
  * Defines interfaces for user memories - used for personalized conversations.
  */
 
+import type { State } from './index.js';
+
 /**
  * Type of memory content
  * - learning_progress: Info about user's language learning (vocabulary, grammar, struggles)
  * - personal_context: Personal details shared by user (interests, goals, preferences)
  */
 export type MemoryType = 'learning_progress' | 'personal_context';
+
+/** Valid memory types for runtime validation */
+export const VALID_MEMORY_TYPES: MemoryType[] = [
+  'learning_progress',
+  'personal_context',
+];
 
 /**
  * Memory record for storing in Supabase
@@ -73,4 +81,26 @@ export interface MemoryRetrievalInput {
   queryText: string;
   limit?: number;
   threshold?: number;
+}
+
+/**
+ * Extended state with relevant memories attached
+ * Used by MemoryRetrievalNode and DialogPromptBuilderNode
+ */
+export interface StateWithMemories extends State {
+  relevantMemories?: MemoryMatch[];
+}
+
+/**
+ * Raw row format from Supabase user_memories table
+ * Used for type-safe database row mapping
+ */
+export interface SupabaseMemoryRow {
+  id: string;
+  content: string;
+  memory_type: string;
+  topics: string[];
+  importance: number;
+  similarity?: number;
+  created_at?: string;
 }

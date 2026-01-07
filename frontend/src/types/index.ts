@@ -153,7 +153,7 @@ export interface AppState {
   feedbackMap: Record<string, string>;
 
   // User
-  userId: string;
+  userId: string | null;
 
   // Multi-conversation support
   conversations: ConversationSummary[];

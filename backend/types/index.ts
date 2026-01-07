@@ -75,3 +75,13 @@ export interface InteractionInfo {
   text: string;
   interactionComplete: boolean;
 }
+
+// Re-export memory types for convenience
+export type {
+  MemoryType,
+  MemoryRecord,
+  MemoryMatch,
+  StateWithMemories,
+  SupabaseMemoryRow,
+} from './memory.js';
+export { VALID_MEMORY_TYPES } from './memory.js';
