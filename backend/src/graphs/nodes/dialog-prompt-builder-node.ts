@@ -11,7 +11,10 @@
 import { CustomNode, GraphTypes, ProcessContext } from '@inworld/runtime/graph';
 import { PromptBuilder } from '@inworld/runtime/primitives/llm';
 import { ConnectionsMap, StateWithMemories } from '../../types/index.js';
-import { getLanguageConfig } from '../../config/languages.js';
+import {
+  getLanguageConfig,
+  DEFAULT_LANGUAGE_CODE,
+} from '../../config/languages.js';
 import { conversationTemplate } from '../../helpers/prompt-templates.js';
 import { graphLogger as logger } from '../../utils/logger.js';
 
@@ -29,12 +32,19 @@ export class DialogPromptBuilderNode extends CustomNode {
   }
 
   async process(
-    _context: ProcessContext,
+    context: ProcessContext,
     state: StateWithMemories
   ): Promise<GraphTypes.LLMChatRequest> {
+    // Ensure we have a valid language code
+    const languageCode = state.languageCode || DEFAULT_LANGUAGE_CODE;
+    if (!state.languageCode) {
+      const sessionId = context.getDatastore().get('sessionId') as string;
+      logger.warn({ sessionId }, 'missing_language_code_using_default');
+    }
+
     logger.debug(
       {
-        languageCode: state.languageCode || 'es',
+        languageCode,
         messageCount: state.messages?.length || 0,
         memoryCount: state.relevantMemories?.length || 0,
       },
@@ -42,7 +52,7 @@ export class DialogPromptBuilderNode extends CustomNode {
     );
 
     // Get language config from state
-    const langConfig = getLanguageConfig(state.languageCode || 'es');
+    const langConfig = getLanguageConfig(languageCode);
 
     // Build template variables from language config
     const templateVars = {

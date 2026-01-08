@@ -813,9 +813,25 @@ export class ConnectionManager {
 
     const connection = this.connections[this.sessionId];
     if (connection) {
+      // Always update the connection state to ensure synchronization
       connection.state.languageCode = newLanguageCode;
       connection.state.targetLanguage = this.languageConfig.name;
       connection.state.voiceId = this.languageConfig.ttsConfig.speakerId;
+
+      this.logger.debug(
+        {
+          sessionId: this.sessionId,
+          languageCode: newLanguageCode,
+          targetLanguage: this.languageConfig.name,
+          voiceId: connection.state.voiceId,
+        },
+        'connection_state_language_updated'
+      );
+    } else {
+      this.logger.warn(
+        { sessionId: this.sessionId },
+        'connection_not_found_for_language_update'
+      );
     }
 
     this.logger.info(

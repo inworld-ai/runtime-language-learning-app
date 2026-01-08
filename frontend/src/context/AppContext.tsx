@@ -976,20 +976,12 @@ export function AppProvider({ children }: AppProviderProps) {
   }, [state.isRecording]);
 
   // Change language (only changes the current language for new conversations)
-  const changeLanguage = useCallback(
-    (newLanguage: string) => {
-      const storage = storageRef.current;
-      const wsClient = wsClientRef.current;
+  const changeLanguage = useCallback((newLanguage: string) => {
+    const storage = storageRef.current;
 
-      dispatch({ type: 'SET_LANGUAGE', payload: newLanguage });
-      storage.saveLanguage(newLanguage);
-
-      if (state.connectionStatus === 'connected') {
-        wsClient.send({ type: 'set_language', languageCode: newLanguage });
-      }
-    },
-    [state.connectionStatus]
-  );
+    dispatch({ type: 'SET_LANGUAGE', payload: newLanguage });
+    storage.saveLanguage(newLanguage);
+  }, []);
 
   // Send text message (bypasses audio/STT)
   const sendTextMessage = useCallback(
@@ -1218,14 +1210,21 @@ export function AppProvider({ children }: AppProviderProps) {
       );
     }
 
-    // Create new conversation
-    const newConversation = storage.createConversation(state.currentLanguage);
+    // Create new conversation with the current language preference
+    // Use state.currentLanguage directly since it's in the dependencies and will be up-to-date
+    const languageForNewConversation = state.currentLanguage;
+    const newConversation = storage.createConversation(
+      languageForNewConversation
+    );
     dispatch({ type: 'ADD_CONVERSATION', payload: newConversation });
     dispatch({
       type: 'SET_CURRENT_CONVERSATION_ID',
       payload: newConversation.id,
     });
-    storage.setCurrentConversationId(state.currentLanguage, newConversation.id);
+    storage.setCurrentConversationId(
+      languageForNewConversation,
+      newConversation.id
+    );
 
     // Clear chat and flashcards (new conversation has no flashcards)
     dispatch({ type: 'RESET_CONVERSATION' });
@@ -1234,9 +1233,17 @@ export function AppProvider({ children }: AppProviderProps) {
     lastMessageWasTextRef.current = false;
     pendingFlashcardsRef.current = [];
 
-    // Reset WebSocket conversation
+    // Reset and set language for new conversation
+    // We need to reset first, then set language to ensure the conversation starts fresh
+    // Even if the language is the same, we want to reset the conversation state
     if (state.connectionStatus === 'connected') {
+      // Reset the conversation context first
       wsClient.send({ type: 'conversation_context_reset' });
+      // Then set the language (this will also reset, but ensures language is correct)
+      wsClient.send({
+        type: 'set_language',
+        languageCode: languageForNewConversation,
+      });
     }
 
     // Close sidebar on mobile

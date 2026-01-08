@@ -257,6 +257,12 @@ function handleMessage(
       // Reset backend state when switching conversations
       connectionManager.reset();
       flashcardProcessors.get(connectionId)?.reset();
+      // Clear language in connectionAttributes so set_language will always process
+      const attrs = connectionAttributes.get(connectionId);
+      if (attrs) {
+        delete attrs.languageCode;
+        connectionAttributes.set(connectionId, attrs);
+      }
       logger.info({ connectionId }, 'conversation_context_reset');
     } else if (message.type === 'set_language') {
       handleLanguageChange(connectionId, ws, connectionManager, message);
@@ -315,11 +321,27 @@ function handleLanguageChange(
 
     const languageConfig = getLanguageConfig(newLanguageCode);
 
-    // Update all processors
+    // Update all processors FIRST to ensure they have the correct language
     flashcardProcessors.get(connectionId)?.setLanguage(newLanguageCode);
     feedbackProcessors.get(connectionId)?.setLanguage(newLanguageCode);
     memoryProcessors.get(connectionId)?.setLanguage(newLanguageCode);
+
+    // Update connection manager LAST - this updates the connection state
+    // which is used by the graph nodes
     connectionManager.setLanguage(newLanguageCode);
+
+    // Verify the language config matches what we set
+    const managerLanguageCode = connectionManager.getLanguageCode();
+    if (managerLanguageCode !== newLanguageCode) {
+      logger.error(
+        {
+          connectionId,
+          expected: newLanguageCode,
+          actual: managerLanguageCode,
+        },
+        'language_sync_error_connection_manager'
+      );
+    }
 
     // Reset conversation on language change
     connectionManager.reset();
@@ -357,11 +379,23 @@ function handleUserContext(
   const userId = message.userId || message.data?.userId;
   const languageCode = message.languageCode || message.data?.languageCode;
   const currentAttrs = connectionAttributes.get(connectionId) || {};
+
+  // Only update languageCode if it hasn't been explicitly set via set_language
+  // This prevents user_context from overriding the language set for a conversation
+  // The language should be set via set_language when creating/switching conversations
+  const shouldUpdateLanguage =
+    languageCode &&
+    !currentAttrs.languageCode && // Only if not already set
+    languageCode !== DEFAULT_LANGUAGE_CODE; // And not just the default
+
   connectionAttributes.set(connectionId, {
     ...currentAttrs,
     timezone: timezone || currentAttrs.timezone,
     userId: userId || currentAttrs.userId,
-    languageCode: languageCode || currentAttrs.languageCode,
+    // Only set language if it hasn't been explicitly set and we have a valid code
+    languageCode: shouldUpdateLanguage
+      ? languageCode
+      : currentAttrs.languageCode,
   });
 
   // Set user ID on connection manager for memory retrieval
