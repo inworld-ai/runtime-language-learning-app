@@ -21,14 +21,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install backend dependencies
+        working-directory: ./backend
         run: npm ci
 
-      - name: Run ESLint
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run ESLint (backend)
+        working-directory: ./backend
         run: npm run lint
 
-      - name: Check Prettier formatting
+      - name: Run ESLint (frontend)
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Check Prettier formatting (backend)
+        working-directory: ./backend
+        run: npm run format:check
+
+      - name: Check Prettier formatting (frontend)
+        working-directory: ./frontend
         run: npm run format:check
 
