@@ -52,7 +52,22 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', '*.js', '*.config.js'],
+    files: ['**/context/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['public/**/*.js'],
+    languageOptions: {
+      globals: {
+        AudioWorkletProcessor: 'readonly',
+        registerProcessor: 'readonly',
+      },
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**', '*.config.js', '**/*.js', '!public'],
   },
 ];
 

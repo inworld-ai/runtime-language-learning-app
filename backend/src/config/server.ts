@@ -111,4 +111,3 @@ export function getAssemblyAISettingsForEagerness(
 ): AssemblyAITurnDetectionSettings {
   return assemblyAIPresets[eagerness];
 }
-

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Storage } from '../../services/Storage';
+import type { Flashcard } from '../../types';
 
 describe('Storage', () => {
   let storage: Storage;
@@ -172,7 +173,7 @@ describe('Storage', () => {
       const cards = [
         { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
       ];
-      const result = storage.addFlashcards(cards as any, 'es');
+      const result = storage.addFlashcards(cards as Partial<Flashcard>[], 'es');
 
       expect(result.length).toBe(1);
       expect(result[0].targetWord).toBe('hola');
@@ -182,13 +183,16 @@ describe('Storage', () => {
       const cards1 = [
         { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
       ];
-      storage.addFlashcards(cards1 as any, 'es');
+      storage.addFlashcards(cards1 as Partial<Flashcard>[], 'es');
 
       const cards2 = [
         { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
         { targetWord: 'adios', english: 'goodbye', example: '', mnemonic: '' },
       ];
-      const result = storage.addFlashcards(cards2 as any, 'es');
+      const result = storage.addFlashcards(
+        cards2 as Partial<Flashcard>[],
+        'es'
+      );
 
       // Should only have 2 cards (hola + adios), not 3
       expect(result.length).toBe(2);
@@ -198,7 +202,7 @@ describe('Storage', () => {
       const cards1 = [
         { targetWord: 'Hola', english: 'hello', example: '', mnemonic: '' },
       ];
-      storage.addFlashcards(cards1 as any, 'es');
+      storage.addFlashcards(cards1 as Partial<Flashcard>[], 'es');
 
       const cards2 = [
         {
@@ -208,7 +212,10 @@ describe('Storage', () => {
           mnemonic: '',
         },
       ];
-      const result = storage.addFlashcards(cards2 as any, 'es');
+      const result = storage.addFlashcards(
+        cards2 as Partial<Flashcard>[],
+        'es'
+      );
 
       expect(result.length).toBe(1);
       expect(result[0].targetWord).toBe('Hola');
@@ -218,7 +225,7 @@ describe('Storage', () => {
       const cards = [
         { targetWord: 'bonjour', english: 'hello', example: '', mnemonic: '' },
       ];
-      const result = storage.addFlashcards(cards as any, 'fr');
+      const result = storage.addFlashcards(cards as Partial<Flashcard>[], 'fr');
 
       expect(result[0].languageCode).toBe('fr');
     });
@@ -227,7 +234,7 @@ describe('Storage', () => {
       const cards = [
         { spanish: 'hola', english: 'hello', example: '', mnemonic: '' },
       ];
-      const result = storage.addFlashcards(cards as any, 'es');
+      const result = storage.addFlashcards(cards as Partial<Flashcard>[], 'es');
 
       expect(result[0].targetWord).toBe('hola');
     });
@@ -243,7 +250,7 @@ describe('Storage', () => {
               example: '',
               mnemonic: '',
             },
-          ] as any,
+          ] as Partial<Flashcard>[],
           'es'
         );
       }
@@ -258,7 +265,7 @@ describe('Storage', () => {
       storage.addFlashcards(
         [
           { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
-        ] as any,
+        ] as Partial<Flashcard>[],
         'es'
       );
       storage.clearFlashcards('es');
@@ -271,7 +278,7 @@ describe('Storage', () => {
       storage.addFlashcards(
         [
           { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
-        ] as any,
+        ] as Partial<Flashcard>[],
         'es'
       );
       storage.addFlashcards(
@@ -282,7 +289,7 @@ describe('Storage', () => {
             example: '',
             mnemonic: '',
           },
-        ] as any,
+        ] as Partial<Flashcard>[],
         'fr'
       );
 
@@ -300,7 +307,11 @@ describe('Storage', () => {
         { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
       ];
 
-      storage.addFlashcardsForConversation(conv.id, cards as any, 'es');
+      storage.addFlashcardsForConversation(
+        conv.id,
+        cards as Partial<Flashcard>[],
+        'es'
+      );
       const result = storage.getFlashcardsForConversation(conv.id);
 
       expect(result.length).toBe(1);
@@ -315,7 +326,7 @@ describe('Storage', () => {
         conv1.id,
         [
           { targetWord: 'hola', english: 'hello', example: '', mnemonic: '' },
-        ] as any,
+        ] as Partial<Flashcard>[],
         'es'
       );
       storage.addFlashcardsForConversation(
@@ -327,7 +338,7 @@ describe('Storage', () => {
             example: '',
             mnemonic: '',
           },
-        ] as any,
+        ] as Partial<Flashcard>[],
         'es'
       );
 
@@ -356,7 +367,7 @@ describe('Storage', () => {
       const conv1 = storage.createConversation('es');
 
       // Wait a tiny bit to ensure different timestamps
-      const conv2 = storage.createConversation('fr');
+      storage.createConversation('fr');
 
       // Update conv1 to make it more recent
       storage.saveConversation(conv1.id, [], 'es');

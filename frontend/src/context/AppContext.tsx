@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react';
 import type {
@@ -238,22 +239,35 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   const { supabase, user } = useAuth();
-  const storageRef = useRef(new HybridStorage());
-  const wsClientRef = useRef(new WebSocketClient(getWebSocketUrl()));
-  const audioHandlerRef = useRef(new AudioHandler());
-  const audioPlayerRef = useRef(new AudioPlayer());
-  const ttsAudioPlayerRef = useRef(new AudioPlayer());
+  // Create instances directly using useMemo - these are stable and don't change
+  const storageInstance = useMemo(() => new HybridStorage(), []);
+  const storageRef = useRef(storageInstance);
+  const wsClientInstance = useMemo(
+    () => new WebSocketClient(getWebSocketUrl()),
+    []
+  );
+  const wsClientRef = useRef(wsClientInstance);
+  const audioHandlerInstance = useMemo(() => new AudioHandler(), []);
+  const audioHandlerRef = useRef(audioHandlerInstance);
+  const audioPlayerInstance = useMemo(() => new AudioPlayer(), []);
+  const audioPlayerRef = useRef(audioPlayerInstance);
+  const ttsAudioPlayerInstance = useMemo(() => new AudioPlayer(), []);
+  const ttsAudioPlayerRef = useRef(ttsAudioPlayerInstance);
   const hasMigratedRef = useRef(false);
 
   const [state, dispatch] = useReducer(
     appReducer,
-    storageRef.current,
+    storageInstance,
     createInitialState
   );
 
   // Refs for tracking state in callbacks
   const stateRef = useRef(state);
-  stateRef.current = state;
+
+  // Update stateRef in effect to avoid updating ref during render
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Connect/disconnect Supabase based on auth state
   useEffect(() => {
@@ -347,29 +361,32 @@ export function AppProvider({ children }: AppProviderProps) {
 
   // Initialize audio players
   useEffect(() => {
-    audioPlayerRef.current.initialize().catch(console.error);
-    ttsAudioPlayerRef.current.initialize().catch(console.error);
+    const audioPlayer = audioPlayerRef.current;
+    const ttsAudioPlayer = ttsAudioPlayerRef.current;
+    audioPlayer.initialize().catch(console.error);
+    ttsAudioPlayer.initialize().catch(console.error);
     return () => {
-      audioPlayerRef.current.destroy();
-      ttsAudioPlayerRef.current.destroy();
+      audioPlayer.destroy();
+      ttsAudioPlayer.destroy();
     };
   }, []);
 
   // Load initial state (conversations across all languages)
   useEffect(() => {
     const storage = storageRef.current;
+    const currentLang = stateRef.current.currentLanguage;
 
     // Load ALL conversations across all languages
     const allConversations = storage.getAllConversations();
     dispatch({ type: 'SET_CONVERSATIONS', payload: allConversations });
 
     // Load current conversation or use the most recent one
-    let currentId = storage.getCurrentConversationId(state.currentLanguage);
+    let currentId = storage.getCurrentConversationId(currentLang);
     if (!currentId && allConversations.length > 0) {
       currentId = allConversations[0].id;
       // Update language to match the most recent conversation
       const mostRecentConvo = allConversations[0];
-      if (mostRecentConvo.languageCode !== state.currentLanguage) {
+      if (mostRecentConvo.languageCode !== currentLang) {
         dispatch({
           type: 'SET_LANGUAGE',
           payload: mostRecentConvo.languageCode,
@@ -428,8 +445,9 @@ export function AppProvider({ children }: AppProviderProps) {
             payload: data.languages,
           });
 
+          const currentLang = stateRef.current.currentLanguage;
           const isValidLanguage = data.languages.some(
-            (lang: Language) => lang.code === state.currentLanguage
+            (lang: Language) => lang.code === currentLang
           );
           if (!isValidLanguage) {
             dispatch({
@@ -651,8 +669,10 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, []);
 
-  // Keep refs updated
-  checkAndUpdateConversationRef.current = checkAndUpdateConversation;
+  // Update refs in effect to avoid updating during render
+  useEffect(() => {
+    checkAndUpdateConversationRef.current = checkAndUpdateConversation;
+  }, [checkAndUpdateConversation]);
 
   // Process any pending flashcards that were queued before conversation existed
   const processPendingFlashcards = useCallback((conversationId: string) => {
@@ -673,8 +693,10 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, []);
 
-  // Keep ref updated
-  processPendingFlashcardsRef.current = processPendingFlashcards;
+  // Update refs in effect to avoid updating during render
+  useEffect(() => {
+    processPendingFlashcardsRef.current = processPendingFlashcards;
+  }, [processPendingFlashcards]);
 
   // Process pending flashcards when conversation ID becomes available
   // This handles the race condition where flashcards arrive before the conversation is created
@@ -717,8 +739,10 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, []);
 
-  // Keep refs updated
-  handleInterruptRef.current = handleInterrupt;
+  // Update refs in effect to avoid updating during render
+  useEffect(() => {
+    handleInterruptRef.current = handleInterrupt;
+  }, [handleInterrupt]);
 
   // Setup WebSocket event listeners - runs once on mount
   useEffect(() => {
@@ -1379,24 +1403,46 @@ export function AppProvider({ children }: AppProviderProps) {
     });
   }, []);
 
-  const value: AppContextType = {
-    state,
-    dispatch,
-    storage: storageRef.current,
-    wsClient: wsClientRef.current,
-    audioHandler: audioHandlerRef.current,
-    audioPlayer: audioPlayerRef.current,
-    toggleRecording,
-    changeLanguage,
-    handleInterrupt,
-    sendTextMessage,
-    pronounceWord,
-    selectConversation,
-    createNewConversation,
-    deleteConversation,
-    renameConversation,
-    toggleSidebar,
-  };
+  // Use direct instances instead of refs for context value
+  // These instances are stable and don't change, so accessing them during render is safe
+  const value: AppContextType = useMemo(
+    () => ({
+      state,
+      dispatch,
+      storage: storageInstance,
+      wsClient: wsClientInstance,
+      audioHandler: audioHandlerInstance,
+      audioPlayer: audioPlayerInstance,
+      toggleRecording,
+      changeLanguage,
+      handleInterrupt,
+      sendTextMessage,
+      pronounceWord,
+      selectConversation,
+      createNewConversation,
+      deleteConversation,
+      renameConversation,
+      toggleSidebar,
+    }),
+    [
+      state,
+      dispatch,
+      storageInstance,
+      wsClientInstance,
+      audioHandlerInstance,
+      audioPlayerInstance,
+      toggleRecording,
+      changeLanguage,
+      handleInterrupt,
+      sendTextMessage,
+      pronounceWord,
+      selectConversation,
+      createNewConversation,
+      deleteConversation,
+      renameConversation,
+      toggleSidebar,
+    ]
+  );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

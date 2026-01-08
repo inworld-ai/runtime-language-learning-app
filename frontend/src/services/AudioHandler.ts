@@ -106,9 +106,11 @@ export class AudioHandler {
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('Microphone access granted for continuous streaming');
 
-      this.audioContext = new (window.AudioContext ||
+      this.audioContext = new (
+        window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext)();
+          .webkitAudioContext
+      )();
 
       if (this.audioContext.state === 'suspended') {
         console.log('Audio context suspended, resuming...');

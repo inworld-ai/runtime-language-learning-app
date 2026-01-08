@@ -40,9 +40,11 @@ export class AudioPlayer {
 
   async initialize(): Promise<void> {
     try {
-      this.audioContext = new (window.AudioContext ||
+      this.audioContext = new (
+        window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext)();
+          .webkitAudioContext
+      )();
 
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
