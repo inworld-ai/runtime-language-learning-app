@@ -12,9 +12,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
@@ -32,9 +29,6 @@ import {
 import { setupWebSocketHandlers } from './services/websocket-handler.js';
 import { apiRouter } from './services/api-routes.js';
 import { createGracefulShutdown } from './services/shutdown.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Initialize Express and servers
 const app = express();
@@ -61,14 +55,6 @@ app.get('/health', (_req, res) => {
     .status(200)
     .json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
-
-// Static files
-const frontendPath = path.join(__dirname, '../../frontend');
-const devFrontendPath = path.join(__dirname, '../frontend');
-const staticPath = path.resolve(frontendPath);
-const devStaticPath = path.resolve(devFrontendPath);
-const finalStaticPath = existsSync(devStaticPath) ? devStaticPath : staticPath;
-app.use(express.static(finalStaticPath));
 
 // WebSocket handlers
 setupWebSocketHandlers(wss);

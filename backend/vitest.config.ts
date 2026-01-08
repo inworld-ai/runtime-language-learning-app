@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    root: './backend',
-    include: ['__tests__/**/*.test.ts'],
+    root: './',
+    include: ['src/**/*.test.ts'],
     coverage: {
       reporter: ['text', 'lcov'],
       exclude: ['node_modules', '__tests__', 'graphs/nodes/**'],
