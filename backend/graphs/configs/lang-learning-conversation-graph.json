@@ -233,8 +233,12 @@
         "loop": true
       }
     ],
-    "end_nodes": ["tts-node-lang-learning"],
-    "start_nodes": ["audio-input-proxy-lang-learning"]
+    "end_nodes": [
+      "tts-node-lang-learning"
+    ],
+    "start_nodes": [
+      "audio-input-proxy-lang-learning"
+    ]
   },
   "components": [
     {
