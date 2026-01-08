@@ -1087,14 +1087,18 @@ export function AppProvider({ children }: AppProviderProps) {
       const storage = storageRef.current;
       const audioHandler = audioHandlerRef.current;
       const audioPlayer = audioPlayerRef.current;
+      const ttsAudioPlayer = ttsAudioPlayerRef.current;
       const wsClient = wsClientRef.current;
 
-      // Stop any ongoing recording/playback
+      // Stop any ongoing recording/playback and audio
       if (state.isRecording) {
         audioHandler.stopStreaming();
         dispatch({ type: 'SET_RECORDING', payload: false });
       }
+      // Stop main audio playback (TTS responses)
       audioPlayer.stop();
+      // Stop TTS audio playback (flashcard pronunciation)
+      ttsAudioPlayer.stop();
 
       // Save current conversation first if it exists
       if (
@@ -1184,14 +1188,18 @@ export function AppProvider({ children }: AppProviderProps) {
     const storage = storageRef.current;
     const audioHandler = audioHandlerRef.current;
     const audioPlayer = audioPlayerRef.current;
+    const ttsAudioPlayer = ttsAudioPlayerRef.current;
     const wsClient = wsClientRef.current;
 
-    // Stop any ongoing recording/playback
+    // Stop any ongoing recording/playback and audio
     if (state.isRecording) {
       audioHandler.stopStreaming();
       dispatch({ type: 'SET_RECORDING', payload: false });
     }
+    // Stop main audio playback (TTS responses)
     audioPlayer.stop();
+    // Stop TTS audio playback (flashcard pronunciation)
+    ttsAudioPlayer.stop();
 
     // Save current conversation first if it exists
     if (
