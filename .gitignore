@@ -143,3 +143,8 @@ backend/audio/
 .DS_Store
 CLAUDE.md
 templates/
+.claude
+
+# Deployment files
+deploy/
+.gcloudignore

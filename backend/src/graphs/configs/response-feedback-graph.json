@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.2.2",
+  "main": {
+    "id": "response-feedback-graph",
+    "nodes": [
+      {
+        "type": "FeedbackPromptBuilderNodeType",
+        "id": "feedback-prompt-builder",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "type": "TextToChatRequestNodeType",
+        "id": "text-to-chat-request",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      },
+      {
+        "id": "llm-node",
+        "type": "LLMChatNode",
+        "execution_config": {
+          "type": "LLMChatNodeExecutionConfig",
+          "properties": {
+            "llm_component_id": "llm-node_llm_component",
+            "text_generation_config": {
+              "max_new_tokens": 100,
+              "max_prompt_length": 2000,
+              "temperature": 0.7,
+              "top_p": 1,
+              "repetition_penalty": 1,
+              "frequency_penalty": 0,
+              "presence_penalty": 0
+            },
+            "stream": false,
+            "report_to_client": false,
+            "response_format": "text"
+          }
+        }
+      },
+      {
+        "type": "FeedbackExtractorNodeType",
+        "id": "feedback-extractor",
+        "execution_config": {
+          "type": "NodeExecutionConfig",
+          "properties": {
+            "report_to_client": false
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from_node": "feedback-prompt-builder",
+        "to_node": "text-to-chat-request"
+      },
+      {
+        "from_node": "text-to-chat-request",
+        "to_node": "llm-node"
+      },
+      {
+        "from_node": "llm-node",
+        "to_node": "feedback-extractor"
+      }
+    ],
+    "end_nodes": [
+      "feedback-extractor"
+    ],
+    "start_nodes": [
+      "feedback-prompt-builder"
+    ]
+  },
+  "components": [
+    {
+      "id": "llm-node_llm_component",
+      "type": "LLMInterface",
+      "creation_config": {
+        "type": "RemoteLLMConfig",
+        "properties": {
+          "provider": "openai",
+          "model_name": "gpt-4.1-nano",
+          "default_config": {},
+          "api_key": "{{INWORLD_API_KEY}}"
+        }
+      }
+    }
+  ]
+}
